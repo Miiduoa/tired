@@ -1,0 +1,23 @@
+id: /thread.summarize
+task: |
+  將頻道近 24h 對話轉成「需處理清單＋關鍵點」，避免主觀推測；列出 @人 與截止。
+input_schema:
+  type: object
+  properties:
+    messages: { type: array, items: { type: object } }
+    now: { type: string, format: date-time }
+output_schema:
+  type: object
+  properties:
+    action_items:
+      type: array
+      items:
+        type: object
+        properties:
+          title: { type: string }
+          owners: { type: array, items: { type: string } }
+          due: { type: string, format: date-time }
+    highlights:
+      type: array
+      items: { type: string }
+

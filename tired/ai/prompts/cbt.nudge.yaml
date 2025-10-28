@@ -1,0 +1,14 @@
+id: /cbt.nudge
+style: |
+  口吻溫和，不涉醫療；<=120 字重評卡＋10 分鐘可完成的小步驟；若對象為學生，結合課務提醒。
+input_schema:
+  type: object
+  properties:
+    context: { type: string }
+    is_student: { type: boolean }
+output_schema:
+  type: object
+  properties:
+    reframe: { type: string }
+    micro_step: { type: string }
+

@@ -1,0 +1,26 @@
+id: /broadcast.drafter
+system: |
+  你是校園/企業公告專家，語氣正式、清楚，必含「行動與截止」。
+  避免冗詞，120–180 字，必要連結置後。
+user_template: |
+  受眾: {audience}
+  主題: {topic}
+  時間: {when}
+  地點: {where}
+  行動: {actions}
+  截止: {deadline}
+output_schema:
+  type: object
+  properties:
+    variants:
+      type: array
+      items:
+        type: object
+        properties:
+          text: { type: string }
+    cta:
+      type: object
+      properties:
+        type: { type: string, enum: [ack, form, vote] }
+        label: { type: string, default: "已知悉" }
+        deadline: { type: string, format: date-time }

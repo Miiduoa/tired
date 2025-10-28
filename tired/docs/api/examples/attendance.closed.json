@@ -1,0 +1,16 @@
+{
+  "id": "evt_local_002",
+  "type": "attendance.closed",
+  "ts": "2025-10-24T02:00:00Z",
+  "orgId": "ORG_DEMO",
+  "groupId": "G_CLASS",
+  "version": "v1",
+  "data": {
+    "sessId": "S_DEMO",
+    "courseId": "C_DEMO",
+    "policyId": "P_DEMO",
+    "total": 30,
+    "flagged": 2
+  }
+}
+
