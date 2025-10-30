@@ -1,0 +1,21 @@
+id: /study.split
+task: |
+  把作業拆為 30–90 分鐘子任務，附估時、先後、所需前置材料；避免模糊動詞。
+input_schema:
+  type: object
+  properties:
+    assignment: { type: string }
+    due: { type: string, format: date-time }
+output_schema:
+  type: object
+  properties:
+    steps:
+      type: array
+      items:
+        type: object
+        properties:
+          title: { type: string }
+          estimate_min: { type: integer, minimum: 15, maximum: 120 }
+          depends_on: { type: array, items: { type: integer } }
+          materials: { type: array, items: { type: string } }
+

@@ -1,0 +1,12 @@
+{
+  "id": "evt_local_004",
+  "type": "esg.report.ready",
+  "ts": "2025-10-24T03:00:00Z",
+  "orgId": "ORG_DEMO",
+  "version": "v1",
+  "data": {
+    "month": "2025-09",
+    "factorVersion": "CN-DEFRA-2025.09"
+  }
+}
+

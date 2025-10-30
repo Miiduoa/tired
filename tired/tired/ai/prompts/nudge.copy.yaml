@@ -1,0 +1,18 @@
+id: /nudge.copy
+notes: |
+  Short nudge microcopy with ethical framing. Keep to <= 80 chars when possible.
+variants:
+  broadcast_ack:
+    - 今天先按一下「已知悉」，你就完成 1 件事。
+    - 截止將至，按一下即可完成回條。
+    - 你已完成 {done}/{total}，再一下就達標。
+  assignment:
+    - 來個 30 分鐘專注，先讀第 1 節即可。
+    - 先把題目看一遍，找 2 個關鍵字。
+  attendance:
+    - 到場掃碼完成簽到，倒數 {mm}:{ss}。
+    - 在教室範圍內即可完成簽到。
+  clock:
+    - 你已在打卡範圍內，按一下即可上班。
+    - 離開範圍前記得下班打卡。
+

@@ -1,0 +1,14 @@
+{
+  "id": "evt_local_001",
+  "type": "message.ack",
+  "ts": "2025-10-24T01:23:45Z",
+  "orgId": "ORG_DEMO",
+  "groupId": "G_DEMO",
+  "version": "v1",
+  "data": {
+    "messageId": "MSG_DEMO",
+    "channelId": "CH_DEMO",
+    "uid": "U_DEMO"
+  }
+}
+

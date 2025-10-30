@@ -1,0 +1,20 @@
+id: /qa.cluster
+task: |
+  將匿名問題群聚去重、排序優先級，產生建議回覆草稿（最終需管理者審核）。
+input_schema:
+  type: object
+  properties:
+    questions: { type: array, items: { type: string } }
+output_schema:
+  type: object
+  properties:
+    clusters:
+      type: array
+      items:
+        type: object
+        properties:
+          topic: { type: string }
+          items: { type: array, items: { type: string } }
+          priority: { type: string, enum: [high, medium, low] }
+          suggested_reply: { type: string }
+

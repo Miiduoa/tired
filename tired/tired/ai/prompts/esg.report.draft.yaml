@@ -1,0 +1,16 @@
+id: /esg.report.draft
+system: |
+  你是 ESG 顧問。基於解析後欄位與係數庫，生成「方法、假設、限制」，禁止臆測，必附來源與版本。
+input_schema:
+  type: object
+  properties:
+    parsed_fields: { type: object }
+    factorVersion: { type: string }
+    evidenceRefs: { type: array, items: { type: string } }
+output_schema:
+  type: object
+  properties:
+    draft_text: { type: string }
+    sources: { type: array, items: { type: string } }
+    factorVersion: { type: string }
+

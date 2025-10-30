@@ -1,0 +1,38 @@
+{
+  "id": "sample-company",
+  "adapter": "rest",
+  "rest": {
+    "baseURL": "https://api.example.com/v1",
+    "authMethod": "bearerToken",
+    "headers": {
+      "X-Client-ID": "your-client-id"
+    },
+    "queries": {
+      "tenant": "{{TENANT_ID}}"
+    },
+    "credentials": {
+      "token": "YOUR_ACCESS_TOKEN"
+    }
+  },
+  "featureFlags": {
+    "enabledModules": [
+      "home",
+      "broadcast",
+      "inbox",
+      "attendance",
+      "esg",
+      "insights",
+      "profile"
+    ],
+    "extra": {
+      "supportsWebhook": true
+    }
+  },
+  "options": {
+    "broadcasts.path": "/broadcasts",
+    "inbox.path": "/inbox",
+    "attendance.path": "/attendance/snapshot",
+    "esg.path": "/esg/summary",
+    "insights.path": "/insights"
+  }
+}

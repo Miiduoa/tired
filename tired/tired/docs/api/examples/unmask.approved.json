@@ -1,0 +1,13 @@
+{
+  "id": "evt_local_006",
+  "type": "unmask.approved",
+  "ts": "2025-10-24T03:20:00Z",
+  "orgId": "ORG_SEC",
+  "version": "v1",
+  "data": {
+    "requestId": "UM_DEMO",
+    "approvers": ["U_HR", "U_DPO"],
+    "delay_notified": true
+  }
+}
+

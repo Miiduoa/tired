@@ -1,0 +1,54 @@
+{
+  "channels": [
+    {
+      "id": "ch_general",
+      "groupId": "demo",
+      "name": "一般聊天",
+      "description": "預設頻道",
+      "mode": "normal",
+      "requiresAck": false,
+      "createdAt": {"_seconds": 1730000000, "_nanoseconds": 0},
+      "updatedAt": {"_seconds": 1730000000, "_nanoseconds": 0}
+    },
+    {
+      "id": "ch_announce",
+      "groupId": "demo",
+      "name": "公告",
+      "description": "重要公告",
+      "mode": "broadcast",
+      "requiresAck": true,
+      "createdAt": {"_seconds": 1730000000, "_nanoseconds": 0},
+      "updatedAt": {"_seconds": 1730000000, "_nanoseconds": 0}
+    }
+  ],
+  "messages": [
+    {
+      "id": "m1",
+      "channelId": "ch_announce",
+      "fromAliasId": "system",
+      "content": { "text": "歡迎使用 tired 平台！", "type": "announcement", "metadata": {} },
+      "attachments": [],
+      "requiresAck": true,
+      "ackDeadline": {"_seconds": 1730086400, "_nanoseconds": 0},
+      "isE2EE": false,
+      "createdAt": {"_seconds": 1730001000, "_nanoseconds": 0},
+      "updatedAt": {"_seconds": 1730001000, "_nanoseconds": 0},
+      "isDeleted": false
+    }
+  ],
+  "clock_sessions": [
+    {
+      "id": "site_main",
+      "groupId": "demo",
+      "siteId": "office_main",
+      "name": "總部大樓",
+      "geofence": {"latitude": 25.0330, "longitude": 121.5654, "radius": 100, "name": "總部大樓"},
+      "openAt": {"_seconds": 1730000000, "_nanoseconds": 0},
+      "closeAt": {"_seconds": 1730032800, "_nanoseconds": 0},
+      "isActive": true,
+      "createdAt": {"_seconds": 1730000000, "_nanoseconds": 0},
+      "updatedAt": {"_seconds": 1730000000, "_nanoseconds": 0}
+    }
+  ]
+}
+

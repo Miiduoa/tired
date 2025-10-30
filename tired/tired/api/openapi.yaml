@@ -1,0 +1,820 @@
+openapi: 3.0.3
+info:
+  title: tired API (draft)
+  version: 0.1.0
+  description: Draft API surface derived from PRD v1
+servers:
+  - url: https://api.tired.app
+    description: Production (placeholder)
+  - url: https://staging.tired.app
+    description: Staging (placeholder)
+security:
+  - bearerAuth: []
+paths:
+  /v1/broadcasts:
+    post:
+      summary: Create and publish a broadcast (channel inferred by groupId)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BroadcastRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BroadcastResult'
+              examples:
+                created:
+                  value:
+                    broadcastId: "bc_01HR7V2A4Z"
+                    scheduledNudges: ["2025-11-09T08:00:00Z", "2025-11-10T06:00:00Z"]
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /v1/broadcasts/{id}/ack:
+    post:
+      summary: Ack a broadcast message (idempotent)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AckRequest'
+            examples:
+              basic:
+                value:
+                  uid: "u_123"
+                  idempotencyKey: "ack-9d6f7f30-38a0-4b6c-b2ea-7ec0b9c8d1a1"
+                  meta:
+                    deviceHash: "abc123"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AckResult' }
+              examples:
+                ok:
+                  value: { status: ok }
+        '409': { description: Idempotency conflict }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /v1/groups:
+    post:
+      summary: Create group with type → auto-attach capability pack
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGroupRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /v1/channels/{id}/broadcast:
+    post:
+      summary: Broadcast message with optional ACK/FORM/VOTE CTA
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BroadcastRequest'
+      responses:
+        '200':
+          description: Broadcast enqueued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BroadcastResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /v1/attendance/policies:
+    post:
+      summary: Create attendance policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttendancePolicy' }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AttendancePolicy' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /v1/attendance/sessions:
+    post:
+      summary: Create an attendance session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAttendanceSessionRequest' }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AttendanceSession' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /v1/attendance/check:
+    post:
+      summary: Submit an attendance check
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttendanceCheck' }
+      responses:
+        '200':
+          description: Recorded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttendanceCheck' }
+              examples:
+                recorded:
+                  value:
+                    id: "chk_01HRA9KQ1N"
+                    sessId: "sess_01HR8..."
+                    uid: "u_123"
+                    ts: "2025-11-10T01:00:00Z"
+                    device_hash: "abc123"
+                    gps: { lat: 25.0418, lng: 121.5360, acc: 12 }
+                    ble_ok: true
+                    risk_score: 0.08
+                    status: ok
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /v1/clock/records:
+    post:
+      summary: Submit a clock record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClockRecord' }
+      responses:
+        '200':
+          description: Recorded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClockRecord' }
+              examples:
+                ok:
+                  value:
+                    id: "rec_01HRB2..."
+                    uid: "u_123"
+                    siteId: "site_hq"
+                    ts: "2025-11-10T09:00:00+08:00"
+                    device_hash: "abc123"
+                    gps: { lat: 25.0418, lng: 121.5360 }
+                    status: ok
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /v1/esg/bill:ocr:
+    post:
+      summary: OCR a bill image/PDF and return parsed fields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EsgOcrRequest' }
+      responses:
+        '200': { description: Parsed, content: { application/json: { schema: { $ref: '#/components/schemas/EsgOcrResult' } } } }
+  /v1/esg/report:generate:
+    post:
+      summary: Generate ESG report draft from parsed fields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EsgReportGenerateRequest' }
+      responses:
+        '200': { description: Draft, content: { application/json: { schema: { $ref: '#/components/schemas/EsgReport' } } } }
+  /v1/payroll/paystub:publish:
+    post:
+      summary: Publish encrypted paystub blob
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublishPaystubRequest' }
+      responses:
+        '200': { description: Published, content: { application/json: { schema: { $ref: '#/components/schemas/Paystub' } } } }
+  /v1/unmask:request:
+    post:
+      summary: Request to unmask an alias (dual-sign required)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnmaskRequest' }
+      responses:
+        '200': { description: Requested, content: { application/json: { schema: { $ref: '#/components/schemas/UnmaskRequest' } } } }
+  /v1/unmask:approve:
+    post:
+      summary: Approve an unmask request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnmaskApproval' }
+      responses:
+        '200': { description: Approved }
+  /v1/profile/{uid}:
+    get:
+      summary: Get viewer-scoped profile fields
+      parameters:
+        - in: path
+          name: uid
+          required: true
+          schema: { type: string }
+        - in: query
+          name: viewer
+          schema: { type: string, description: viewer uid }
+        - in: query
+          name: groupId
+          schema: { type: string }
+      responses:
+        '200': { description: Visible fields, content: { application/json: { schema: { $ref: '#/components/schemas/ProfileView' } } } }
+  /v1/profile/fields:
+    patch:
+      summary: Update profile fields and visibility settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProfileFieldsPatch' }
+      responses:
+        '200': { description: Updated }
+  /v1/profile/share:
+    post:
+      summary: Create a temporary profile share token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProfileShareRequest' }
+      responses:
+        '200': { description: Token, content: { application/json: { schema: { $ref: '#/components/schemas/ProfileShare' } } } }
+  /v1/profile/share/{token}:
+    delete:
+      summary: Revoke a profile share token
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: Revoked }
+
+  /v1/webhooks/register:
+    post:
+      summary: Register a webhook endpoint to receive events
+      description: |
+        Registers a tenant webhook endpoint. The server will POST events to the provided `callbackUrl`.
+        Events include: message.ack, attendance.closed, clock.recorded, esg.report.ready, policy.violation, unmask.approved.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookRegistrationRequest' }
+      responses:
+        '200': { description: Registered }
+      callbacks:
+        TiredEvents:
+          # message.ack
+          message_ack:
+            '{$request.body#/callbackUrl}':
+              post:
+                summary: message.ack event delivery
+                parameters:
+                  - $ref: '#/components/parameters/SignatureHeader'
+                  - $ref: '#/components/parameters/EventHeader'
+                  - $ref: '#/components/parameters/IdempotencyKeyHeader'
+                requestBody:
+                  required: true
+                  content:
+                    application/json:
+                      schema: { $ref: '#/components/schemas/EventMessageAck' }
+                responses:
+                  '200': { description: Received }
+          # attendance.closed
+          attendance_closed:
+            '{$request.body#/callbackUrl}':
+              post:
+                summary: attendance.closed event delivery
+                parameters:
+                  - $ref: '#/components/parameters/SignatureHeader'
+                  - $ref: '#/components/parameters/EventHeader'
+                  - $ref: '#/components/parameters/IdempotencyKeyHeader'
+                requestBody:
+                  required: true
+                  content:
+                    application/json:
+                      schema: { $ref: '#/components/schemas/EventAttendanceClosed' }
+                responses:
+                  '200': { description: Received }
+          # clock.recorded
+          clock_recorded:
+            '{$request.body#/callbackUrl}':
+              post:
+                summary: clock.recorded event delivery
+                parameters:
+                  - $ref: '#/components/parameters/SignatureHeader'
+                  - $ref: '#/components/parameters/EventHeader'
+                  - $ref: '#/components/parameters/IdempotencyKeyHeader'
+                requestBody:
+                  required: true
+                  content:
+                    application/json:
+                      schema: { $ref: '#/components/schemas/EventClockRecorded' }
+                responses:
+                  '200': { description: Received }
+          # esg.report.ready
+          esg_report_ready:
+            '{$request.body#/callbackUrl}':
+              post:
+                summary: esg.report.ready event delivery
+                parameters:
+                  - $ref: '#/components/parameters/SignatureHeader'
+                  - $ref: '#/components/parameters/EventHeader'
+                  - $ref: '#/components/parameters/IdempotencyKeyHeader'
+                requestBody:
+                  required: true
+                  content:
+                    application/json:
+                      schema: { $ref: '#/components/schemas/EventEsgReportReady' }
+                responses:
+                  '200': { description: Received }
+          # policy.violation
+          policy_violation:
+            '{$request.body#/callbackUrl}':
+              post:
+                summary: policy.violation event delivery
+                parameters:
+                  - $ref: '#/components/parameters/SignatureHeader'
+                  - $ref: '#/components/parameters/EventHeader'
+                  - $ref: '#/components/parameters/IdempotencyKeyHeader'
+                requestBody:
+                  required: true
+                  content:
+                    application/json:
+                      schema: { $ref: '#/components/schemas/EventPolicyViolation' }
+                responses:
+                  '200': { description: Received }
+          # unmask.approved
+          unmask_approved:
+            '{$request.body#/callbackUrl}':
+              post:
+                summary: unmask.approved event delivery
+                parameters:
+                  - $ref: '#/components/parameters/SignatureHeader'
+                  - $ref: '#/components/parameters/EventHeader'
+                  - $ref: '#/components/parameters/IdempotencyKeyHeader'
+                requestBody:
+                  required: true
+                  content:
+                    application/json:
+                      schema: { $ref: '#/components/schemas/EventUnmaskApproved' }
+                responses:
+                  '200': { description: Received }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    SignatureHeader:
+      name: X-Tired-Signature
+      in: header
+      required: true
+      description: HMAC-SHA256 signature of the raw body using the shared webhook secret.
+      schema:
+        type: string
+        description: Hex-encoded digest
+        example: "9f2c0a9f0b3b6b2a6d1b3f7a0c2d4e6f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d"
+    EventHeader:
+      name: X-Tired-Event
+      in: header
+      required: true
+      description: Event type identifier
+      schema:
+        type: string
+        enum: [message.ack, attendance.closed, clock.recorded, esg.report.ready, policy.violation, unmask.approved]
+        example: message.ack
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Optional idempotency key for de-duplication.
+      schema:
+        type: string
+        example: "2c7f6a7a-8b9c-4d1e-92f3-7a6b5c4d3e2f"
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    UnprocessableEntity:
+      description: Validation failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    InternalError:
+      description: Server error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+          enum: [E-AUTH-401, E-PERM-403, E-VAL-422, E-IDEMP-409, E-SRV-500]
+        message: { type: string }
+    Group:
+      type: object
+      required: [id, orgId, type, capability_pack, verification_level]
+      properties:
+        id: { type: string }
+        orgId: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [School, Company, Community, SME-ESG] }
+        capability_pack: { type: string }
+        addons:
+          type: array
+          items: { type: string }
+        verification_level: { type: string, enum: [L0, L1, L2, L3] }
+        chat_mode: { type: string, enum: [off, broadcast, normal, alias] }
+        dm_policy: { type: string, enum: [off, members, open] }
+        retention_policy:
+          type: object
+          properties:
+            e2ee: { type: boolean }
+            keep_days: { type: integer }
+            legal_hold: { type: boolean }
+        alias_allowed: { type: boolean }
+    CreateGroupRequest:
+      type: object
+      required: [orgId, type, name]
+      properties:
+        orgId: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [School, Company, Community, SME-ESG] }
+        verification_level: { type: string, enum: [L0, L1, L2, L3], default: L0 }
+        addons: { type: array, items: { type: string } }
+        alias_allowed: { type: boolean, default: true }
+    BroadcastRequest:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string }
+        requires_ack: { type: boolean, default: false }
+        cta: { $ref: '#/components/schemas/Cta' }
+        audience: { type: array, items: { type: string } }
+    Cta:
+      type: object
+      properties:
+        type: { type: string, enum: [ack, form, vote] }
+        label: { type: string, default: "已知悉" }
+        deadline: { type: string, format: date-time }
+    BroadcastResult:
+      type: object
+      properties:
+        broadcastId: { type: string }
+        scheduledNudges: { type: array, items: { type: string, format: date-time } }
+    AckRequest:
+      type: object
+      required: [uid, idempotencyKey]
+      properties:
+        uid: { type: string }
+        idempotencyKey: { type: string }
+        meta:
+          type: object
+          additionalProperties: true
+    AckResult:
+      type: object
+      properties:
+        status: { type: string, enum: [ok] }
+    AttendancePolicy:
+      type: object
+      required: [scope]
+      properties:
+        id: { type: string }
+        scope: { type: string, enum: [group, course] }
+        start_offset_min: { type: integer, nullable: true }
+        end_offset_min: { type: integer, nullable: true }
+        min_dwell_sec: { type: integer }
+        late_after_min: { type: integer }
+        geofence:
+          type: object
+          properties:
+            lat: { type: number }
+            lng: { type: number }
+            radius: { type: number }
+        qr_rotate_sec: { type: integer, minimum: 15, maximum: 60 }
+        require_ble: { type: boolean }
+    CreateAttendanceSessionRequest:
+      type: object
+      required: [courseId, policyId, open_at, close_at]
+      properties:
+        courseId: { type: string }
+        policyId: { type: string }
+        open_at: { type: string, format: date-time }
+        close_at: { type: string, format: date-time }
+    AttendanceSession:
+      type: object
+      properties:
+        id: { type: string }
+        courseId: { type: string }
+        policyId: { type: string }
+        open_at: { type: string, format: date-time }
+        close_at: { type: string, format: date-time }
+        qr_seed: { type: string }
+        status: { type: string, enum: [open, closed] }
+    AttendanceCheck:
+      type: object
+      required: [sessId, uid, ts]
+      properties:
+        id: { type: string }
+        sessId: { type: string }
+        uid: { type: string }
+        ts: { type: string, format: date-time }
+        device_hash: { type: string }
+        gps:
+          type: object
+          properties:
+            lat: { type: number }
+            lng: { type: number }
+            acc: { type: number }
+        ble_ok: { type: boolean }
+        risk_score: { type: number, minimum: 0, maximum: 1 }
+        status: { type: string, enum: [ok, late, flagged] }
+    ClockRecord:
+      type: object
+      required: [uid, siteId, ts]
+      properties:
+        id: { type: string }
+        uid: { type: string }
+        siteId: { type: string }
+        ts: { type: string, format: date-time }
+        device_hash: { type: string }
+        gps:
+          type: object
+          properties:
+            lat: { type: number }
+            lng: { type: number }
+        status: { type: string, enum: [ok, exception, amended] }
+    EsgOcrRequest:
+      type: object
+      properties:
+        orgId: { type: string }
+        fileRef: { type: string }
+    EsgOcrResult:
+      type: object
+      properties:
+        orgId: { type: string }
+        ocrJson: { type: object }
+        parsed: { type: object }
+        factorVersion: { type: string }
+    EsgReportGenerateRequest:
+      type: object
+      properties:
+        orgId: { type: string }
+        parsed_fields: { type: object }
+        factorVersion: { type: string }
+        evidenceRefs: { type: array, items: { type: string } }
+    EsgReport:
+      type: object
+      properties:
+        orgId: { type: string }
+        month: { type: string }
+        pdfRef: { type: string }
+        assumptions: { type: object }
+        evidenceRefs: { type: array, items: { type: string } }
+    PublishPaystubRequest:
+      type: object
+      required: [orgId, uid, month, blobEncRef]
+      properties:
+        orgId: { type: string }
+        uid: { type: string }
+        month: { type: string }
+        blobEncRef: { type: string }
+        ttl: { type: integer }
+    Paystub:
+      type: object
+      properties:
+        id: { type: string }
+        orgId: { type: string }
+        uid: { type: string }
+        month: { type: string }
+        blobEncRef: { type: string }
+        ttl: { type: integer }
+    UnmaskRequest:
+      type: object
+      required: [orgId, targetAlias, reasonCode]
+      properties:
+        id: { type: string }
+        orgId: { type: string }
+        targetAlias: { type: string }
+        reasonCode: { type: string }
+        approvers: { type: array, items: { type: string } }
+        status: { type: string, enum: [pending, approved, rejected] }
+        auditRef: { type: string }
+    UnmaskApproval:
+      type: object
+      required: [requestId, approverUid]
+      properties:
+        requestId: { type: string }
+        approverUid: { type: string }
+        comment: { type: string }
+    ProfileView:
+      type: object
+      properties:
+        uid: { type: string }
+        fields: { type: array, items: { $ref: '#/components/schemas/ProfileField' } }
+    ProfileField:
+      type: object
+      properties:
+        key: { type: string }
+        type: { type: string }
+        value: {}
+        visibility: { $ref: '#/components/schemas/Visibility' }
+    Visibility:
+      type: object
+      properties:
+        mode: { type: string, enum: [public, friends, group, org, private, custom] }
+        groups: { type: array, items: { type: string } }
+        orgs: { type: array, items: { type: string } }
+        listIds: { type: array, items: { type: string } }
+        expiresAt: { type: string, format: date-time }
+    ProfileFieldsPatch:
+      type: object
+      properties:
+        fields: { type: array, items: { $ref: '#/components/schemas/ProfileField' } }
+    ProfileShareRequest:
+      type: object
+      properties:
+        fields: { type: array, items: { type: string } }
+        scope:
+          type: object
+          properties:
+            uids: { type: array, items: { type: string } }
+            groups: { type: array, items: { type: string } }
+            listIds: { type: array, items: { type: string } }
+        expiresAt: { type: string, format: date-time }
+    ProfileShare:
+      type: object
+      properties:
+        token: { type: string }
+        ownerUid: { type: string }
+        fields: { type: array, items: { type: string } }
+        scope: { type: object }
+        expiresAt: { type: string, format: date-time }
+
+    # Webhooks
+    WebhookRegistrationRequest:
+      type: object
+      required: [callbackUrl]
+      properties:
+        callbackUrl:
+          type: string
+          format: uri
+          example: "https://example.com/webhooks/tired"
+        events:
+          type: array
+          description: Optional subset of events to subscribe to. Default=all.
+          items:
+            type: string
+            enum: [message.ack, attendance.closed, clock.recorded, esg.report.ready, policy.violation, unmask.approved]
+
+    EventEnvelope:
+      type: object
+      required: [id, type, ts, version, data]
+      properties:
+        id: { type: string }
+        type:
+          type: string
+          enum: [message.ack, attendance.closed, clock.recorded, esg.report.ready, policy.violation, unmask.approved]
+        ts: { type: string, format: date-time }
+        orgId: { type: string }
+        groupId: { type: string }
+        version: { type: string, example: v1 }
+        data: { type: object }
+
+    EventMessageAck:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                messageId: { type: string }
+                channelId: { type: string }
+                uid: { type: string }
+
+    EventAttendanceClosed:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                sessId: { type: string }
+                courseId: { type: string }
+                policyId: { type: string }
+                total: { type: integer }
+                flagged: { type: integer }
+
+    EventClockRecorded:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                recordId: { type: string }
+                uid: { type: string }
+                siteId: { type: string }
+                status: { type: string, enum: [ok, exception, amended] }
+
+    EventEsgReportReady:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                month: { type: string }
+                factorVersion: { type: string }
+
+    EventPolicyViolation:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                policy: { type: string }
+                actor: { type: string }
+                target: { type: string }
+                reason: { type: string }
+
+    EventUnmaskApproved:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                requestId: { type: string }
+                approvers:
+                  type: array
+                  items: { type: string }
+                delay_notified: { type: boolean }
