@@ -310,6 +310,40 @@ struct GlobalFeedView: View {
         }
     }
 
+    // 縮起時的一行快捷列
+    @ViewBuilder
+    private func capabilityStrip(for membership: TenantMembership) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                if membership.hasAccess(to: .broadcast) {
+                    NavigationLink { BroadcastListView(membership: membership) } label: { quickChip("公告", icon: "megaphone.fill", color: .purple) }
+                }
+                if membership.hasAccess(to: .attendance) {
+                    NavigationLink { AttendanceView(membership: membership) } label: { quickChip("點名", icon: "qrcode.viewfinder", color: .orange) }
+                }
+                if membership.hasAccess(to: .clock) {
+                    NavigationLink { ClockView(membership: membership) } label: { quickChip("打卡", icon: "mappin.circle", color: .green) }
+                }
+                if membership.hasAccess(to: .esg) {
+                    NavigationLink { ESGOverviewView(membership: membership) } label: { quickChip("ESG", icon: "leaf.fill", color: .mint) }
+                }
+            }
+            .padding(.vertical, 6)
+        }
+    }
+
+    private func quickChip(_ title: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+            Text(title)
+        }
+        .font(.caption2)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(color.opacity(0.15), in: Capsule())
+        .foregroundStyle(color)
+    }
+
     @MainActor
     private func refresh() async {
         async let timelineTask = loadPersonalTimeline()
