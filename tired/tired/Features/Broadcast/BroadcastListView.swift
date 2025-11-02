@@ -136,7 +136,7 @@ struct BroadcastListView: View {
                                 viewModel.ack(item)
                             }
                         } label: { Label("完成", systemImage: "checkmark.circle") }
-                        .tint(.green)
+                        .tint(Color.green)
 
                         Button {
                             Haptics.impact(.light)
@@ -154,7 +154,7 @@ struct BroadcastListView: View {
                                 Task { await SnoozeSyncService.shared.clearSnooze(id: item.id) }
                             })
                         } label: { Label("延後", systemImage: "clock") }
-                        .tint(.orange)
+                        .tint(Color.orange)
                     }
                 }
             }
