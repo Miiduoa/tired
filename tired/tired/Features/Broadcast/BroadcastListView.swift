@@ -87,13 +87,14 @@ struct BroadcastListView: View {
     // MARK: - Content View
     
     private var contentView: some View {
-        List {
-            ForEach(Array(filteredItems.filter { !SnoozeStore.shared.isSnoozed($0.id) }.enumerated()), id: \.element.id) { index, item in
-                BroadcastCard(
-                    item: item,
-                    isAcked: ackStore.isAcked(item.id),
-                    index: index
-                ) {
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                ForEach(Array(filteredItems.filter { !SnoozeStore.shared.isSnoozed($0.id) }.enumerated()), id: \.element.id) { index, item in
+                    BroadcastCard(
+                        item: item,
+                        isAcked: ackStore.isAcked(item.id),
+                        index: index
+                    ) {
                     Task {
                         guard let uid = authService.currentUser?.id, !uid.isEmpty else {
                             AckStore.shared.ack(item.id)

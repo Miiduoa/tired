@@ -135,12 +135,13 @@ struct ChatThreadView: View {
                         .font(.body.weight(.semibold))
                         .frame(width: 36, height: 36)
                         .background {
-                            Circle()
-                                .fill(
-                                    (uploadingTotal > 0 || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                                        ? Color.gray.opacity(0.3).gradient
-                                        : TTokens.gradientPrimary
-                                )
+                            if uploadingTotal > 0 || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Circle()
+                                    .fill(Color.gray.opacity(0.3))
+                            } else {
+                                Circle()
+                                    .fill(TTokens.gradientPrimary)
+                            }
                         }
                         .shadow(
                             color: (uploadingTotal > 0 || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) 
