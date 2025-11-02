@@ -466,17 +466,17 @@ private struct FriendRequestCard: View {
                 Button(action: onDecline) {
                     Image(systemName: "xmark")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.danger)
+                        .foregroundStyle(Color.danger)
                         .frame(width: 36, height: 36)
-                        .background(Color.dangerBg, in: Circle())
+                        .background(Color.danger.opacity(0.15), in: Circle())
                 }
                 
                 Button(action: onAccept) {
                     Image(systemName: "checkmark")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.success)
+                        .foregroundStyle(Color.success)
                         .frame(width: 36, height: 36)
-                        .background(Color.successBg, in: Circle())
+                        .background(Color.success.opacity(0.15), in: Circle())
                 }
             }
         }

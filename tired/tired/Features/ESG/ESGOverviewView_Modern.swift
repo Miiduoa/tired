@@ -313,7 +313,7 @@ private struct HotspotTag: View {
             
             Text(percentage)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(.success)
+                .foregroundStyle(Color.success)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
