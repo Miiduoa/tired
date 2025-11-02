@@ -13,6 +13,8 @@ help:
 	@echo "  make webhook-send EVENT=...  # send signed webhook (uses scripts/send_webhook.py)"
 	@echo "  make webhook-logs            # print server log"
 	@echo "  make webhook-stop            # stop server"
+	@echo "  make ios-run                 # build + run iOS app (auto device detect)"
+	@echo "  make ios-uitest              # run UI tests (auto device detect)"
 	@echo "Vars: PORT=$(PORT), SECRET=$(SECRET), EVENT=$(EVENT)"
 
 $(TMP):
@@ -43,3 +45,9 @@ webhook-stop:
 webhook-test: webhook-serve
 	@sleep 0.8; $(MAKE) -s webhook-send; echo '--- server log ---'; $(MAKE) -s webhook-logs; $(MAKE) -s webhook-stop
 
+# iOS helpers
+ios-run:
+	@DEVICE="$(or $(DEVICE),)" TIRED_API_URL="$(TIRED_API_URL)" bash tired/scripts/ios_build_run.sh
+
+ios-uitest:
+	@bash tired/scripts/ios_ui_test.sh

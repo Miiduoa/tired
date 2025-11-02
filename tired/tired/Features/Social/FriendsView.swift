@@ -89,5 +89,6 @@ struct FriendsView: View {
             .refreshable { await viewModel.load() }
             .task { await viewModel.load() }
         }
+        .background(Color.bg.ignoresSafeArea(.all))
     }
 }

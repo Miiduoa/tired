@@ -49,6 +49,18 @@ final class InboxViewModel: ObservableObject {
             print("⚠️ 無法標記收件項目 \(item.id)：\(error.localizedDescription)")
         }
     }
+
+    func acknowledgeAll() async {
+        // 建立快照，避免遍歷時修改同一陣列造成問題
+        let pending = items
+        await withTaskGroup(of: Void.self) { group in
+            for item in pending {
+                group.addTask { [weak self] in
+                    await self?.acknowledge(item: item)
+                }
+            }
+        }
+    }
 }
 
 struct InboxView: View {
@@ -87,9 +99,13 @@ struct InboxView: View {
                 
                 Group {
                     if viewModel.isLoading && viewModel.items.isEmpty {
-                        loadingView
+                        AppLoadingView(title: L.s("inbox.loading"))
                     } else if filteredItems.isEmpty {
-                        emptyStateView
+                        AppEmptyStateView(
+                            systemImage: "tray.fill",
+                            title: L.s("inbox.empty.title"),
+                            subtitle: selectedKind == nil ? L.s("inbox.empty.subtitle.all") : L.s("inbox.empty.subtitle.filtered")
+                        )
                     } else {
                         contentView
                     }
@@ -97,9 +113,19 @@ struct InboxView: View {
             }
             .navigationTitle("收件匣")
             .navigationBarTitleDisplayMode(.large)
+            .toolbarBackground(Color.bg, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     filterMenu
+                }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        Task { await viewModel.acknowledgeAll() }
+                    } label: {
+                        Image(systemName: "checkmark.circle")
+                    }
+                    .disabled(viewModel.items.isEmpty)
                 }
             }
             .searchable(text: $searchText, prompt: "搜尋收件項目")
@@ -131,44 +157,7 @@ struct InboxView: View {
         }
     }
     
-    // MARK: - Loading View
-    
-    private var loadingView: some View {
-        VStack(spacing: TTokens.spacingLG) {
-            ProgressView()
-                .scaleEffect(1.2)
-                .tint(Color.tint)
-            Text("載入中...")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-    }
-    
-    // MARK: - Empty State
-    
-    private var emptyStateView: some View {
-        VStack(spacing: TTokens.spacingXL) {
-            ZStack {
-                Circle()
-                    .fill(TTokens.gradientPrimary.opacity(0.1))
-                    .frame(width: 120, height: 120)
-                
-                Image(systemName: "tray.fill")
-                    .font(.system(size: 50))
-                    .foregroundStyle(TTokens.gradientPrimary)
-            }
-            
-            VStack(spacing: TTokens.spacingSM) {
-                Text("收件匣是空的")
-                    .font(.title2.weight(.semibold))
-                
-                Text(selectedKind == nil ? "所有項目都已完成" : "沒有 \(selectedKind!.displayName) 項目")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
+    // loading/empty 改用通用元件
     
     // MARK: - Filter Menu
     

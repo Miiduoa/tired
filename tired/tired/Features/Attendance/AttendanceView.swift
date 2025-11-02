@@ -59,6 +59,7 @@ struct AttendanceView: View {
     let membership: TenantMembership
     @StateObject private var viewModel: AttendanceViewModel
     @EnvironmentObject private var authService: AuthService
+    @EnvironmentObject private var deepLink: DeepLinkRouter
     @State private var didLocalCheckIn = false
     @State private var enteredSessId = ""
     @State private var showScanner = false
@@ -84,6 +85,12 @@ struct AttendanceView: View {
         .navigationTitle("10 秒點名")
         .task { await viewModel.load() }
         .refreshable { await viewModel.load() }
+        .task(id: deepLink.pendingAttendanceSessId) {
+            if let sess = deepLink.pendingAttendanceSessId, !sess.isEmpty {
+                await submitAttendanceCheck(using: sess)
+                deepLink.pendingAttendanceSessId = nil
+            }
+        }
         .sheet(isPresented: $showScanner) {
             NavigationStack {
                 QRScannerView { result in
@@ -119,21 +126,14 @@ struct AttendanceView: View {
     private var qrSection: some View {
         VStack(spacing: 16) {
             if viewModel.isLoading {
-                ProgressView("同步中…")
-                    .progressViewStyle(.circular)
-                    .frame(maxWidth: .infinity)
+                AppLoadingView(title: "同步中…")
             } else {
                 Image(uiImage: qrCode(from: viewModel.qrSeed))
                     .interpolation(.none)
                 .resizable()
                 .scaledToFit()
                     .frame(width: 240, height: 240)
-                    .padding(TTokens.spacingLG)
-                    .background(Color.card, in: RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous))
-                .overlay {
-                        RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
-                            .strokeBorder(Color.separator, lineWidth: 0.5)
-                    }
+                    .cardStyle(padding: TTokens.spacingLG, radius: TTokens.radiusLG, shadowLevel: 1)
                 
                 Text("QR Code 將在 \(viewModel.ttl) 秒後更新")
                     .font(.callout)
@@ -144,12 +144,12 @@ struct AttendanceView: View {
                         Button("開始點名") {
                             Task { await createAttendanceSession() }
                         }
-                        .buttonStyle(.borderedProminent)
+                        .tPrimaryButton()
                         
                         Button("結束點名") {
                             Task { await closeAttendanceSession() }
                         }
-                        .buttonStyle(.bordered)
+                        .tSecondaryButton()
                     }
                 } else {
                     VStack(spacing: 8) {
@@ -162,20 +162,19 @@ struct AttendanceView: View {
                         } label: {
                             Label("掃描 QR", systemImage: "qrcode.viewfinder")
                         }
-                        .buttonStyle(.bordered)
+                        .tSecondaryButton()
                         Button {
                             Task { await submitAttendanceCheck(using: enteredSessId) }
                         } label: {
                             Label("我已到", systemImage: "hand.raised")
                         }
-                        .buttonStyle(.borderedProminent)
+                        .tPrimaryButton(fullWidth: false)
                     }
                 }
             }
         }
         .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color.card, in: RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous))
+        .cardStyle(padding: TTokens.spacingLG, radius: TTokens.radiusLG, shadowLevel: 1)
     }
     
     private var statsSection: some View {
@@ -205,8 +204,7 @@ struct AttendanceView: View {
                             .font(.caption)
                     }
                 }
-                .padding()
-                .background(Color.card, in: RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous))
+                .cardStyle(padding: TTokens.spacingLG, radius: TTokens.radiusLG, shadowLevel: 1)
             }
         }
     }
@@ -227,8 +225,7 @@ struct AttendanceView: View {
                         }
                     }
                 }
-                .padding()
-                .background(Color.card, in: RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous))
+                .cardStyle(padding: TTokens.spacingLG, radius: TTokens.radiusLG, shadowLevel: 1)
             }
         }
     }

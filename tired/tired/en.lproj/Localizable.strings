@@ -1,0 +1,16 @@
+"action.retry" = "Retry";
+
+"feed.loading" = "Loading posts…";
+"feed.empty.title" = "No matching posts";
+"feed.empty.subtitle" = "Try adjusting filters or create a new post.";
+
+"broadcast.loading" = "Loading announcements…";
+"broadcast.empty.title" = "No announcements";
+"broadcast.empty.subtitle" = "New announcements will appear here.";
+
+"inbox.loading" = "Loading…";
+"inbox.empty.title" = "Inbox is empty";
+"inbox.empty.subtitle.all" = "All items are completed";
+"inbox.empty.subtitle.filtered" = "No items match the current filter";
+
+

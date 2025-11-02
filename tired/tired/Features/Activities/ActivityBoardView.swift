@@ -30,6 +30,13 @@ struct ActivityBoardView: View {
     
     var body: some View {
         List {
+            if viewModel.items.isEmpty {
+                AppEmptyStateView(
+                    systemImage: "text.bubble",
+                    title: "目前沒有活動",
+                    subtitle: "完成操作後會出現在這裡"
+                )
+            }
             ForEach(viewModel.items.sorted { $0.timestamp > $1.timestamp }) { item in
                 HStack(spacing: 12) {
                     Image(systemName: icon(for: item.kind))
@@ -55,6 +62,7 @@ struct ActivityBoardView: View {
         .navigationTitle("活動")
         .task { await viewModel.load() }
         .refreshable { await viewModel.load() }
+        .background(Color.bg.ignoresSafeArea())
     }
     
     private func icon(for kind: ActivityListItem.Kind) -> String {

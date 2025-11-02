@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import Photos
 import UniformTypeIdentifiers
 import UIKit
 import AVFoundation
@@ -17,6 +18,10 @@ struct ChatThreadView: View {
     @State private var alertMessage: String? = nil
     @State private var previewURL: URL? = nil
     @State private var shareURL: URL? = nil
+    @State private var videoURL: URL? = nil
+    @State private var uploadingTotal: Int = 0
+    @State private var uploadingDone: Int = 0
+    @State private var uploadingProgress: Double = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -28,10 +33,13 @@ struct ChatThreadView: View {
                                 message: m,
                                 isMe: m.senderId == session.user.id,
                                 onPreview: { url in
-                                    previewURL = url
+                                    if isLikelyVideo(url) { videoURL = url } else { previewURL = url }
                                 },
                                 onShare: { url in
                                     shareURL = url
+                                },
+                                onSave: { url in
+                                    Task { await saveToPhotos(url: url) }
                                 }
                             )
                             .id(m.id)
@@ -65,29 +73,53 @@ struct ChatThreadView: View {
         .sheet(item: Binding(get: { shareURL.map { PreviewItem(url: $0) } }, set: { _ in shareURL = nil })) { item in
             ShareSheet(activityItems: [item.url])
         }
+        .sheet(item: Binding(get: { videoURL.map { PreviewItem(url: $0) } }, set: { _ in videoURL = nil })) { item in
+            VideoPlayerView(url: item.url).ignoresSafeArea()
+        }
     }
 
     private var inputBar: some View {
-        HStack(spacing: 8) {
-            PhotosPicker(selection: $selectedItems, maxSelectionCount: 3, matching: .any(of: [.images, .videos])) {
-                Image(systemName: "paperclip.circle.fill").font(.title3)
+        VStack(spacing: 6) {
+            if uploadingTotal > 0 {
+                HStack(spacing: 8) {
+                    ProgressView(value: uploadingProgress)
+                        .progressViewStyle(.linear)
+                    Text(String(format: "%.0f%%", uploadingProgress * 100))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 12)
             }
-            .onChange(of: $selectedItems.wrappedValue) { _, items in
-                Task { await handlePicked(items: items) }
+            HStack(spacing: 8) {
+                PhotosPicker(selection: $selectedItems, maxSelectionCount: 3, matching: .any(of: [.images, .videos])) {
+                    Image(systemName: "paperclip.circle.fill").font(.title3)
+                }
+                .onChange(of: $selectedItems.wrappedValue) { _, items in
+                    Task { await handlePicked(items: items) }
+                }
+                .disabled(uploadingTotal > 0)
+                .opacity(uploadingTotal > 0 ? 0.5 : 1.0)
+
+                TextField("輸入訊息…", text: $inputText, axis: .vertical)
+                    .lineLimit(1...4)
+                    .textFieldStyle(.roundedBorder)
+
+                Button {
+                    Task { await send() }
+                } label: {
+                    Image(systemName: "paperplane.fill")
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(TTokens.gradientPrimary, in: Capsule())
+                }
+                .disabled(uploadingTotal > 0 || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .opacity((uploadingTotal > 0 || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? 0.5 : 1.0)
             }
-            TextField("輸入訊息…", text: $inputText, axis: .vertical)
-                .lineLimit(1...4)
-                .textFieldStyle(.roundedBorder)
-            Button {
-                Task { await send() }
-            } label: {
-                Image(systemName: "paperplane.fill")
-            }
-            .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(.ultraThinMaterial)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
     }
 
     @MainActor
@@ -139,7 +171,9 @@ struct ChatThreadView: View {
                     alertMessage = "圖片過大，已超過限制 (\(maxBytes/1_000_000)MB)。"
                     continue
                 }
-                if let url = try? await UploadAPI.uploadWithProgress(data: finalData, mime: "image/jpeg", progress: { _ in }) { urls.append(url.absoluteString) }
+                if let url = try? await UploadAPI.uploadWithProgress(data: finalData, mime: "image/jpeg", progress: { frac in
+                    uploadingProgress = (Double(uploadingDone) + frac) / Double(max(uploadingTotal, 1))
+                }) { urls.append(url.absoluteString) }
                 uploadingDone += 1
                 continue
             }
@@ -167,7 +201,9 @@ struct ChatThreadView: View {
                         continue
                     }
                 }
-                if let url = try? await UploadAPI.uploadWithProgress(data: data, mime: mime, progress: { _ in }) { urls.append(url.absoluteString) }
+                if let url = try? await UploadAPI.uploadWithProgress(data: data, mime: mime, progress: { frac in
+                    uploadingProgress = (Double(uploadingDone) + frac) / Double(max(uploadingTotal, 1))
+                }) { urls.append(url.absoluteString) }
                 uploadingDone += 1
             }
         }
@@ -178,6 +214,51 @@ struct ChatThreadView: View {
         await load()
         uploadingTotal = 0
         uploadingDone = 0
+        uploadingProgress = 0
+    }
+
+    // 儲存圖片/影片到相簿
+    @MainActor
+    private func saveToPhotos(url: URL) async {
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        guard status == .authorized || status == .limited else {
+            alertMessage = "相簿存取未授權，請到設定啟用照片權限。"
+            return
+        }
+
+        do {
+            if isLikelyVideo(url) {
+                // 下載到臨時檔後以影片建立資產
+                let localURL = try await downloadToTemporary(url: url, fileExtension: url.pathExtension)
+                try await PHPhotoLibrary.shared().performChanges {
+                    PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: localURL)
+                }
+            } else {
+                // 優先以資料建立 UIImage 再寫入
+                let (data, _) = try await URLSession.shared.data(from: url)
+                guard let img = UIImage(data: data) else { throw NSError(domain: "Save", code: -1) }
+                try await PHPhotoLibrary.shared().performChanges {
+                    PHAssetChangeRequest.creationRequestForAsset(from: img)
+                }
+            }
+        } catch {
+            alertMessage = "儲存失敗：\(error.localizedDescription)"
+            return
+        }
+    }
+
+    // 簡易型別偵測（與附件檢視一致邏輯）
+    private func isLikelyVideo(_ url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        return ["mp4", "mov", "m4v"].contains(ext) || url.absoluteString.contains("video=")
+    }
+
+    // 將遠端 URL 下載為本地臨時檔
+    private func downloadToTemporary(url: URL, fileExtension: String) async throws -> URL {
+        let (data, _) = try await URLSession.shared.data(from: url)
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString).appendingPathExtension(fileExtension)
+        try data.write(to: tmp)
+        return tmp
     }
 }
 
@@ -186,6 +267,7 @@ private struct ChatBubble: View {
     let isMe: Bool
     let onPreview: (URL) -> Void
     let onShare: (URL) -> Void
+    let onSave: (URL) -> Void
 
     var body: some View {
         HStack {
@@ -202,6 +284,8 @@ private struct ChatBubble: View {
                                     onPreview(tapped)
                                 }, onShare: { tapped in
                                     onShare(tapped)
+                                }, onSave: { tapped in
+                                    onSave(tapped)
                                 })
                             }
                         }
@@ -233,12 +317,18 @@ private struct AttachmentView: View {
     let url: URL
     let onTap: (URL) -> Void
     let onShare: (URL) -> Void
+    let onSave: (URL) -> Void
     @State private var image: UIImage? = nil
     @State private var isVideo: Bool = false
+    @State private var playInline: Bool = false
 
     var body: some View {
         Group {
-            if let image {
+            if playInline && isVideo {
+                VideoPlayerView(url: url)
+                    .frame(height: 200)
+                    .cornerRadius(8)
+            } else if let image {
                 ZStack(alignment: .center) {
                     Image(uiImage: image)
                         .resizable()
@@ -252,8 +342,12 @@ private struct AttachmentView: View {
                 }
                 .onTapGesture { onTap(url) }
                 .contextMenu {
+                    Button { onSave(url) } label: { Label("儲存到相簿", systemImage: "square.and.arrow.down") }
                     Button { onShare(url) } label: { Label("分享", systemImage: "square.and.arrow.up") }
                     Button { onTap(url) } label: { Label("預覽", systemImage: "doc.viewfinder") }
+                    if isVideo {
+                        Button { playInline.toggle() } label: { Label(playInline ? "停止播放" : "在泡泡中播放", systemImage: "play.fill") }
+                    }
                 }
             } else if isLikelyImage(url) == false {
                 // Generic tile for non-image (e.g., file)
@@ -268,6 +362,7 @@ private struct AttachmentView: View {
                     .background(Color.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
                 }
                 .contextMenu {
+                    Button { onSave(url) } label: { Label("儲存到相簿", systemImage: "square.and.arrow.down") }
                     Button { onShare(url) } label: { Label("分享", systemImage: "square.and.arrow.up") }
                     Button { onTap(url) } label: { Label("預覽", systemImage: "doc.viewfinder") }
                 }

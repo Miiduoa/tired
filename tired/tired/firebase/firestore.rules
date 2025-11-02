@@ -30,6 +30,11 @@ service cloud.firestore {
         allow create: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(cid)).data.participantIds;
         allow update, delete: if false; // immutable messages
       }
+      match /reads/{uid} {
+        allow read, write: if isSignedIn()
+          && request.auth.uid == uid
+          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(cid)).data.participantIds;
+      }
     }
 
     // Attendance

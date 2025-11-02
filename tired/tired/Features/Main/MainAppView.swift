@@ -5,9 +5,15 @@ struct MainAppView: View {
     @StateObject private var moduleManager = TenantModuleManager()
     @State private var selectedModule: AppModule = .home
     @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var deepLink: DeepLinkRouter
+    @State private var deepLinkConversation: Conversation? = nil
+    @State private var deepLinkAttendance: AttendanceLink? = nil
+    @State private var deepLinkError: String? = nil
     
     var body: some View {
         content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.bg.ignoresSafeArea(.all))
             .task {
                 if case .loading = sessionStore.state {
                     await sessionStore.refreshMemberships()
@@ -25,6 +31,65 @@ struct MainAppView: View {
                     }
                 }
             }
+            .task(id: deepLink.pendingChatId) {
+                guard let cid = deepLink.pendingChatId else { return }
+                if case .ready(let session) = sessionStore.state {
+                    let service: ChatServiceProtocol = ChatServiceRouter.make()
+                    if let convo = await service.conversation(id: cid, for: session.user.id) {
+                        deepLinkConversation = convo
+                    }
+                    deepLink.pendingChatId = nil
+                }
+            }
+            .sheet(item: $deepLinkConversation) { convo in
+                if case .ready(let session) = sessionStore.state {
+                    NavigationStack { ChatThreadView(session: session, conversation: convo, chatService: ChatServiceRouter.make()) }
+                }
+            }
+            .task(id: deepLink.pendingAttendanceSessId) {
+                guard let sess = deepLink.pendingAttendanceSessId else { return }
+                if case .ready(let session) = sessionStore.state {
+                    if (session.activeMembership ?? session.allMemberships.first) != nil {
+                        deepLinkAttendance = AttendanceLink(id: sess)
+                    } else {
+                        deepLinkError = "需要加入或選擇租戶後才能簽到。"
+                    }
+                }
+            }
+            .sheet(item: $deepLinkAttendance) { link in
+                if case .ready(let session) = sessionStore.state, let membership = session.activeMembership ?? session.allMemberships.first {
+                    NavigationStack {
+                        AttendanceView(membership: membership)
+                            .environmentObject(deepLink)
+                            .onAppear { deepLink.pendingAttendanceSessId = link.id }
+                    }
+                }
+            }
+            .onReceive(sessionStore.$state) { state in
+                // When state becomes ready, re-check pending deep links
+                if case .ready(let session) = state {
+                    if let cid = deepLink.pendingChatId {
+                        Task {
+                            let service: ChatServiceProtocol = ChatServiceRouter.make()
+                            if let convo = await service.conversation(id: cid, for: session.user.id) {
+                                deepLinkConversation = convo
+                            } else {
+                                deepLinkError = "無法開啟對話，可能不存在或無權限。"
+                            }
+                            deepLink.pendingChatId = nil
+                        }
+                    }
+                    if let sess = deepLink.pendingAttendanceSessId,
+                       (session.activeMembership ?? session.allMemberships.first) != nil {
+                        deepLinkAttendance = AttendanceLink(id: sess)
+                    }
+                }
+            }
+            .alert("無法處理連結", isPresented: Binding(get: { deepLinkError != nil }, set: { v in if !v { deepLinkError = nil } })) {
+                Button("好", role: .cancel) {}
+            } message: {
+                Text(deepLinkError ?? "")
+            }
     }
     
     @ViewBuilder
@@ -33,6 +98,8 @@ struct MainAppView: View {
         case .loading:
             ProgressView("載入中…")
                 .progressViewStyle(.circular)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.bg.ignoresSafeArea(.all))
         case .signedOut:
             AuthView().environmentObject(sessionStore.authService)
         case .error(let message):
@@ -49,6 +116,8 @@ struct MainAppView: View {
                 .buttonStyle(.borderedProminent)
             }
             .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.bg.ignoresSafeArea(.all))
         case .ready(let session):
             if let activeMembership = session.activeMembership {
                 OrganizationTabView(
@@ -71,6 +140,8 @@ struct MainAppView: View {
         }
     }
 }
+
+private struct AttendanceLink: Identifiable { let id: String }
 
 private struct OrganizationTabView: View {
     let session: AppSession
@@ -96,6 +167,8 @@ private struct OrganizationTabView: View {
                     }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.bg.ignoresSafeArea(.all))
         .task {
             if !modules.contains(selectedModule) {
                 selectedModule = .home
@@ -245,8 +318,7 @@ private struct HomeView: View {
                         Spacer()
                         Image(systemName: "chevron.right").foregroundStyle(.secondary)
                     }
-                    .padding()
-                    .background(Color.card, in: RoundedRectangle(cornerRadius: 12))
+                    .cardStyle(padding: TTokens.spacingLG, radius: TTokens.radiusLG, shadowLevel: 1)
                 }
             }
             if quickActions.isEmpty {
@@ -416,8 +488,7 @@ private struct HomeStatCard: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
-        .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .cardStyle(padding: TTokens.spacingLG, radius: 16, shadowLevel: 1)
     }
 }
 

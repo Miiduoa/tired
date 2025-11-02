@@ -76,8 +76,12 @@ struct InboxDetailView: View {
                 }
             }
             
-            Button("已知悉") { /* TODO: call ack */ }
-                .gradientPrimary()
+            Button("已知悉") {
+                // 標記為已知悉（本地持久化），並可在有網路時由 OutboxService 重送至後端
+                AckStore.shared.ack(item.id.uuidString)
+                OutboxService.shared.enqueueInboxAck(inboxItemId: item.id.uuidString, membershipId: "demo")
+            }
+            .gradientPrimary()
             
             Spacer()
         }

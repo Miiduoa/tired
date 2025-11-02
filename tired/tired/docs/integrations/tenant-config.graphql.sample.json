@@ -1,0 +1,23 @@
+{
+  "id": "sample-graphql-tenant",
+  "adapter": "graphQL",
+  "featureFlags": {
+    "enabledModules": ["home", "broadcast", "inbox", "activities", "insights", "profile"],
+    "extra": {}
+  },
+  "options": {
+    "graphql.endpoint": "https://graphql.example.com/",
+    "graphql.header.Authorization": "Bearer YOUR_ACCESS_TOKEN",
+
+    "gql.broadcasts": "query($groupId: ID!){ broadcasts(groupId:$groupId){ id title body deadline requiresAck acked eventId } }",
+    "gql.inbox": "query($groupId: ID!){ inboxItems(groupId:$groupId){ id kind title subtitle deadline isUrgent priority eventId } }",
+    "gql.activities": "query($groupId: ID!){ activities(groupId:$groupId){ kind title subtitle timestamp } }",
+    "gql.clock": "query($groupId: ID!){ clockRecords(groupId:$groupId){ id site time status } }",
+    "gql.attendance": "query($groupId: ID!){ attendanceSnapshot(groupId:$groupId){ courseName attendanceTime validDuration stats{attended absent late total} personalRecords{ courseName date status } } }",
+    "gql.esg": "query($groupId: ID!){ esgSummary(groupId:$groupId){ progress monthlyReduction records{ id title subtitle timestamp } } }",
+    "gql.insights": "query($groupId: ID!){ insights(groupId:$groupId){ id title entries{ id category title value trend } } }",
+
+    "gql.mutation.ackInbox": "mutation($groupId: ID!, $itemId: ID!){ ackInboxItem(groupId:$groupId,itemId:$itemId) }"
+  }
+}
+

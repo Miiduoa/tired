@@ -8,6 +8,7 @@ protocol ChatServiceProtocol {
     func markRead(conversationId: String, userId: String) async
     func unreadCount(conversationId: String, userId: String, sampleLimit: Int) async -> Int
     func sendAttachment(conversationId: String, from userId: String, name: String, attachmentURLs: [String]) async throws -> Message
+    func conversation(id: String, for userId: String) async -> Conversation?
 }
 
 final class ChatService: ChatServiceProtocol {
@@ -92,5 +93,9 @@ final class ChatService: ChatServiceProtocol {
         }
         return msg
     }
-}
 
+    func conversation(id: String, for userId: String) async -> Conversation? {
+        let list = conversationsStore[userId] ?? []
+        return list.first(where: { $0.id == id })
+    }
+}

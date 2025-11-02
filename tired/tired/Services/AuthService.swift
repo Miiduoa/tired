@@ -392,6 +392,107 @@ final class AuthService: NSObject, ObservableObject {
         }
     }
     
+    // MARK: - 密碼變更（Email 使用者）
+    
+    func changePassword(currentPassword: String, newPassword: String) {
+        guard let firebaseUser = firebase.currentUser else {
+            presentAlert(.error, message: "請先登入後再變更密碼。")
+            return
+        }
+        guard let email = firebaseUser.email, !email.isEmpty else {
+            presentAlert(.info, message: "此帳號使用第三方登入，請於第三方服務變更密碼。")
+            return
+        }
+        guard newPassword.count >= 6 else {
+            presentAlert(.error, message: "新密碼至少需 6 碼。")
+            return
+        }
+        guard !isLoading else { return }
+        
+        isLoading = true
+        activeAlert = nil
+        
+        Task {
+            do {
+                let credential = EmailAuthProvider.credential(withEmail: email, password: currentPassword)
+                try await reauthenticate(user: firebaseUser, with: credential)
+                try await updatePassword(user: firebaseUser, newPassword: newPassword)
+                await MainActor.run {
+                    self.isLoading = false
+                    self.presentAlert(.success, message: "密碼已更新。")
+                }
+            } catch {
+                await MainActor.run {
+                    self.isLoading = false
+                    self.presentAlert(.error, message: self.message(for: error))
+                }
+            }
+        }
+    }
+    
+    // MARK: - 刪除帳號
+    
+    func deleteAccount(password: String? = nil) {
+        guard let firebaseUser = firebase.currentUser else {
+            presentAlert(.error, message: "請先登入後再刪除帳號。")
+            return
+        }
+        guard !isLoading else { return }
+        
+        isLoading = true
+        activeAlert = nil
+        
+        Task {
+            do {
+                // 若為 email/password 帳號，嘗試進行 reauth
+                if let email = firebaseUser.email, let password, !password.isEmpty {
+                    let credential = EmailAuthProvider.credential(withEmail: email, password: password)
+                    try await reauthenticate(user: firebaseUser, with: credential)
+                }
+                try await deleteUser(user: firebaseUser)
+                await MainActor.run {
+                    self.isLoading = false
+                    self.isAuthenticated = false
+                    self.currentUser = nil
+                }
+            } catch {
+                await MainActor.run {
+                    self.isLoading = false
+                    self.presentAlert(.error, message: self.message(for: error))
+                }
+            }
+        }
+    }
+    
+    // MARK: - Low-level async wrappers
+    
+    private func reauthenticate(user: FirebaseAuth.User, with credential: AuthCredential) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            user.reauthenticate(with: credential) { _, error in
+                if let error { continuation.resume(throwing: error) }
+                else { continuation.resume(returning: ()) }
+            }
+        }
+    }
+    
+    private func updatePassword(user: FirebaseAuth.User, newPassword: String) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            user.updatePassword(to: newPassword) { error in
+                if let error { continuation.resume(throwing: error) }
+                else { continuation.resume(returning: ()) }
+            }
+        }
+    }
+    
+    private func deleteUser(user: FirebaseAuth.User) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            user.delete { error in
+                if let error { continuation.resume(throwing: error) }
+                else { continuation.resume(returning: ()) }
+            }
+        }
+    }
+    
     // MARK: - Helpers
     
     private func presentAlert(_ kind: AuthAlert.Kind, message: String) {
