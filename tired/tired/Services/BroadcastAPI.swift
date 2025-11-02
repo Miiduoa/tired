@@ -55,7 +55,7 @@ struct BroadcastAPI {
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
         
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
             throw BroadcastAPIError.requestFailed("Failed to create broadcast")
         }
         
@@ -109,7 +109,7 @@ struct BroadcastAPI {
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
         
         let (_, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
             throw BroadcastAPIError.requestFailed("Failed to update broadcast")
         }
     }
@@ -130,15 +130,15 @@ struct BroadcastAPI {
         request.setValue(authorId, forHTTPHeaderField: "X-Author-Id")
         
         let (_, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
+        guard let httpResponse = response as? HTTPURLResponse else {
             throw BroadcastAPIError.requestFailed("Invalid response")
         }
-        if http.statusCode == 403 {
+        if httpResponse.statusCode == 403 {
             throw BroadcastAPIError.notAuthorized
-        } else if http.statusCode == 404 {
+        } else if httpResponse.statusCode == 404 {
             throw BroadcastAPIError.broadcastNotFound
         }
-        guard (200..<300).contains(http.statusCode) else {
+        guard (200..<300).contains(httpResponse.statusCode) else {
             throw BroadcastAPIError.requestFailed("Failed to delete broadcast")
         }
     }
@@ -170,7 +170,7 @@ struct BroadcastAPI {
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
         
         let (_, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
             throw BroadcastAPIError.requestFailed("Failed to acknowledge broadcast")
         }
     }
@@ -208,7 +208,7 @@ struct BroadcastAPI {
         request.httpMethod = "GET"
         
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
             throw BroadcastAPIError.requestFailed("Failed to fetch broadcasts")
         }
         
@@ -232,7 +232,7 @@ struct BroadcastAPI {
         request.httpMethod = "GET"
         
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
             throw BroadcastAPIError.requestFailed("Failed to fetch ack stats")
         }
         

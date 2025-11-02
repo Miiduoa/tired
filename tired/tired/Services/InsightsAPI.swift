@@ -6,6 +6,79 @@ enum InsightsAPIError: Error {
     case invalidDateRange
 }
 
+// MARK: - Supporting Types
+
+extension InsightsAPI {
+    static func getDashboardSummary(tenantId: String) async throws -> DashboardSummary {
+        // Mock data
+        return DashboardSummary(
+            totalMembers: 150,
+            activeRate: 0.85,
+            weeklyEvents: 12,
+            avgAttendanceRate: 0.92
+        )
+    }
+    
+    static func getAttendanceAnalytics(tenantId: String, period: String) async throws -> AttendanceAnalyticsData {
+        // Mock data
+        let calendar = Calendar.current
+        let today = Date()
+        var dailyRates: [DailyAttendanceRate] = []
+        
+        for i in 0..<7 {
+            if let date = calendar.date(byAdding: .day, value: -i, to: today) {
+                dailyRates.append(DailyAttendanceRate(
+                    date: date,
+                    rate: Double.random(in: 0.75...0.95)
+                ))
+            }
+        }
+        
+        return AttendanceAnalyticsData(
+            avgRate: 0.87,
+            maxRate: 0.95,
+            minRate: 0.75,
+            dailyRates: dailyRates.reversed()
+        )
+    }
+    
+    static func getActivityEngagement(tenantId: String, period: String) async throws -> ActivityEngagement {
+        // Mock data
+        return ActivityEngagement(
+            typeDistribution: [
+                ActivityTypeCount(type: "活動", count: 25),
+                ActivityTypeCount(type: "投票", count: 18),
+                ActivityTypeCount(type: "公告", count: 42)
+            ],
+            topParticipants: [
+                ParticipantActivity(userId: "1", userName: "張小明", count: 45),
+                ParticipantActivity(userId: "2", userName: "李小華", count: 38),
+                ParticipantActivity(userId: "3", userName: "王小美", count: 32),
+                ParticipantActivity(userId: "4", userName: "陳小強", count: 28),
+                ParticipantActivity(userId: "5", userName: "林小芳", count: 24)
+            ]
+        )
+    }
+    
+    static func getMemberActivity(tenantId: String, topN: Int) async throws -> [MemberActivity] {
+        // Mock data
+        return (1...topN).map { i in
+            MemberActivity(
+                id: "\(i)",
+                userId: "user\(i)",
+                userName: "用戶 \(i)",
+                activityCount: Int.random(in: 10...50),
+                lastActive: Date().addingTimeInterval(-Double.random(in: 0...86400))
+            )
+        }
+    }
+    
+    static func exportReport(tenantId: String, reportType: String, format: String) async throws -> URL {
+        // Mock URL
+        return URL(string: "https://example.com/reports/\(tenantId)-\(reportType).\(format)")!
+    }
+}
+
 /// 數據分析與洞察 API 服務
 struct InsightsAPI {
     
@@ -65,10 +138,10 @@ struct InsightsAPI {
         groupId: String,
         startDate: Date,
         endDate: Date
-    ) async throws -> AttendanceAnalytics {
+    ) async throws -> AttendanceAnalyticsData {
         guard let endpoint = ProcessInfo.processInfo.environment["TIRED_API_URL"] else {
             // 離線模式
-            return AttendanceAnalytics.mock()
+            return AttendanceAnalyticsData.mock()
         }
         
         let formatter = ISO8601DateFormatter()
@@ -93,7 +166,7 @@ struct InsightsAPI {
         
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(AttendanceAnalytics.self, from: data)
+        return try decoder.decode(AttendanceAnalyticsData.self, from: data)
     }
     
     // MARK: - 活動參與分析
@@ -239,34 +312,8 @@ enum ExportFormat: String, Codable {
     case csv
 }
 
-struct AttendanceAnalytics: Codable {
-    let totalSessions: Int
-    let averageRate: Double
-    let trendData: [DatePoint]
-    let topPerformers: [String]
-    let needsAttention: [String]
-    
-    struct DatePoint: Codable {
-        let date: Date
-        let rate: Double
-    }
-    
-    static func mock() -> AttendanceAnalytics {
-        return AttendanceAnalytics(
-            totalSessions: 45,
-            averageRate: 0.92,
-            trendData: [
-                DatePoint(date: Date().addingTimeInterval(-604800), rate: 0.89),
-                DatePoint(date: Date().addingTimeInterval(-518400), rate: 0.93),
-                DatePoint(date: Date().addingTimeInterval(-432000), rate: 0.91),
-                DatePoint(date: Date().addingTimeInterval(-345600), rate: 0.95),
-                DatePoint(date: Date().addingTimeInterval(-259200), rate: 0.92)
-            ],
-            topPerformers: ["張三", "李四", "王五"],
-            needsAttention: ["趙六", "錢七"]
-        )
-    }
-}
+// NOTE: Removed duplicate AttendanceAnalytics definition here to avoid redeclaration.
+// The canonical AttendanceAnalyticsData is defined in InsightsModels.swift.
 
 struct ActivityAnalytics: Codable {
     let totalEvents: Int

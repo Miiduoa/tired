@@ -179,8 +179,8 @@ struct ClockAPI {
         endDate: Date? = nil
     ) async throws -> [ClockRecordItem] {
         guard let endpoint = ProcessInfo.processInfo.environment["TIRED_API_URL"] else {
-            // 離線模式：返回模擬數據
-            return ClockRecordItem.mockRecords()
+            // 離線模式：返回 Mock 數據
+            return await MockDataProvider.shared.mockClockRecords()
         }
         
         var components = URLComponents(string: "\(endpoint)/v1/clock/records")!

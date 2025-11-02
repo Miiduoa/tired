@@ -63,6 +63,41 @@ final class FriendsServiceFirestore: FriendsServiceProtocol, FriendsRealtimeList
         try? await reqRef.delete()
     }
 
+    func sendRequest(from fromUserId: String, to toUserId: String) async throws {
+        let trimmed = toUserId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw NSError(domain: "FriendsService", code: -2, userInfo: [NSLocalizedDescriptionKey: "請輸入好友 ID"])
+        }
+        // Prevent duplicate requests
+        let existing = try await db.collection("users").document(trimmed)
+            .collection("friend_requests")
+            .whereField("fromUid", isEqualTo: fromUserId)
+            .whereField("status", isEqualTo: "pending")
+            .getDocuments()
+        if !existing.documents.isEmpty {
+            throw NSError(domain: "FriendsService", code: -3, userInfo: [NSLocalizedDescriptionKey: "已送出邀請，請等待回覆"])
+        }
+
+        // Create pending request under recipient
+        let requestRef = db.collection("users").document(trimmed).collection("friend_requests").document(fromUserId)
+        let now = Timestamp(date: Date())
+        try await requestRef.setData([
+            "fromUid": fromUserId,
+            "fromDisplayName": "", // display name可於後端補
+            "createdAt": now,
+            "status": "pending"
+        ], merge: true)
+    }
+
+    func removeFriend(friendId: String, for userId: String) async throws {
+        let batch = db.batch()
+        let myRef = db.collection("users").document(userId).collection("friends").document(friendId)
+        batch.deleteDocument(myRef)
+        let theirRef = db.collection("users").document(friendId).collection("friends").document(userId)
+        batch.deleteDocument(theirRef)
+        try await batch.commit()
+    }
+
     @discardableResult
     func listenFriends(of userId: String, onChange: @escaping ([Friend]) -> Void) -> CancelableToken? {
         let query = db.collection("users").document(userId).collection("friends").order(by: "since", descending: true)

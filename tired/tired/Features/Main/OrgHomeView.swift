@@ -71,31 +71,31 @@ struct OrgHomeView: View {
             }
             if membership.hasAccess(to: .attendance) {
                 TCard(title: "10 秒點名", subtitle: "今日課程/場次", trailingSystemImage: "qrcode.viewfinder") {
-                    NavigationLink("開啟點名") { AttendanceView(membership: membership) }
+                    NavigationLink("開啟點名") { AttendanceView_Modern(membership: membership) }
                         .tPrimaryButton(fullWidth: true)
                 }
             }
             if membership.hasAccess(to: .clock) {
                 TCard(title: "打卡", subtitle: "據點與外勤", trailingSystemImage: "mappin.circle") {
-                    NavigationLink("前往打卡") { ClockView(membership: membership) }
+                    NavigationLink("前往打卡") { ClockView_Modern(membership: membership) }
                         .tPrimaryButton(fullWidth: true)
                 }
             }
             if membership.hasAccess(to: .esg) {
                 TCard(title: "ESG", subtitle: "帳單 OCR 與月報", trailingSystemImage: "leaf.fill") {
-                    NavigationLink("開啟 ESG") { ESGOverviewView(membership: membership) }
+                    NavigationLink("開啟 ESG") { ESGOverviewView_Modern(membership: membership) }
                         .tPrimaryButton(fullWidth: true)
                 }
             }
             if membership.hasAccess(to: .activities) {
                 TCard(title: "活動", subtitle: "報名/票券/入場", trailingSystemImage: "calendar") {
-                    NavigationLink("查看活動") { ActivityBoardView(membership: membership) }
+                    NavigationLink("查看活動") { ActivityBoardView_Modern(membership: membership) }
                         .tPrimaryButton(fullWidth: true)
                 }
             }
             if membership.hasAccess(to: .insights) {
                 TCard(title: "分析", subtitle: "群組儀表板", trailingSystemImage: "chart.line.uptrend.xyaxis") {
-                    NavigationLink("查看儀表板") { InsightsView(membership: membership) }
+                    NavigationLink("查看儀表板") { InsightsView_Modern(membership: membership) }
                         .tPrimaryButton(fullWidth: true)
                 }
             }

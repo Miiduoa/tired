@@ -8,6 +8,12 @@ import GoogleSignIn
 import Security
 import UIKit
 
+// MARK: - 協定（供其他模組依賴注入）
+
+protocol AuthServiceProtocol {
+    var currentUser: User? { get }
+}
+
 // MARK: - 認證服務
 
 @MainActor
@@ -536,6 +542,12 @@ final class AuthService: NSObject, ObservableObject {
         guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return nil }
         return scene.windows.first { $0.isKeyWindow }?.rootViewController
     }
+}
+
+// MARK: - 提供 shared 並符合協定
+
+extension AuthService: AuthServiceProtocol {
+    static let shared = AuthService()
 }
 
 // MARK: - Apple Sign-In Delegate

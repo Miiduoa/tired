@@ -204,8 +204,7 @@ struct ChatListView_Modern: View {
     @MainActor
     private func markAsRead(_ convo: Conversation) async {
         ReadStateStore.shared.markOpened(conversationId: convo.id)
-        // TODO: 實現 markAsRead API
-        // await chatService.markAsRead(conversationId: convo.id, userId: session.user.id)
+        await chatService.markRead(conversationId: convo.id, userId: session.user.id)
         if let count = unreadCounts[convo.id], count > 0 {
             unreadCounts[convo.id] = 0
         }
@@ -307,6 +306,15 @@ private struct ConversationCard: View {
 struct FriendsView_Modern: View {
     let session: AppSession
     @StateObject private var viewModel: FriendsViewModel
+    @EnvironmentObject private var router: DeepLinkRouter
+    private let chatService: ChatServiceProtocol = ChatServiceRouter.make()
+    
+    @State private var showAddFriendSheet = false
+    @State private var newFriendIdentifier = ""
+    @State private var isSendingRequest = false
+    @State private var addFriendError: String?
+    @State private var activeChat: Conversation?
+    @State private var friendPendingRemoval: Friend?
 
     init(session: AppSession) {
         self.session = session
@@ -341,7 +349,7 @@ struct FriendsView_Modern: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         HapticFeedback.light()
-                        // TODO: 添加好友
+                        showAddFriendSheet = true
                     } label: {
                         Image(systemName: "person.badge.plus")
                     }
@@ -349,6 +357,36 @@ struct FriendsView_Modern: View {
             }
             .refreshable { await viewModel.load() }
             .task { await viewModel.load() }
+            .sheet(isPresented: $showAddFriendSheet) {
+                AddFriendSheet(
+                    identifier: $newFriendIdentifier,
+                    isSubmitting: isSendingRequest,
+                    onCancel: {
+                        showAddFriendSheet = false
+                        newFriendIdentifier = ""
+                    },
+                    onSubmit: {
+                        Task { await sendFriendRequest() }
+                    }
+                )
+                .presentationDetents([.fraction(0.35)])
+            }
+            .alert("無法送出邀請", isPresented: Binding(get: { addFriendError != nil }, set: { if !$0 { addFriendError = nil } })) {
+                Button("好", role: .cancel) { addFriendError = nil }
+            } message: {
+                Text(addFriendError ?? "")
+            }
+            .confirmationDialog("確定要刪除此好友？", item: $friendPendingRemoval) { friend in
+                Button("刪除好友", role: .destructive) {
+                    Task { await removeFriend(friend) }
+                }
+                Button("取消", role: .cancel) {}
+            } message: { friend in
+                Text("這將移除與 \(friend.user.displayName) 的好友關係")
+            }
+            .navigationDestination(item: $activeChat) { convo in
+                ChatThreadView(session: session, conversation: convo, chatService: chatService)
+            }
         }
     }
     
@@ -415,7 +453,19 @@ struct FriendsView_Modern: View {
             } else {
                 LazyVStack(spacing: 12) {
                     ForEach(Array(viewModel.friends.enumerated()), id: \.element.id) { index, friend in
-                        FriendCard(friend: friend)
+                        FriendCard(
+                            friend: friend,
+                            onMessage: {
+                                Task { await startChat(with: friend) }
+                            },
+                            onProfile: {
+                                router.activeLink = .profile(friend.user.id)
+                                router.showLinkHandler = true
+                            },
+                            onRemove: {
+                                friendPendingRemoval = friend
+                            }
+                        )
                             .transition(.asymmetric(
                                 insertion: .scale(scale: 0.95).combined(with: .opacity),
                                 removal: .scale(scale: 0.98).combined(with: .opacity)
@@ -428,6 +478,66 @@ struct FriendsView_Modern: View {
                     }
                 }
             }
+        }
+    }
+
+    @MainActor
+    private func sendFriendRequest() async {
+        let identifier = newFriendIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !identifier.isEmpty else {
+            addFriendError = FriendsViewModel.FriendsError.emptyIdentifier.errorDescription
+            return
+        }
+        isSendingRequest = true
+        let result = await viewModel.sendRequest(to: identifier)
+        isSendingRequest = false
+        switch result {
+        case .success:
+            ToastCenter.shared.show("已送出好友邀請", style: .success)
+            showAddFriendSheet = false
+            newFriendIdentifier = ""
+            await viewModel.load()
+        case .failure(let error):
+            addFriendError = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func removeFriend(_ friend: Friend) async {
+        let result = await viewModel.remove(friend)
+        switch result {
+        case .success:
+            ToastCenter.shared.show("已移除好友", style: .success)
+        case .failure(let error):
+            ToastCenter.shared.show("無法移除好友：\(error.localizedDescription)", style: .error)
+        }
+        friendPendingRemoval = nil
+    }
+
+    @MainActor
+    private func startChat(with friend: Friend) async {
+        if let convo = await ensureConversation(with: friend) {
+            activeChat = convo
+        }
+    }
+
+    @MainActor
+    private func ensureConversation(with friend: Friend) async -> Conversation? {
+        let existing = await chatService.conversations(for: session.user.id)
+        if let convo = existing.first(where: { conversation in
+            let set = Set(conversation.participantIds)
+            return set.contains(session.user.id) && set.contains(friend.user.id)
+        }) {
+            return convo
+        }
+        do {
+            return try await chatService.createConversation(
+                participantIds: [session.user.id, friend.user.id],
+                title: friend.user.displayName
+            )
+        } catch {
+            ToastCenter.shared.show("無法建立對話：\(error.localizedDescription)", style: .error)
+            return nil
         }
     }
 }
@@ -489,6 +599,9 @@ private struct FriendRequestCard: View {
 
 private struct FriendCard: View {
     let friend: Friend
+    let onMessage: () -> Void
+    let onProfile: () -> Void
+    let onRemove: () -> Void
     
     var body: some View {
         HStack(spacing: TTokens.spacingMD) {
@@ -516,21 +629,21 @@ private struct FriendCard: View {
             Menu {
                 Button {
                     HapticFeedback.light()
-                    // TODO: 發送訊息
+                    onMessage()
                 } label: {
                     Label("發送訊息", systemImage: "message")
                 }
                 
                 Button {
                     HapticFeedback.light()
-                    // TODO: 查看資料
+                    onProfile()
                 } label: {
                     Label("查看資料", systemImage: "person.crop.circle")
                 }
                 
                 Button(role: .destructive) {
                     HapticFeedback.warning()
-                    // TODO: 刪除好友
+                    onRemove()
                 } label: {
                     Label("刪除好友", systemImage: "person.crop.circle.badge.minus")
                 }
@@ -543,5 +656,43 @@ private struct FriendCard: View {
         }
         .padding(TTokens.spacingLG)
         .floatingCard()
+    }
+}
+
+private struct AddFriendSheet: View {
+    @Binding var identifier: String
+    let isSubmitting: Bool
+    let onCancel: () -> Void
+    let onSubmit: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("好友帳號或 ID") {
+                    TextField("輸入用戶 ID", text: $identifier)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+            }
+            .navigationTitle("新增好友")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消", action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        guard !isSubmitting else { return }
+                        onSubmit()
+                    } label: {
+                        if isSubmitting {
+                            ProgressView()
+                        } else {
+                            Text("送出")
+                        }
+                    }
+                    .disabled(identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting)
+                }
+            }
+        }
     }
 }

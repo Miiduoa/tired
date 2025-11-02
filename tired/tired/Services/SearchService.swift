@@ -34,8 +34,38 @@ class SearchService {
         }
         
         guard let endpoint = ProcessInfo.processInfo.environment["TIRED_API_URL"] else {
-            // 離線模式：返回空結果
-            return SearchResults(posts: [], broadcasts: [], users: [], events: [])
+            // 離線模式：返回 Mock 搜索結果
+            let mockProvider = await MockDataProvider.shared
+            let posts = await scope == .posts || scope == .all ? mockProvider.mockPosts() : []
+            let broadcasts = await (scope == .broadcasts || scope == .all) ? mockProvider.mockBroadcasts().map { broadcast in
+                BroadcastSearchResult(
+                    id: broadcast.id,
+                    title: broadcast.title,
+                    body: broadcast.body,
+                    deadline: broadcast.deadline,
+                    highlights: []
+                )
+            } : []
+            let users = await scope == .users || scope == .all ? mockProvider.mockUsers() : []
+            let events = await (scope == .events || scope == .all) ? mockProvider.mockEvents().map { event in
+                EventSearchResult(
+                    id: event.id,
+                    title: event.title,
+                    description: event.description ?? "",
+                    startTime: event.startTime,
+                    location: event.location ?? "",
+                    highlights: []
+                )
+            } : []
+            
+            // 簡單的關鍵詞過濾
+            let queryLower = trimmedQuery.lowercased()
+            return SearchResults(
+                posts: posts.filter { $0.summary.lowercased().contains(queryLower) || $0.content.lowercased().contains(queryLower) },
+                broadcasts: broadcasts.filter { $0.title.lowercased().contains(queryLower) || $0.body.lowercased().contains(queryLower) },
+                users: users.filter { $0.displayName.lowercased().contains(queryLower) },
+                events: events.filter { $0.title.lowercased().contains(queryLower) || $0.description.lowercased().contains(queryLower) }
+            )
         }
         
         var components = URLComponents(string: "\(endpoint)/v1/search")!

@@ -62,8 +62,17 @@ struct AttendanceView_Modern: View {
                     }
                 }
             }
-            .task { await viewModel.load() }
-            .refreshable { await viewModel.load() }
+            .task {
+                viewModel.updateUserId(authService.currentUser?.id)
+                await viewModel.load()
+            }
+            .refreshable {
+                viewModel.updateUserId(authService.currentUser?.id)
+                await viewModel.load()
+            }
+            .onChange(of: authService.currentUser?.id) { _, newValue in
+                viewModel.updateUserId(newValue)
+            }
             .task(id: deepLink.pendingAttendanceSessId) {
                 if let sess = deepLink.pendingAttendanceSessId, !sess.isEmpty {
                     await submitAttendanceCheck(using: sess)
@@ -269,17 +278,17 @@ struct AttendanceView_Modern: View {
     // MARK: - 提交點名
     
     private func submitAttendanceCheck(using sessionId: String) async {
-        guard let uid = authService.currentUser?.id, !uid.isEmpty else {
-            ToastCenter.shared.show("請先登入", style: .error)
-            return
-        }
-        
-        // TODO: 實現實際的 API 調用
-        // try await AttendanceAPI.checkIn(userId: uid, sessionId: sessionId)
+        let uid = authService.currentUser?.id ?? "guest"
+        let record = await AttendanceService.shared.checkIn(
+            sessionId: sessionId,
+            membershipId: membership.id,
+            userId: uid,
+            courseName: viewModel.snapshot?.courseName ?? membership.tenant.name
+        )
+        viewModel.appendPersonalRecord(record)
         didLocalCheckIn = true
         HapticFeedback.success()
         ToastCenter.shared.show("點名成功！", style: .success)
-        await viewModel.load()
     }
 }
 

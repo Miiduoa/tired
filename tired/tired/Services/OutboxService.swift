@@ -295,30 +295,30 @@ final class OutboxService: ObservableObject {
             case .clockRecord:
                 if let siteId = item.siteId, let ts = item.timestamp {
                     do {
-                        _ = try await ClockAPI.submit(siteId: siteId, uid: item.uid, idempotencyKey: item.idempotencyKey, ts: ts)
+                        _ = try await ClockAPI.clockIn(uid: item.uid, site: siteId, idempotencyKey: item.idempotencyKey, timestamp: ts)
                     } catch {
                         remaining.append(item)
                     }
                 }
             case .attendanceCheck:
-                if let sessId = item.sessId, let ts = item.timestamp {
+                if let sessId = item.sessId {
                     do {
-                        _ = try await AttendanceAPI.submitCheck(sessId: sessId, uid: item.uid, idempotencyKey: item.idempotencyKey, ts: ts)
+                        try await AttendanceAPI.checkIn(userId: item.uid, sessionId: sessId)
                     } catch {
                         remaining.append(item)
                     }
                 }
             case .attendanceSessionOpen:
-                if let openAt = item.timestamp, let closeAt = item.closeAt, let courseId = item.courseId {
+                if let courseId = item.courseId {
                     do {
-                        _ = try await AttendanceAPI.createSession(courseId: courseId, policyId: item.idempotencyKey, openAt: openAt, closeAt: closeAt)
+                        _ = try await AttendanceAPI.openSession(courseId: courseId, teacherId: item.uid, validDuration: 1800)
                     } catch {
                         remaining.append(item)
                     }
                 }
             case .attendanceSessionClose:
                 if let sessId = item.sessId {
-                    do { try await AttendanceAPI.closeSession(sessId: sessId) }
+                    do { try await AttendanceAPI.closeSession(sessionId: sessId, teacherId: item.uid) }
                     catch { remaining.append(item) }
                 }
             }

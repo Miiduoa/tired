@@ -36,6 +36,8 @@ struct ProfileView: View {
     @State var bio = ProfileField(key: "簡介", value: "資管系 / 喜歡 AI & UX", visibility: .friends)
     @State var link = ProfileField(key: "連結", value: "https://tired.app", visibility: .public)
     @State var studentId = ProfileField(key: "學號", value: "A1234567", visibility: .org)
+    @State private var showSettings = false
+    @State private var showSearch = false
     
     var body: some View {
         NavigationStack {
@@ -118,6 +120,33 @@ struct ProfileView: View {
                 }
             )
             .navigationTitle("我")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: TTokens.spacingSM) {
+                        Button {
+                            showSearch = true
+                            HapticFeedback.light()
+                        } label: {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundStyle(Color.tint)
+                        }
+                        
+                        Button {
+                            showSettings = true
+                            HapticFeedback.light()
+                        } label: {
+                            Image(systemName: "gearshape.fill")
+                                .foregroundStyle(Color.tint)
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+            }
+            .sheet(isPresented: $showSearch) {
+                GlobalSearchView()
+            }
         }
     }
 }

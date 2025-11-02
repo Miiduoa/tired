@@ -181,19 +181,16 @@ struct ClockView_Modern: View {
     // MARK: - 提交打卡
     
     private func submitClock(site: String) async {
-        guard let uid = authService.currentUser?.id, !uid.isEmpty else {
-            viewModel.insertLocalRecord(site: site, time: Date(), status: .ok)
-            HapticFeedback.success()
-            ToastCenter.shared.show("打卡成功（離線模式）", style: .success)
-            return
-        }
-        
-        // TODO: 實現實際的 API 調用
-        // try await ClockAPI.clockIn(uid: uid, site: site, idempotencyKey: "clock-\(UUID().uuidString)")
-        viewModel.insertLocalRecord(site: site, time: Date(), status: .ok)
+        let userId = authService.currentUser?.id
+        let record = await ClockService.shared.recordClock(
+            for: membership,
+            siteName: site,
+            userId: userId
+        )
+        viewModel.prepend(record)
         HapticFeedback.success()
-        ToastCenter.shared.show("打卡成功！", style: .success)
-        await viewModel.load()
+        let message = (userId == nil || userId?.isEmpty == true) ? "打卡成功（離線模式）" : "打卡成功！"
+        ToastCenter.shared.show(message, style: .success)
     }
 }
 
@@ -348,4 +345,3 @@ private struct ClockInSheet: View {
         !site.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
-

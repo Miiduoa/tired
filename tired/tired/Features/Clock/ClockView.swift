@@ -8,6 +8,7 @@ final class ClockViewModel: ObservableObject {
     
     private let service: TenantFeatureServiceProtocol
     private let membership: TenantMembership
+    private let clockService = ClockService.shared
     
     init(membership: TenantMembership, service: TenantFeatureServiceProtocol) {
         self.membership = membership
@@ -16,13 +17,12 @@ final class ClockViewModel: ObservableObject {
     
     func load() async {
         isLoading = true
-        let items = await service.clockRecords(for: membership)
+        let items = await clockService.records(for: membership, remoteService: service)
         records = items.sorted { $0.time > $1.time }
         isLoading = false
     }
     
-    func insertLocalRecord(site: String, time: Date, status: ClockRecordItem.Status) {
-        let item = ClockRecordItem(id: "local-\(UUID().uuidString)", site: site, time: time, status: status)
+    func prepend(_ item: ClockRecordItem) {
         records.insert(item, at: 0)
     }
 }
@@ -103,25 +103,15 @@ struct ClockView: View {
     }
 
     private func submitClock() async {
-        let siteId = membership.id // server側用站點ID；此處用群組ID作示範
         let siteName = membership.tenant.name
-        let ts = Date()
-
-        guard let uid = authService.currentUser?.id, !uid.isEmpty else {
-            // 未登入：僅本地顯示
-            withAnimation { viewModel.insertLocalRecord(site: siteName, time: ts, status: .ok) }
-            return
-        }
-        let key = "clock-\(UUID().uuidString)"
-        // 先入列以確保崩潰/離開也能補送
-        OutboxService.shared.enqueueClockRecord(siteId: siteId, uid: uid, idempotencyKey: key, ts: ts)
-        do {
-            _ = try await ClockAPI.submit(siteId: siteId, uid: uid, idempotencyKey: key, ts: ts)
-            OutboxService.shared.remove(id: "outbox-clock-\(siteId)-\(key)", for: uid)
-        } catch {
-            // 留給 outbox 重試
-        }
-        withAnimation { viewModel.insertLocalRecord(site: siteName, time: ts, status: .ok) }
-        ToastCenter.shared.show("打卡成功", style: .success)
+        let userId = authService.currentUser?.id
+        let record = await ClockService.shared.recordClock(
+            for: membership,
+            siteName: siteName,
+            userId: userId
+        )
+        withAnimation { viewModel.prepend(record) }
+        let message = (userId == nil || userId?.isEmpty == true) ? "打卡成功（離線模式）" : "打卡成功"
+        ToastCenter.shared.show(message, style: .success)
     }
 }
