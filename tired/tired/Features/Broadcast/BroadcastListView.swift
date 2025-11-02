@@ -1,4 +1,3 @@
-
 import SwiftUI
 import Combine
 
@@ -95,29 +94,6 @@ struct BroadcastListView: View {
                         isAcked: ackStore.isAcked(item.id),
                         index: index
                     ) {
-                    Task {
-                        guard let uid = authService.currentUser?.id, !uid.isEmpty else {
-                            AckStore.shared.ack(item.id)
-                            viewModel.ack(item)
-                            ToastCenter.shared.show("已確認公告", style: .success, actionTitle: "撤銷", action: { AckStore.shared.unack(item.id) })
-                            return
-                        }
-                        let key = "ack-\(UUID().uuidString)"
-                        OutboxService.shared.enqueueBroadcastAck(broadcastId: item.id, uid: uid, idempotencyKey: key)
-                        do {
-                            try await BroadcastAPI.ack(broadcastId: item.id, uid: uid, idempotencyKey: key)
-                            await OutboxService.shared.flush(for: uid)
-                            ToastCenter.shared.show("已確認公告", style: .success, actionTitle: "撤銷", action: { AckStore.shared.unack(item.id) })
-                        } catch {
-                            ToastCenter.shared.show("離線中，稍後自動同步", style: .warning)
-                        }
-                        AckStore.shared.ack(item.id)
-                        viewModel.ack(item)
-                    }
-                }
-                .listRowBackground(Color.clear)
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    Button {
                         Task {
                             guard let uid = authService.currentUser?.id, !uid.isEmpty else {
                                 AckStore.shared.ack(item.id)
@@ -137,26 +113,49 @@ struct BroadcastListView: View {
                             AckStore.shared.ack(item.id)
                             viewModel.ack(item)
                         }
-                    } label: { Label("完成", systemImage: "checkmark.circle") }
-                    .tint(.green)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button {
+                            Task {
+                                guard let uid = authService.currentUser?.id, !uid.isEmpty else {
+                                    AckStore.shared.ack(item.id)
+                                    viewModel.ack(item)
+                                    ToastCenter.shared.show("已確認公告", style: .success, actionTitle: "撤銷", action: { AckStore.shared.unack(item.id) })
+                                    return
+                                }
+                                let key = "ack-\(UUID().uuidString)"
+                                OutboxService.shared.enqueueBroadcastAck(broadcastId: item.id, uid: uid, idempotencyKey: key)
+                                do {
+                                    try await BroadcastAPI.ack(broadcastId: item.id, uid: uid, idempotencyKey: key)
+                                    await OutboxService.shared.flush(for: uid)
+                                    ToastCenter.shared.show("已確認公告", style: .success, actionTitle: "撤銷", action: { AckStore.shared.unack(item.id) })
+                                } catch {
+                                    ToastCenter.shared.show("離線中，稍後自動同步", style: .warning)
+                                }
+                                AckStore.shared.ack(item.id)
+                                viewModel.ack(item)
+                            }
+                        } label: { Label("完成", systemImage: "checkmark.circle") }
+                        .tint(.green)
 
-                    Button {
-                        Haptics.impact(.light)
-                        let expires = Date().addingTimeInterval(600)
-                        SnoozeStore.shared.snooze(id: item.id, until: expires)
-                        Task { await SnoozeSyncService.shared.saveSnooze(id: item.id, title: item.title, subtitle: item.body, expires: expires, kind: "broadcast") }
-                        NotificationService.shared.scheduleLocalNotification(
-                            id: "snooze-b-\(item.id)",
-                            title: "提醒：\(item.title)",
-                            body: item.body,
-                            after: 600
-                        )
-                        ToastCenter.shared.show("已延後 10 分鐘", style: .info, actionTitle: "撤銷", action: {
-                            SnoozeStore.shared.snooze(id: item.id, until: Date())
-                            Task { await SnoozeSyncService.shared.clearSnooze(id: item.id) }
-                        })
-                    } label: { Label("延後", systemImage: "clock") }
-                    .tint(.orange)
+                        Button {
+                            Haptics.impact(.light)
+                            let expires = Date().addingTimeInterval(600)
+                            SnoozeStore.shared.snooze(id: item.id, until: expires)
+                            Task { await SnoozeSyncService.shared.saveSnooze(id: item.id, title: item.title, subtitle: item.body, expires: expires, kind: "broadcast") }
+                            NotificationService.shared.scheduleLocalNotification(
+                                id: "snooze-b-\(item.id)",
+                                title: "提醒：\(item.title)",
+                                body: item.body,
+                                after: 600
+                            )
+                            ToastCenter.shared.show("已延後 10 分鐘", style: .info, actionTitle: "撤銷", action: {
+                                SnoozeStore.shared.snooze(id: item.id, until: Date())
+                                Task { await SnoozeSyncService.shared.clearSnooze(id: item.id) }
+                            })
+                        } label: { Label("延後", systemImage: "clock") }
+                        .tint(.orange)
+                    }
                 }
             }
         }
