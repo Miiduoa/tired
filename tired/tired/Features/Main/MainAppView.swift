@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 struct MainAppView: View {
     @StateObject private var sessionStore = AppSessionStore()

@@ -1,4 +1,3 @@
-
 import SwiftUI
 
 // MARK: - 設計系統 Token (升級版 - 心理學設計原則)
@@ -377,7 +376,7 @@ extension View {
             .modifier(ShakeEffect(shakes: trigger))
     }
     
-    /// 閃爍高亮 - 臨時突出顯示
+    /// 闪爍高亮 - 臨時突出顯示
     func highlightFlash(isActive: Bool = false, color: Color = .tint) -> some View {
         self
             .background(
@@ -475,7 +474,8 @@ struct ShakeEffect: GeometryEffect {
     }
     
     func effectValue(size: CGSize) -> ProjectionTransform {
-        let offset = 8 * sin(animatableData * 2 * .pi * 3)
+        let angle = Double(animatableData * 2 * .pi * 3)
+        let offset = 8 * CGFloat(sin(angle))
         return ProjectionTransform(CGAffineTransform(translationX: offset, y: 0))
     }
 }
@@ -573,10 +573,10 @@ struct BreathingCardModifier: ViewModifier {
     
     func body(content: Content) -> some View {
         content
-            .scaleEffect(1 + (isActive ? sin(phase) * 0.008 : 0))  // 極微妙的呼吸
+            .scaleEffect(1 + (isActive ? CGFloat(sin(Double(phase))) * 0.008 : 0))  // 極微妙的呼吸
             .shadow(
-                color: .tint.opacity(isActive ? 0.15 + sin(phase) * 0.05 : 0.05),
-                radius: 12 + (isActive ? sin(phase) * 4 : 0),
+                color: .tint.opacity(isActive ? 0.15 + CGFloat(sin(Double(phase))) * 0.05 : 0.05),
+                radius: 12 + (isActive ? CGFloat(sin(Double(phase))) * 4 : 0),
                 y: 6
             )
             .onAppear {

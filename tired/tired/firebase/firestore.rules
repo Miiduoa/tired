@@ -117,6 +117,16 @@ service cloud.firestore {
         allow create: if isSignedIn();
         allow update: if false;
       }
+
+      // Snoozes: local reminders synced to cloud; only owner can read/write
+      match /snoozes/{sid} {
+        allow read, write: if isSelf(uid);
+      }
+
+      // Devices: APNS/FCM registry for push; users write their own device-token documents
+      match /devices/{did} {
+        allow read, write: if isSelf(uid);
+      }
     }
   }
 }
