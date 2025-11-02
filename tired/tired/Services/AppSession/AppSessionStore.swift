@@ -91,6 +91,8 @@ final class AppSessionStore: ObservableObject {
 
         // 註冊當前裝置推播資訊（若已取得 APNS token）
         await DeviceRegistry.registerCurrentDevice()
+        // 同步 Snooze 設定（跨裝置共享隱藏/提醒狀態）
+        await SnoozeSyncService.shared.syncFromRemote()
         await loadMemberships(for: user, forceRefresh: false)
     }
     

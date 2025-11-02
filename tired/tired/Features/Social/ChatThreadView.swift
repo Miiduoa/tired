@@ -134,12 +134,14 @@ struct ChatThreadView: View {
                         .foregroundStyle(.white)
                         .font(.body.weight(.semibold))
                         .frame(width: 36, height: 36)
-                        .background(
-                            (uploadingTotal > 0 || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) 
-                                ? AnyShapeStyle(Color.gray.opacity(0.3))
-                                : AnyShapeStyle(TTokens.gradientPrimary),
-                            in: Circle()
-                        )
+                        .background {
+                            Circle()
+                                .fill(
+                                    (uploadingTotal > 0 || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                        ? Color.gray.opacity(0.3).gradient
+                                        : TTokens.gradientPrimary
+                                )
+                        }
                         .shadow(
                             color: (uploadingTotal > 0 || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) 
                                 ? .clear 
@@ -332,13 +334,10 @@ private struct ChatBubble: View {
                     }
                     .padding(10)
                     .background(
-                        Group {
-                            if isMe {
-                                TTokens.gradientPrimary
-                            } else {
-                                .ultraThinMaterial
-                            }
-                        }, in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        isMe
+                            ? AnyShapeStyle(TTokens.gradientPrimary)
+                            : AnyShapeStyle(.ultraThinMaterial),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                     )
                     .overlay {
                         if !isMe {
@@ -351,9 +350,10 @@ private struct ChatBubble: View {
                     Text(message.text)
                         .padding(10)
                         .background(
-                            Group {
-                                if isMe { TTokens.gradientPrimary } else { .ultraThinMaterial }
-                            }, in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            isMe
+                                ? AnyShapeStyle(TTokens.gradientPrimary)
+                                : AnyShapeStyle(.ultraThinMaterial),
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                         )
                         .overlay {
                             if !isMe {

@@ -27,7 +27,7 @@ struct EmotionalLikeButton: View {
                 ZStack {
                     Image(systemName: isLiked ? "heart.fill" : "heart")
                         .font(.title3)
-                        .foregroundStyle(isLiked ? .red.gradient : .secondary)
+                        .foregroundStyle(isLiked ? Color.red : .secondary)
                         .scaleEffect(scale)
                     
                     if showBurst {
@@ -561,7 +561,10 @@ struct GradientMeshBackground: View {
                     startPoint: .topTrailing,
                     endPoint: .bottomLeading
                 )
-                .offset(x: sin(phase) * 50, y: cos(phase) * 50)
+                .offset(
+                    x: CGFloat(sin(Double(phase))) * 50,
+                    y: CGFloat(cos(Double(phase))) * 50
+                )
                 .blur(radius: 80)
             }
             .onAppear {

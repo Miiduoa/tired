@@ -1,6 +1,7 @@
 import SwiftUI
 import FirebaseCore
 import GoogleSignIn
+import FirebaseMessaging
 import FirebaseAuth
 import FirebaseFirestore
 
@@ -58,6 +59,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         
         // 請求通知權限（用於 Snooze 提醒）
         NotificationService.shared.requestAuthorization()
+        Messaging.messaging().delegate = self
+        DispatchQueue.main.async {
+            UIApplication.shared.registerForRemoteNotifications()
+        }
 
         return true
     }
@@ -77,5 +82,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         }
         if DeepLinkRouter.shared.handle(url) { return true }
         return false
+    }
+}
+
+extension AppDelegate: MessagingDelegate {
+    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        guard let token = fcmToken, !token.isEmpty else { return }
+        Task { await DeviceRegistry.saveFCMToken(token) }
     }
 }

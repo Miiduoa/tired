@@ -376,7 +376,7 @@ extension View {
             .modifier(ShakeEffect(shakes: trigger))
     }
     
-    /// 闪爍高亮 - 臨時突出顯示
+    /// 閃爍高亮 - 臨時突出顯示
     func highlightFlash(isActive: Bool = false, color: Color = .tint) -> some View {
         self
             .background(
@@ -474,7 +474,7 @@ struct ShakeEffect: GeometryEffect {
     }
     
     func effectValue(size: CGSize) -> ProjectionTransform {
-        let angle = Double(animatableData * 2 * .pi * 3)
+        let angle = Double(animatableData) * 2 * .pi * 3
         let offset = 8 * CGFloat(sin(angle))
         return ProjectionTransform(CGAffineTransform(translationX: offset, y: 0))
     }
