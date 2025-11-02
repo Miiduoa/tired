@@ -90,6 +90,7 @@ struct BroadcastListView: View {
         ScrollView {
             LazyVStack(spacing: TTokens.spacingMD) {
                 ForEach(Array(filteredItems.enumerated()), id: \.element.id) { index, item in
+                    if !SnoozeStore.shared.isSnoozed(item.id) {
                     BroadcastCard(
                         item: item,
                         isAcked: ackStore.isAcked(item.id),
@@ -109,7 +110,9 @@ struct BroadcastListView: View {
                                 try await BroadcastAPI.ack(broadcastId: item.id, uid: uid, idempotencyKey: key)
                                 // 成功後嘗試清空 outbox（會移除剛入列的同鍵項）
                                 await OutboxService.shared.flush(for: uid)
-                                ToastCenter.shared.show("已確認公告", style: .success)
+                                ToastCenter.shared.show("已確認公告", style: .success, actionTitle: "撤銷", action: {
+                                    AckStore.shared.unack(item.id)
+                                })
                             } catch {
                                 // 保留 outbox 項目，稍後重試
                                 ToastCenter.shared.show("離線中，稍後自動同步", style: .warning)
@@ -117,6 +120,47 @@ struct BroadcastListView: View {
                             AckStore.shared.ack(item.id)
                             viewModel.ack(item)
                         }
+                    }
+                    .contextMenu {
+                        Button("已知悉", systemImage: "checkmark.circle") {
+                            Haptics.impact(.light)
+                            Task {
+                                guard let uid = authService.currentUser?.id, !uid.isEmpty else {
+                                    AckStore.shared.ack(item.id)
+                                    viewModel.ack(item)
+                                    ToastCenter.shared.show("已確認公告", style: .success, actionTitle: "撤銷", action: {
+                                        AckStore.shared.unack(item.id)
+                                    })
+                                    return
+                                }
+                                let key = "ack-\(UUID().uuidString)"
+                                OutboxService.shared.enqueueBroadcastAck(broadcastId: item.id, uid: uid, idempotencyKey: key)
+                                do {
+                                    try await BroadcastAPI.ack(broadcastId: item.id, uid: uid, idempotencyKey: key)
+                                    await OutboxService.shared.flush(for: uid)
+                                    ToastCenter.shared.show("已確認公告", style: .success)
+                                } catch {
+                                    ToastCenter.shared.show("離線中，稍後自動同步", style: .warning)
+                                }
+                                AckStore.shared.ack(item.id)
+                                viewModel.ack(item)
+                            }
+                        }
+                        Button("延後 10 分鐘", systemImage: "clock") {
+                            Haptics.impact(.light)
+                            let expires = Date().addingTimeInterval(600)
+                            SnoozeStore.shared.snooze(id: item.id, until: expires)
+                            NotificationService.shared.scheduleLocalNotification(
+                                id: "snooze-b-\(item.id)",
+                                title: "提醒：\(item.title)",
+                                body: item.body,
+                                after: 600
+                            )
+                            ToastCenter.shared.show("已延後 10 分鐘", style: .info, actionTitle: "撤銷", action: {
+                                SnoozeStore.shared.snooze(id: item.id, until: Date())
+                            })
+                        }
+                    }
                     }
                 }
             }

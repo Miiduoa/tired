@@ -54,6 +54,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             print("✅ Google Sign-In 已配置，CLIENT_ID: \(clientId.prefix(30))...")
         }
         
+        // 請求通知權限（用於 Snooze 提醒）
+        NotificationService.shared.requestAuthorization()
+
         return true
     }
     

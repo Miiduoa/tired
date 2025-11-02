@@ -23,12 +23,16 @@ enum ToastStyle {
     }
 }
 
-struct ToastMessage: Identifiable {
+struct ToastMessage: Identifiable, Equatable {
     let id = UUID()
     let text: String
     let style: ToastStyle
     let actionTitle: String?
     let action: (() -> Void)?
+    
+    static func == (lhs: ToastMessage, rhs: ToastMessage) -> Bool {
+        lhs.id == rhs.id
+    }
 }
 
 @MainActor

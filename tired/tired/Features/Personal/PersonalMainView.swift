@@ -168,85 +168,149 @@ struct PostRowView: View {
     @State private var liked: Bool = false
     @State private var likeCount: Int = 0
     @State private var showComments: Bool = false
+    @State private var commentCount: Int = 0
     private let interaction: PostInteractionServiceProtocol = PostInteractionService()
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: post.sourceType == .personal ? "person.crop.circle" : "building.2")
-                    .foregroundStyle(post.sourceType == .personal ? Color.blue : Color.purple)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(post.authorName).font(.subheadline.weight(.semibold))
-                    if let org = post.organizationName {
-                        Text(org).font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                Spacer()
-                Text(post.createdAt, style: .relative)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Text(post.summary)
-                .font(.subheadline)
-            Text(post.content)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .lineLimit(3)
-            if !post.attachmentURLs.isEmpty {
+        VStack(alignment: .leading, spacing: TTokens.spacingMD) {
+            // 作者信息區（視覺層級優化）
+            HStack(spacing: TTokens.spacingMD) {
+                AvatarRing(
+                    imageURL: nil,
+                    size: 44,
+                    ringColor: post.sourceType == .personal ? .tint : .creative,
+                    ringWidth: 2
+                )
+                
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(post.attachmentURLs, id: \.absoluteString) { url in
-                        Link(destination: url) {
-                            Label(displayName(for: url), systemImage: "link")
+                    Text(post.authorName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.labelPrimary)
+                    
+                    HStack(spacing: 6) {
+                        if let org = post.organizationName {
+                            Text(org)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
-                        .font(.caption)
-                        .foregroundStyle(.blue)
+                        Text("•")
+                            .foregroundStyle(.secondary.opacity(0.5))
+                        Text(post.createdAt, style: .relative)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                
+                Spacer()
+                
+                Menu {
+                    Button(action: {}) {
+                        Label("收藏", systemImage: "bookmark")
+                    }
+                    Button(action: {}) {
+                        Label("舉報", systemImage: "exclamationmark.triangle")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .foregroundStyle(.secondary)
+                        .padding(8)
+                        .background(Color.neutralLight.opacity(0.5), in: Circle())
+                }
+            }
+            
+            // 內容區（認知負荷優化）
+            VStack(alignment: .leading, spacing: TTokens.spacingSM) {
+                Text(post.summary)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(Color.labelPrimary)
+                
+                Text(post.content)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                    .lineSpacing(4)
+            }
+            
+            // 附件區
+            if !post.attachmentURLs.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(post.attachmentURLs, id: \.absoluteString) { url in
+                            Link(destination: url) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "link.circle.fill")
+                                        .foregroundStyle(.tint)
+                                    Text(displayName(for: url))
+                                        .font(.caption)
+                                        .lineLimit(1)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.tintUltraLight, in: Capsule())
+                            }
+                        }
                     }
                 }
             }
-            HStack(spacing: 12) {
-                Label(post.sourceType == .personal ? "個人" : "組織",
-                      systemImage: post.sourceType == .personal ? "person" : "building.2")
-                Label(post.category.displayName, systemImage: "tag")
-                Label(post.visibility.label, systemImage: "eye")
+            
+            // 標籤區（格式塔相近性原理）
+            HStack(spacing: 6) {
+                TagBadge(
+                    post.sourceType == .personal ? "個人" : "組織",
+                    color: post.sourceType == .personal ? .tint : .creative,
+                    icon: post.sourceType == .personal ? "person.fill" : "building.2.fill"
+                )
+                TagBadge(
+                    post.category.displayName,
+                    color: .mint,
+                    icon: "tag.fill"
+                )
+                TagBadge(
+                    post.visibility.label,
+                    color: .orange,
+                    icon: post.visibility.icon
+                )
             }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-
-            Divider().padding(.vertical, 4)
-            HStack(spacing: 16) {
+            
+            // 互動區（情感化設計）
+            Divider()
+                .padding(.vertical, 4)
+            
+            HStack(spacing: 8) {
+                // 情感化按讚按鈕
                 Button {
+                    HapticFeedback.light()
                     Task {
                         liked.toggle()
                         likeCount += liked ? 1 : -1
                         if liked {
+                            HapticFeedback.success()
                             await interaction.like(postId: post.id, userId: post.sourceId)
                         } else {
                             await interaction.unlike(postId: post.id, userId: post.sourceId)
                         }
                     }
                 } label: {
-                    Label("\(likeCount)", systemImage: liked ? "heart.fill" : "heart")
-                        .foregroundStyle(liked ? .red : .secondary)
+                    EmotionalLikeButton(isLiked: $liked, count: $likeCount)
                 }
-                .buttonStyle(.plain)
-
-                Button { showComments = true } label: {
-                    Label("留言", systemImage: "bubble.right")
-                        .foregroundStyle(.secondary)
+                
+                // 評論氣泡按鈕
+                CommentBubbleButton(count: commentCount) {
+                    HapticFeedback.light()
+                    showComments = true
                 }
-                .buttonStyle(.plain)
-
+                
                 Spacer()
-
-                Button { /* share placeholder */ } label: {
-                    Image(systemName: "square.and.arrow.up")
-                        .foregroundStyle(.secondary)
+                
+                // 分享按鈕
+                ShareButton {
+                    HapticFeedback.medium()
+                    // TODO: 實際分享邏輯
                 }
-                .buttonStyle(.plain)
             }
         }
-        .padding()
-        .background(Color.card, in: RoundedRectangle(cornerRadius: TTokens.radiusMD, style: .continuous))
+        .padding(TTokens.spacingLG)
+        .floatingCard()
         .task {
             likeCount = await interaction.likeCount(postId: post.id)
             // 若需要 userId，可由環境或 post.sourceId 判斷，這裡以 post.sourceId 做基準（個人文作者）

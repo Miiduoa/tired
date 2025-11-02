@@ -88,6 +88,8 @@ struct InboxView: View {
                 return item.title.lowercased().contains(query) ||
                        item.subtitle.lowercased().contains(query)
             }
+            // Snooze 過濾
+            if SnoozeStore.shared.isSnoozed(item.id) { return false }
             return true
         }
     }
@@ -145,10 +147,27 @@ struct InboxView: View {
             LazyVStack(spacing: TTokens.spacingMD) {
                 ForEach(Array(filteredItems.enumerated()), id: \.element.id) { index, item in
                     InboxItemCard(item: item, index: index)
-                        .onTapGesture {
-                            Task {
-                                await viewModel.acknowledge(item: item)
+                        .contextMenu {
+                            Button("標記完成", systemImage: "checkmark.circle") {
+                                Task { await viewModel.acknowledge(item: item) }
                             }
+                            Button("延後 10 分鐘", systemImage: "clock") {
+                                Haptics.impact(.light)
+                                let expires = Date().addingTimeInterval(600)
+                                SnoozeStore.shared.snooze(id: item.id, until: expires)
+                                NotificationService.shared.scheduleLocalNotification(
+                                    id: "snooze-\(item.id)",
+                                    title: "提醒：\(item.title)",
+                                    body: item.subtitle,
+                                    after: 600
+                                )
+                                ToastCenter.shared.show("已延後 10 分鐘", style: .info, actionTitle: "撤銷", action: {
+                                    SnoozeStore.shared.snooze(id: item.id, until: Date())
+                                })
+                            }
+                        }
+                        .onTapGesture {
+                            Task { await viewModel.acknowledge(item: item) }
                         }
                 }
             }

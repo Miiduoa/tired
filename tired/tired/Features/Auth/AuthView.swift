@@ -11,9 +11,15 @@ struct AuthView: View {
     
     var body: some View {
         ZStack {
-            // 背景漸層
-            TTokens.gradientPrimary
-                .ignoresSafeArea()
+            // 動態背景漸層（呼吸效果）
+            ZStack {
+                TTokens.gradientPrimary
+                    .ignoresSafeArea()
+                
+                // 浮動粒子效果
+                FloatingParticlesView()
+                    .ignoresSafeArea()
+            }
             
             ScrollView {
                 VStack(spacing: TTokens.spacingXL) {

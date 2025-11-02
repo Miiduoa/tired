@@ -121,7 +121,7 @@ enum TTokens {
     static let animationGentle: Animation = .spring(response: 0.5, dampingFraction: 0.9)
     static let animationBouncy: Animation = .spring(response: 0.35, dampingFraction: 0.6)
     
-    // MARK: - 文字大小階層 (清晰的信息架構)
+    // MARK: - 文字大小階層 (清晰的信息架構 - 基於黃金比例)
     static let fontSizeXS: CGFloat = 11
     static let fontSizeSM: CGFloat = 13
     static let fontSizeMD: CGFloat = 15
@@ -129,12 +129,28 @@ enum TTokens {
     static let fontSizeXL: CGFloat = 20
     static let fontSizeXXL: CGFloat = 24
     static let fontSizeXXXL: CGFloat = 32
+    static let fontSizeHero: CGFloat = 48  // 英雄標題
     
     // MARK: - 不透明度 (層次感和重點突出)
     static let opacityDisabled: Double = 0.4
     static let opacitySecondary: Double = 0.6
     static let opacityTertiary: Double = 0.8
     static let opacityFull: Double = 1.0
+    
+    // MARK: - 觸控目標尺寸（菲茨定律 - 易於點擊）
+    static let touchTargetMin: CGFloat = 44  // iOS 最小觸控目標
+    static let touchTargetComfortable: CGFloat = 56  // 舒適觸控尺寸
+    static let touchTargetLarge: CGFloat = 64  // 大按鈕
+    
+    // MARK: - 視覺權重（認知負荷優化）
+    static let weightUltraLight: Font.Weight = .ultraLight
+    static let weightLight: Font.Weight = .light
+    static let weightRegular: Font.Weight = .regular
+    static let weightMedium: Font.Weight = .medium
+    static let weightSemibold: Font.Weight = .semibold
+    static let weightBold: Font.Weight = .bold
+    static let weightHeavy: Font.Weight = .heavy
+    static let weightBlack: Font.Weight = .black
 }
 
 // MARK: - 顏色系統 (心理學驅動的顏色選擇 - 升級版)
@@ -473,5 +489,184 @@ struct AnimationHelper {
     
     static func springAnimation(response: Double = 0.3, damping: Double = 0.8) -> Animation {
         .spring(response: response, dampingFraction: damping)
+    }
+}
+
+// MARK: - 🎯 現代化互動組件（心理學驅動）
+
+/// 神經形態按鈕（Neumorphism - 感知深度）
+struct NeumorphicButtonStyle: ButtonStyle {
+    let color: Color
+    let isActive: Bool
+    
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.headline)
+            .foregroundStyle(color)
+            .padding(.horizontal, TTokens.spacingLG)
+            .padding(.vertical, TTokens.spacingMD)
+            .background {
+                ZStack {
+                    RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                        .fill(Color.bg)
+                    if !isActive {
+                        RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                            .stroke(Color.separator.opacity(0.3), lineWidth: 0.5)
+                    }
+                }
+                .shadow(color: .black.opacity(configuration.isPressed ? 0.1 : 0.08), radius: configuration.isPressed ? 4 : 8, x: configuration.isPressed ? 1 : 2, y: configuration.isPressed ? 2 : 4)
+                .shadow(color: .white.opacity(0.8), radius: configuration.isPressed ? 2 : 4, x: configuration.isPressed ? -1 : -2, y: configuration.isPressed ? -1 : -2)
+            }
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(TTokens.animationQuick, value: configuration.isPressed)
+    }
+}
+
+/// 流體按鈕（Fluid Animation - 流動感）
+struct FluidButtonStyle: ButtonStyle {
+    let gradient: LinearGradient
+    
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.headline.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, TTokens.spacingXL)
+            .padding(.vertical, TTokens.spacingMD)
+            .background {
+                ZStack {
+                    RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                        .fill(gradient)
+                    if configuration.isPressed {
+                        RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                            .fill(.black.opacity(0.1))
+                    }
+                }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                    .stroke(.white.opacity(0.2), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(configuration.isPressed ? 0.15 : 0.25), radius: configuration.isPressed ? 8 : 16, y: configuration.isPressed ? 4 : 8)
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+    }
+}
+
+/// 磁吸效果 ViewModifier（接近時產生吸引感）
+struct MagneticEffect: ViewModifier {
+    @State private var offset: CGSize = .zero
+    @State private var isNearTarget: Bool = false
+    
+    func body(content: Content) -> some View {
+        content
+            .offset(offset)
+            .scaleEffect(isNearTarget ? 1.05 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: offset)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isNearTarget)
+    }
+}
+
+/// 呼吸卡片（Breathing Card - 吸引注意力但不干擾）
+struct BreathingCardModifier: ViewModifier {
+    @State private var phase: CGFloat = 0
+    let isActive: Bool
+    
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(1 + (isActive ? sin(phase) * 0.008 : 0))  // 極微妙的呼吸
+            .shadow(
+                color: .tint.opacity(isActive ? 0.15 + sin(phase) * 0.05 : 0.05),
+                radius: 12 + (isActive ? sin(phase) * 4 : 0),
+                y: 6
+            )
+            .onAppear {
+                if isActive {
+                    withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: false)) {
+                        phase = .pi * 2
+                    }
+                }
+            }
+    }
+}
+
+/// 懸浮卡片（Floating Card - 深度感知）
+struct FloatingCardStyle: ViewModifier {
+    @State private var isHovered: Bool = false
+    let shadowLevel: Int
+    
+    func body(content: Content) -> some View {
+        content
+            .background {
+                RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                    .fill(Color.card)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [.white.opacity(0.5), .clear],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 0.5
+                            )
+                    }
+            }
+            .shadow(
+                color: .black.opacity(isHovered ? 0.2 : 0.08),
+                radius: isHovered ? 24 : 12,
+                y: isHovered ? 12 : 6
+            )
+            .scaleEffect(isHovered ? 1.02 : 1.0)
+            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: isHovered)
+    }
+}
+
+/// 粒子爆炸效果（Particle Burst - 慶祝時刻）
+struct ParticleBurst: View {
+    let count: Int = 12
+    let color: Color
+    @State private var animate = false
+    
+    var body: some View {
+        ZStack {
+            ForEach(0..<count, id: \.self) { index in
+                Circle()
+                    .fill(color.opacity(0.7))
+                    .frame(width: 6, height: 6)
+                    .offset(
+                        x: animate ? cos(Double(index) * .pi * 2 / Double(count)) * 60 : 0,
+                        y: animate ? sin(Double(index) * .pi * 2 / Double(count)) * 60 : 0
+                    )
+                    .opacity(animate ? 0 : 1)
+                    .scaleEffect(animate ? 0.5 : 1.0)
+            }
+        }
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.6)) {
+                animate = true
+            }
+        }
+    }
+}
+
+extension View {
+    /// 應用神經形態按鈕樣式
+    func neumorphicButton(color: Color = .tint, isActive: Bool = false) -> some View {
+        self.buttonStyle(NeumorphicButtonStyle(color: color, isActive: isActive))
+    }
+    
+    /// 應用流體按鈕樣式
+    func fluidButton(gradient: LinearGradient = TTokens.gradientPrimary) -> some View {
+        self.buttonStyle(FluidButtonStyle(gradient: gradient))
+    }
+    
+    /// 應用呼吸卡片效果
+    func breathingCard(isActive: Bool = true) -> some View {
+        self.modifier(BreathingCardModifier(isActive: isActive))
+    }
+    
+    /// 應用懸浮卡片效果
+    func floatingCard(shadowLevel: Int = 2) -> some View {
+        self.modifier(FloatingCardStyle(shadowLevel: shadowLevel))
     }
 }

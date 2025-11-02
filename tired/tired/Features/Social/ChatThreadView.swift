@@ -295,18 +295,46 @@ private struct ChatBubble: View {
                                 .foregroundStyle(.primary)
                         }
                     }
-                    .padding(8)
-                    .background(isMe ? Color.blue.opacity(0.85) : Color.gray.opacity(0.2), in: RoundedRectangle(cornerRadius: 12))
+                    .padding(10)
+                    .background(
+                        Group {
+                            if isMe {
+                                TTokens.gradientPrimary
+                            } else {
+                                .ultraThinMaterial
+                            }
+                        }, in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    )
+                    .overlay {
+                        if !isMe {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(Color.separator.opacity(0.25), lineWidth: 0.6)
+                        }
+                    }
                     .foregroundStyle(isMe ? .white : .primary)
                 } else {
                     Text(message.text)
                         .padding(10)
-                        .background(isMe ? Color.blue.opacity(0.85) : Color.gray.opacity(0.2), in: RoundedRectangle(cornerRadius: 12))
+                        .background(
+                            Group {
+                                if isMe { TTokens.gradientPrimary } else { .ultraThinMaterial }
+                            }, in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        )
+                        .overlay {
+                            if !isMe {
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .strokeBorder(Color.separator.opacity(0.25), lineWidth: 0.6)
+                            }
+                        }
                         .foregroundStyle(isMe ? .white : .primary)
                 }
-                Text(message.createdAt, style: .time)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                HStack {
+                    if isMe { Spacer() }
+                    Text(message.createdAt, style: .time)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    if !isMe { Spacer() }
+                }
             }
             if !isMe { Spacer() }
         }

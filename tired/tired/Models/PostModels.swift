@@ -21,6 +21,15 @@ enum PostVisibility: String, Codable, CaseIterable, Identifiable {
         case .privateOnly: return "僅自己"
         }
     }
+    
+    var icon: String {
+        switch self {
+        case .public: return "globe"
+        case .connections: return "person.2.fill"
+        case .organizations: return "building.2.fill"
+        case .privateOnly: return "lock.fill"
+        }
+    }
 }
 
 enum PostCategory: String, Codable, CaseIterable, Identifiable {

@@ -24,9 +24,16 @@ struct GlobalFeedView: View {
             Group {
                 if isInitialLoading && mergedPosts.isEmpty {
                     ScrollView {
-                        VStack(spacing: 12) {
-                            ForEach(0..<6, id: \.self) { _ in
-                                FeedSkeletonRow().padding(.horizontal, 16)
+                        VStack(spacing: 16) {
+                            ForEach(0..<6, id: \.self) { index in
+                                SkeletonCard()
+                                    .padding(.horizontal, 16)
+                                    .transition(.scale.combined(with: .opacity))
+                                    .animation(
+                                        .spring(response: 0.4, dampingFraction: 0.8)
+                                            .delay(Double(index) * 0.08),
+                                        value: isInitialLoading
+                                    )
                             }
                         }
                         .padding(.top, 12)
@@ -53,10 +60,18 @@ struct GlobalFeedView: View {
                                 capabilityStrip(for: m)
                                     .padding(.horizontal, 16)
                             }
-                            ForEach(filteredPosts) { post in
+                            ForEach(Array(filteredPosts.enumerated()), id: \.element.id) { index, post in
                                 PostRowView(post: post)
-                                    .cardStyle(padding: 16, radius: TTokens.radiusLG, shadowLevel: 1)
                                     .padding(.horizontal, 16)
+                                    .transition(.asymmetric(
+                                        insertion: .scale(scale: 0.9).combined(with: .opacity),
+                                        removal: .scale(scale: 0.95).combined(with: .opacity)
+                                    ))
+                                    .animation(
+                                        .spring(response: 0.5, dampingFraction: 0.8)
+                                            .delay(Double(index % 10) * 0.05),
+                                        value: filteredPosts.count
+                                    )
                                     .onAppear {
                                         guard post.id == filteredPosts.last?.id else { return }
                                         Task { await loadPage(reset: false) }
