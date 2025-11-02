@@ -85,39 +85,67 @@ struct ToastHostView: View {
     
     @ViewBuilder
     private func toastView(_ msg: ToastMessage) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: msg.style.icon)
-                .foregroundStyle(msg.style.color)
+        HStack(spacing: 14) {
+            // 圖標（增強視覺）
+            ZStack {
+                Circle()
+                    .fill(msg.style.color.opacity(0.15))
+                    .frame(width: 36, height: 36)
+                
+                Image(systemName: msg.style.icon)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(msg.style.color)
+            }
+            
+            // 訊息文字
             Text(msg.text)
                 .foregroundStyle(Color.labelPrimary)
-                .font(.subheadline)
+                .font(.subheadline.weight(.medium))
+                .lineLimit(2)
+            
             Spacer(minLength: 0)
+            
+            // 行動按鈕
             if let title = msg.actionTitle, msg.action != nil {
-                Button(title) {
+                Button {
+                    HapticFeedback.light()
                     msg.action?()
                     withAnimation(TTokens.animationQuick) { dismiss() }
+                } label: {
+                    Text(title)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(msg.style.color)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(msg.style.color.opacity(0.15), in: Capsule())
                 }
-                .font(.caption.weight(.semibold))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(msg.style.color.opacity(0.12), in: Capsule())
+                .buttonStyle(.plain)
             }
+            
+            // 關閉按鈕
             Button {
+                HapticFeedback.selection()
                 withAnimation(TTokens.animationQuick) { dismiss() }
             } label: {
                 Image(systemName: "xmark")
-                    .font(.caption)
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 24)
+                    .background(Color.neutralLight.opacity(0.3), in: Circle())
             }
             .buttonStyle(.plain)
         }
-        .padding(12)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.separator.opacity(0.3), lineWidth: 0.6)
+        .padding(14)
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(msg.style.color.opacity(0.2), lineWidth: 1)
+                }
         }
-        .shadow(color: TTokens.shadowLevel1.color, radius: TTokens.shadowLevel1.radius, y: TTokens.shadowLevel1.y)
+        .shadow(color: msg.style.color.opacity(0.2), radius: 16, y: 8)
+        .shadow(color: TTokens.shadowLevel2.color, radius: TTokens.shadowLevel2.radius, y: TTokens.shadowLevel2.y)
         .padding(.horizontal, 16)
     }
     

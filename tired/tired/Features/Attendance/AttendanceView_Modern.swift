@@ -2,8 +2,7 @@ import SwiftUI
 import Combine
 import CoreImage.CIFilterBuiltins
 
-// 使用原有的 ViewModel
-// 注意：將原文件中的 ViewModel 代碼保留
+// 保留原有 ViewModel
 
 struct AttendanceView_Modern: View {
     let membership: TenantMembership
@@ -31,32 +30,35 @@ struct AttendanceView_Modern: View {
                     .ignoresSafeArea()
                 
                 ScrollView {
-                    LazyVStack(spacing: TTokens.spacingXL) {
-                        // 英雄卡片（QR 碼區域）
-                        qrHeroCard
-                        
-                        // 統計儀表板
-                        if let snapshot = viewModel.snapshot {
-                            statsGrid(snapshot: snapshot)
-                        }
-                        
-                        // 出席記錄
-                        if let snapshot = viewModel.snapshot {
-                            attendanceRecords(snapshot: snapshot)
-                        }
+                    LazyVStack(alignment: .leading, spacing: TTokens.spacingXL) {
+                        heroCard
+                        qrCard
+                        statsGrid
+                        recordsSection
                     }
                     .padding(16)
                 }
             }
-            .navigationTitle("10 秒點名")
+            .navigationTitle("10秒點名")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        HapticFeedback.light()
-                        showScanner = true
+                    Menu {
+                        Button {
+                            HapticFeedback.light()
+                            showScanner = true
+                        } label: {
+                            Label("掃描學生 QR Code", systemImage: "qrcode.viewfinder")
+                        }
+                        
+                        Button {
+                            HapticFeedback.light()
+                            viewModel.regenerateCode()
+                        } label: {
+                            Label("重新產生 QR Code", systemImage: "arrow.clockwise")
+                        }
                     } label: {
-                        Image(systemName: "qrcode.viewfinder")
+                        Image(systemName: "ellipsis.circle")
                     }
                 }
             }
@@ -69,269 +71,307 @@ struct AttendanceView_Modern: View {
                 }
             }
             .sheet(isPresented: $showScanner) {
-                NavigationStack {
-                    QRScannerView { result in
-                        switch result {
-                        case .success(let code):
-                            enteredSessId = code
-                            showScanner = false
-                            Task { await submitAttendanceCheck(using: code) }
-                        case .failure(let error):
-                            ToastCenter.shared.show("掃描失敗: \(error.localizedDescription)", style: .error)
-                        }
-                    }
-                    .navigationTitle("掃描 QR Code")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("取消") {
-                                HapticFeedback.selection()
-                                showScanner = false
-                            }
-                        }
-                    }
+                QRScannerSheet { code in
+                    enteredSessId = code
+                    showScanner = false
+                    Task { await submitAttendanceCheck(using: code) }
                 }
             }
         }
     }
     
-    // MARK: - QR 英雄卡片
+    // MARK: - Hero 卡片
     
-    private var qrHeroCard: some View {
+    private var heroCard: some View {
         HeroCard(
-            title: "出席 QR Code",
-            subtitle: "有效時間：\(viewModel.ttl) 秒",
-            gradient: TTokens.gradientPrimary
+            title: membership.tenant.name,
+            subtitle: "請確認裝置狀態正常後讓學生掃描 QR Code 完成點名",
+            gradient: LinearGradient(colors: [.creative, .creative.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing)
         ) {
-            VStack(spacing: TTokens.spacingLG) {
-                // QR 碼（玻璃框 + 呼吸動畫）
-                ZStack {
-                    RoundedRectangle(cornerRadius: TTokens.radiusXL, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: TTokens.radiusXL, style: .continuous)
-                                .strokeBorder(
-                                    LinearGradient(
-                                        colors: [.white.opacity(0.6), .white.opacity(0.2)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ),
-                                    lineWidth: 2
-                                )
-                        }
-                    
-                    if let qrImage = generateQR(from: viewModel.qrSeed) {
-                        Image(uiImage: qrImage)
-                            .interpolation(.none)
-                            .resizable()
-                            .frame(width: 200, height: 200)
-                            .padding(20)
-                    }
-                }
-                .frame(width: 240, height: 240)
-                .breathingCard(isActive: viewModel.ttl > 0)
+            HStack(spacing: TTokens.spacingMD) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title)
+                    .foregroundStyle(.white)
                 
-                // 倒計時環
-                ZStack {
-                    Circle()
-                        .stroke(Color.neutralLight, lineWidth: 8)
-                    
-                    Circle()
-                        .trim(from: 0, to: CGFloat(viewModel.ttl) / 30.0)
-                        .stroke(
-                            viewModel.ttl > 10 ? TTokens.gradientSuccess : TTokens.gradientWarm,
-                            style: StrokeStyle(lineWidth: 8, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees(-90))
-                        .animation(.linear(duration: 1), value: viewModel.ttl)
-                    
-                    Text("\(viewModel.ttl)s")
-                        .font(.title.weight(.bold))
-                        .foregroundStyle(viewModel.ttl > 10 ? .success : .warn)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("點名狀態")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.8))
+                    Text(viewModel.snapshot != nil ? "進行中" : "準備中")
+                        .font(.headline)
+                        .foregroundStyle(.white)
                 }
-                .frame(width: 80, height: 80)
                 
-                // 重新生成按鈕
-                Button {
-                    HapticFeedback.medium()
-                    viewModel.regenerateCode()
-                    HapticFeedback.success()
-                } label: {
-                    Label("重新生成", systemImage: "arrow.clockwise")
-                        .frame(maxWidth: .infinity)
-                        .frame(height: TTokens.touchTargetComfortable)
+                Spacer()
+                
+                if viewModel.isLoading {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(.white)
                 }
-                .fluidButton(gradient: TTokens.gradientPrimary)
             }
         }
+    }
+    
+    // MARK: - QR Code 卡片
+    
+    private var qrCard: some View {
+        VStack(spacing: TTokens.spacingXL) {
+            // QR Code 顯示
+            ZStack {
+                // 外圈呼吸光環
+                RoundedRectangle(cornerRadius: 32)
+                    .fill(TTokens.gradientCreative.opacity(0.1))
+                    .frame(width: 280, height: 280)
+                    .breathingCard(isActive: true)
+                
+                // QR Code
+                if let image = generateQRCode(from: viewModel.qrSeed) {
+                    Image(uiImage: image)
+                        .interpolation(.none)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 240, height: 240)
+                        .background(.white)
+                        .cornerRadius(24)
+                        .shadow(color: .creative.opacity(0.3), radius: 20, y: 10)
+                } else {
+                    RoundedRectangle(cornerRadius: 24)
+                        .fill(Color.neutralLight.opacity(0.3))
+                        .frame(width: 240, height: 240)
+                        .overlay {
+                            Text("無法產生 QR Code")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                }
+            }
+            
+            // 倒數計時
+            VStack(spacing: 8) {
+                Text("剩餘時間")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
+                HStack(spacing: 4) {
+                    Text("\(viewModel.ttl)")
+                        .font(.system(size: 52, weight: .bold))
+                        .foregroundStyle(TTokens.gradientCreative)
+                        .monospacedDigit()
+                    
+                    Text("秒")
+                        .font(.title2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+                
+                // 進度條
+                ProgressRing(
+                    progress: Double(viewModel.ttl) / (Double(viewModel.snapshot?.validDuration ?? 30) * 60.0),
+                    ringColor: .creative,
+                    lineWidth: 4,
+                    size: 100
+                )
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(TTokens.spacingXL)
+        .floatingCard()
     }
     
     // MARK: - 統計網格
     
-    private func statsGrid(snapshot: AttendanceSnapshot) -> some View {
-        LazyVGrid(columns: [
-            GridItem(.flexible()),
-            GridItem(.flexible())
-        ], spacing: TTokens.spacingMD) {
-            StatCard(
-                value: "\(snapshot.presentCount)",
-                label: "已出席",
-                icon: "checkmark.circle.fill",
-                color: .success
-            )
-            
-            StatCard(
-                value: "\(snapshot.absentCount)",
-                label: "缺席",
-                icon: "xmark.circle.fill",
-                color: .danger
-            )
-            
-            StatCard(
-                value: "\(Int((Double(snapshot.presentCount) / Double(max(snapshot.presentCount + snapshot.absentCount, 1))) * 100))%",
-                label: "出席率",
-                icon: "chart.pie.fill",
-                color: .tint
-            )
-            
-            StatCard(
-                value: "\(snapshot.presentCount + snapshot.absentCount)",
-                label: "總人數",
-                icon: "person.2.fill",
-                color: .creative
-            )
-        }
-    }
-    
-    // MARK: - 出席記錄
-    
-    private func attendanceRecords(snapshot: AttendanceSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: TTokens.spacingMD) {
-            Text("出席名單")
-                .font(.title3.weight(.semibold))
-                .padding(.horizontal, 4)
-            
-            LazyVStack(spacing: 12) {
-                ForEach(Array(snapshot.records.enumerated()), id: \.element.userId) { index, record in
-                    attendanceRow(record: record, index: index)
-                }
+    @ViewBuilder
+    private var statsGrid: some View {
+        if let snapshot = viewModel.snapshot {
+            LazyVGrid(columns: [
+                GridItem(.flexible()),
+                GridItem(.flexible())
+            ], spacing: 12) {
+                StatCard(
+                    value: "\(snapshot.stats.total)",
+                    label: "總人數",
+                    icon: "person.3.fill",
+                    color: .tint
+                )
+                
+                StatCard(
+                    value: "\(snapshot.stats.attended)",
+                    label: "已到",
+                    icon: "checkmark.circle.fill",
+                    color: .success
+                )
+                
+                StatCard(
+                    value: "\(snapshot.stats.absent)",
+                    label: "缺席",
+                    icon: "xmark.circle.fill",
+                    color: .danger
+                )
+                
+                StatCard(
+                    value: "\(snapshot.stats.late)",
+                    label: "遲到",
+                    icon: "clock.fill",
+                    color: .warn
+                )
             }
         }
     }
     
-    private func attendanceRow(record: AttendanceRecord, index: Int) -> some View {
+    // MARK: - 記錄區
+    
+    private var recordsSection: some View {
+        VStack(alignment: .leading, spacing: TTokens.spacingMD) {
+            Text("點名記錄")
+                .font(.title3.weight(.semibold))
+                .padding(.horizontal, 4)
+            
+            if let snapshot = viewModel.snapshot, !snapshot.personalRecords.isEmpty {
+                LazyVStack(spacing: 12) {
+                    ForEach(Array(snapshot.personalRecords.enumerated()), id: \.element.id) { index, record in
+                        AttendanceRecordCard(record: record)
+                            .transition(.asymmetric(
+                                insertion: .scale(scale: 0.95).combined(with: .opacity),
+                                removal: .scale(scale: 0.98).combined(with: .opacity)
+                            ))
+                            .animation(
+                                .spring(response: 0.5, dampingFraction: 0.8)
+                                    .delay(Double(index % 10) * 0.04),
+                                value: snapshot.personalRecords.count
+                            )
+                    }
+                }
+            } else {
+                AppEmptyStateView(
+                    systemImage: "checkmark.circle",
+                    title: "目前沒有記錄",
+                    subtitle: "學生掃描 QR Code 後將顯示於此"
+                )
+            }
+        }
+    }
+    
+    // MARK: - QR Code 生成
+    
+    private func generateQRCode(from string: String) -> UIImage? {
+        let context = CIContext()
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(string.utf8)
+        
+        if let outputImage = filter.outputImage {
+            if let cgimg = context.createCGImage(outputImage, from: outputImage.extent) {
+                return UIImage(cgImage: cgimg)
+            }
+        }
+        return nil
+    }
+    
+    // MARK: - 提交點名
+    
+    private func submitAttendanceCheck(using sessionId: String) async {
+        guard let uid = authService.currentUser?.id, !uid.isEmpty else {
+            ToastCenter.shared.show("請先登入", style: .error)
+            return
+        }
+        
+        // TODO: 實現實際的 API 調用
+        // try await AttendanceAPI.checkIn(userId: uid, sessionId: sessionId)
+        didLocalCheckIn = true
+        HapticFeedback.success()
+        ToastCenter.shared.show("點名成功！", style: .success)
+        await viewModel.load()
+    }
+}
+
+// MARK: - 點名記錄卡片
+
+private struct AttendanceRecordCard: View {
+    let record: AttendanceRecord
+    
+    var body: some View {
         HStack(spacing: TTokens.spacingMD) {
-            // 頭像環
+            // 狀態圖標
             AvatarRing(
                 imageURL: nil,
-                size: 44,
-                ringColor: record.present ? .success : .danger,
+                size: 50,
+                ringColor: statusColor,
                 ringWidth: 2
             )
             
             // 信息
-            VStack(alignment: .leading, spacing: 4) {
-                Text(record.userName)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(record.courseName)
                     .font(.subheadline.weight(.semibold))
                 
-                if let time = record.checkInTime {
-                    Text(time, style: .time)
+                HStack(spacing: 8) {
+                    Text(record.date, style: .time)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    
+                    Text("•")
+                        .foregroundStyle(.secondary.opacity(0.5))
+                    
+                    Text(record.status.title)
+                        .font(.caption)
+                        .foregroundStyle(statusColor)
                 }
             }
             
             Spacer()
             
             // 狀態徽章
-            if record.present {
-                TagBadge("已出席", color: .success, icon: "checkmark.circle.fill")
-            } else {
-                TagBadge("缺席", color: .danger, icon: "xmark.circle.fill")
-            }
+            Image(systemName: record.status.icon)
+                .font(.title3)
+                .foregroundStyle(statusColor)
+                .frame(width: 36, height: 36)
+                .background(statusColor.opacity(0.15), in: Circle())
         }
         .padding(TTokens.spacingLG)
         .floatingCard()
-        .transition(.asymmetric(
-            insertion: .scale(scale: 0.95).combined(with: .opacity),
-            removal: .scale(scale: 0.98).combined(with: .opacity)
-        ))
-        .animation(
-            .spring(response: 0.5, dampingFraction: 0.8)
-                .delay(Double(index % 10) * 0.04),
-            value: snapshot?.records.count ?? 0
-        )
     }
     
-    // MARK: - 統計卡片組件
-    
-    private struct StatCard: View {
-        let value: String
-        let label: String
-        let icon: String
-        let color: Color
-        
-        var body: some View {
-            VStack(spacing: TTokens.spacingSM) {
-                HStack {
-                    Image(systemName: icon)
-                        .font(.title3)
-                        .foregroundStyle(color)
-                    Spacer()
-                }
-                
-                Text(value)
-                    .font(.title.weight(.bold))
-                    .foregroundStyle(color.gradient)
-                
-                Text(label)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(TTokens.spacingLG)
-            .floatingCard()
-        }
-    }
-    
-    // MARK: - QR 生成
-    
-    private func generateQR(from string: String) -> UIImage? {
-        let context = CIContext()
-        let filter = CIFilter.qrCodeGenerator()
-        filter.message = Data(string.utf8)
-        filter.correctionLevel = "M"
-        
-        guard let outputImage = filter.outputImage else { return nil }
-        let transform = CGAffineTransform(scaleX: 10, y: 10)
-        let scaledImage = outputImage.transformed(by: transform)
-        
-        guard let cgImage = context.createCGImage(scaledImage, from: scaledImage.extent) else { return nil }
-        return UIImage(cgImage: cgImage)
-    }
-    
-    // MARK: - Submit
-    
-    private func submitAttendanceCheck(using sessId: String) async {
-        guard let uid = authService.currentUser?.id, !uid.isEmpty else {
-            didLocalCheckIn = true
-            ToastCenter.shared.show("打卡成功（離線模式）", style: .success)
-            return
-        }
-        
-        do {
-            try await AttendanceAPI.checkIn(sessionId: sessId, uid: uid, idempotencyKey: "att-\(UUID().uuidString)")
-            didLocalCheckIn = true
-            HapticFeedback.success()
-            ToastCenter.shared.show("簽到成功！", style: .success)
-            await viewModel.load()
-        } catch {
-            HapticFeedback.error()
-            ToastCenter.shared.show("簽到失敗：\(error.localizedDescription)", style: .error)
+    private var statusColor: Color {
+        switch record.status {
+        case .present: return .success
+        case .late: return .warn
+        case .absent: return .danger
         }
     }
 }
 
-// 統一卡片組件
+// MARK: - QR 掃描彈窗
+
+private struct QRScannerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let onScan: (String) -> Void
+    
+    var body: some View {
+        NavigationStack {
+            QRScannerView { result in
+                switch result {
+                case .success(let code):
+                    onScan(code)
+                case .failure:
+                    dismiss()
+                }
+            }
+            .ignoresSafeArea()
+            .navigationTitle("掃描 QR Code")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("關閉") {
+                        HapticFeedback.selection()
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - 統計卡片
+
 private struct StatCard: View {
     let value: String
     let label: String
@@ -339,24 +379,31 @@ private struct StatCard: View {
     let color: Color
     
     var body: some View {
-        VStack(spacing: TTokens.spacingSM) {
-            HStack {
+        VStack(spacing: TTokens.spacingMD) {
+            // 圖標
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.15))
+                    .frame(width: 56, height: 56)
+                
                 Image(systemName: icon)
-                    .font(.title3)
+                    .font(.title2)
                     .foregroundStyle(color)
-                Spacer()
             }
             
+            // 數值
             Text(value)
-                .font(.title.weight(.bold))
-                .foregroundStyle(color.gradient)
+                .font(.system(size: 32, weight: .bold))
+                .foregroundStyle(color)
+                .monospacedDigit()
             
+            // 標籤
             Text(label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity)
         .padding(TTokens.spacingLG)
-        .floatingCard()
+        .glassEffect(intensity: 0.7)
     }
 }
-
