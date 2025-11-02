@@ -3,7 +3,7 @@ import SwiftUI
 struct MainAppView: View {
     @StateObject private var sessionStore = AppSessionStore()
     @StateObject private var moduleManager = TenantModuleManager()
-    @State private var selectedModule: AppModule = .home
+    @State private var selectedModule: AppModule = .feed
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var deepLink: DeepLinkRouter
     @State private var deepLinkConversation: Conversation? = nil
@@ -204,7 +204,13 @@ private struct OrganizationTabView: View {
         case .insights:
             NavigationStack { InsightsView(membership: activeMembership) }
         case .feed:
-            GlobalFeedView(session: session, membership: activeMembership, personalTimelineStore: nil, feedService: GlobalFeedService())
+            GlobalFeedView(
+                session: session,
+                membership: activeMembership,
+                personalTimelineStore: nil,
+                feedService: GlobalFeedService(),
+                onSwitchTenant: onSwitchTenant
+            )
         case .chat:
             ChatListView(session: session)
         case .friends:

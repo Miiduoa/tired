@@ -10,7 +10,7 @@ struct TiredApp: App {
     var body: some Scene {
         WindowGroup {
             ZStack {
-                Color.bg.ignoresSafeArea(.all)
+                DynamicBackground(style: .glassmorphism)
                 AppShellView()
                     .environmentObject(deepLinkRouter)
             }
@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         tabAppearance.backgroundColor = UIColor.systemBackground
         UITabBar.appearance().standardAppearance = tabAppearance
         UITabBar.appearance().scrollEdgeAppearance = tabAppearance
-
+        
         // 初始化 Google Sign-In
         guard let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
               let plist = NSDictionary(contentsOfFile: path),

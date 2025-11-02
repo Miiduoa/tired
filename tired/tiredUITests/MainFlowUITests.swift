@@ -7,12 +7,13 @@ final class MainFlowUITests: XCTestCase {
     }
 
     @MainActor
-    func testAutoLoginShowsHome() throws {
+    func testAutoLoginShowsLanding() throws {
         let app = XCUIApplication()
         app.launchArguments += ["-ui-test-autologin"]
         app.launch()
-
-        XCTAssertTrue(app.staticTexts["首頁"].waitForExistence(timeout: 5), "應顯示首頁標題")
+        // 允許首頁或動態做為預設落點
+        let ok = app.staticTexts["首頁"].waitForExistence(timeout: 3) || app.staticTexts["動態"].waitForExistence(timeout: 3)
+        XCTAssertTrue(ok, "應顯示首頁或動態")
     }
 
     @MainActor
@@ -36,4 +37,3 @@ final class MainFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["10 秒點名"].waitForExistence(timeout: 5), "應顯示出勤頁")
     }
 }
-

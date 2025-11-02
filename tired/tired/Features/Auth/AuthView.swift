@@ -150,12 +150,8 @@ struct AuthView: View {
             .padding(.horizontal, TTokens.spacingLG)
             .padding(.bottom, TTokens.spacingLG)
         }
-        .background(Color.card, in: RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
-                .strokeBorder(Color.separator, lineWidth: 0.5)
-        }
-        .shadow(color: TTokens.shadowLevel1.color, radius: TTokens.shadowLevel1.radius, y: TTokens.shadowLevel1.y)
+        .glassEffect(intensity: 0.7)
+        .shadow(color: TTokens.shadowElevated.color, radius: TTokens.shadowElevated.radius, y: TTokens.shadowElevated.y)
     }
     
     // MARK: - Social Login Section

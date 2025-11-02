@@ -23,7 +23,11 @@ struct AppShellView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .ready(let session):
                 if let membership = session.activeMembership ?? session.allMemberships.first {
-                    OrganizationShellView(session: session, membership: membership)
+                    OrganizationShellView(
+                        session: session,
+                        membership: membership,
+                        onSwitchTenant: { id in sessionStore.switchActiveMembership(to: id) }
+                    )
                         .environmentObject(sessionStore.authService)
                 } else {
                     PersonalShellView(session: session)
@@ -45,18 +49,19 @@ private struct OrganizationShellView: View {
     let session: AppSession
     let membership: TenantMembership
     @EnvironmentObject private var authService: AuthService
+    let onSwitchTenant: (String) -> Void
     
-    enum OrgTab: Hashable { case home, inbox, messages, me }
+    enum OrgTab: Hashable { case home, groups, messages, me }
     @State private var tab: OrgTab = .home
     
     var body: some View {
         TabView(selection: $tab) {
-            OrgHomeView(session: session, membership: membership)
+            GlobalFeedView(session: session, membership: membership, personalTimelineStore: nil, feedService: GlobalFeedService())
                 .tabItem { Label("首頁", systemImage: "house.fill") }
                 .tag(OrgTab.home)
-            InboxView(membership: membership)
-                .tabItem { Label("收件匣", systemImage: "tray.fill") }
-                .tag(OrgTab.inbox)
+            GroupsTab(session: session, active: membership, onSwitch: onSwitchTenant)
+                .tabItem { Label("組織", systemImage: "building.2") }
+                .tag(OrgTab.groups)
             ChatListView(session: session)
                 .tabItem { Label("訊息", systemImage: "message.fill") }
                 .tag(OrgTab.messages)
@@ -70,4 +75,31 @@ private struct OrganizationShellView: View {
     }
 }
 
-
+private struct GroupsTab: View {
+    let session: AppSession
+    let active: TenantMembership
+    let onSwitch: (String) -> Void
+    
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("我的組織") {
+                    ForEach(session.allMemberships, id: \.id) { m in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(m.tenant.name).font(.subheadline.weight(.semibold))
+                                Text(m.role.displayName).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if m.id == active.id { Image(systemName: "checkmark").foregroundStyle(.tint) }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture { onSwitch(m.id) }
+                    }
+                }
+            }
+            .navigationTitle("組織")
+            .background(Color.bg.ignoresSafeArea())
+        }
+    }
+}

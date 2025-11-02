@@ -9,7 +9,7 @@ private enum PersonalTab: Hashable {
 
 struct PersonalMainView: View {
     let session: AppSession
-    @State private var selection: PersonalTab = .home
+    @State private var selection: PersonalTab = .feed
     @StateObject private var timelineStore: PersonalTimelineStore
     private let feedService: GlobalFeedServiceProtocol = GlobalFeedService()
     private let talentService: TalentServiceProtocol = TalentService()
@@ -165,6 +165,9 @@ private struct PersonalHomeView: View {
 
 struct PostRowView: View {
     let post: Post
+    @State private var liked: Bool = false
+    @State private var likeCount: Int = 0
+    @State private var showComments: Bool = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -200,14 +203,57 @@ struct PostRowView: View {
                 }
             }
             HStack(spacing: 12) {
+                Label(post.sourceType == .personal ? "個人" : "組織",
+                      systemImage: post.sourceType == .personal ? "person" : "building.2")
                 Label(post.category.displayName, systemImage: "tag")
                 Label(post.visibility.label, systemImage: "eye")
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
+
+            Divider().padding(.vertical, 4)
+            HStack(spacing: 16) {
+                Button {
+                    liked.toggle()
+                    likeCount += liked ? 1 : -1
+                } label: {
+                    Label("\(likeCount)", systemImage: liked ? "heart.fill" : "heart")
+                        .foregroundStyle(liked ? .red : .secondary)
+                }
+                .buttonStyle(.plain)
+
+                Button { showComments = true } label: {
+                    Label("留言", systemImage: "bubble.right")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                Button { /* share placeholder */ } label: {
+                    Image(systemName: "square.and.arrow.up")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding()
         .background(Color.card, in: RoundedRectangle(cornerRadius: TTokens.radiusMD, style: .continuous))
+        .onAppear {
+            if let raw = post.metadata["likes"], let n = Int(raw) { likeCount = n }
+        }
+        .sheet(isPresented: $showComments) {
+            NavigationStack {
+                List {
+                    Section("留言（示意）") {
+                        Text("這裡之後接後端留言串")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .navigationTitle("留言")
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("關閉") { showComments = false } } }
+            }
+        }
     }
 }
 
