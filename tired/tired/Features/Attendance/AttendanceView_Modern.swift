@@ -167,9 +167,9 @@ struct AttendanceView_Modern: View {
                 // 進度條
                 ProgressRing(
                     progress: Double(viewModel.ttl) / (Double(viewModel.snapshot?.validDuration ?? 30) * 60.0),
-                    ringColor: .creative,
                     lineWidth: 4,
-                    size: 100
+                    size: 100,
+                    gradient: TTokens.gradientCreative
                 )
             }
         }

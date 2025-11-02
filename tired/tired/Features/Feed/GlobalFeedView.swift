@@ -224,7 +224,7 @@ struct GlobalFeedView: View {
             showComposer = true
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: "square.and.pencil").foregroundStyle(.tint)
+                Image(systemName: "square.and.pencil").foregroundStyle(Color.tint)
                 Text("發佈新貼文…")
                     .foregroundStyle(.secondary)
                 Spacer()

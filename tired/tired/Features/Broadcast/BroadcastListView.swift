@@ -209,7 +209,7 @@ private struct BroadcastCard: View {
                     }) {
                         Image(systemName: "circle")
                             .font(.title3)
-                            .foregroundStyle(.tint)
+                            .foregroundStyle(Color.tint)
                     }
                     .buttonStyle(.plain)
                 }

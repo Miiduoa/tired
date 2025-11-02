@@ -137,7 +137,7 @@ struct ChatListView_Modern: View {
                         } label: {
                             Label("已讀", systemImage: "checkmark")
                         }
-                        .tint(.tint)
+                        .tint(Color.tint)
                     }
                 }
             }
@@ -235,7 +235,7 @@ private struct ConversationCard: View {
                 AvatarRing(
                     imageURL: nil,
                     size: 56,
-                    ringColor: isUnread ? .tint : .neutralLight,
+                    ringColor: isUnread ? Color.tint : .neutralLight,
                     ringWidth: isUnread ? 2 : 1
                 )
                 
@@ -265,10 +265,10 @@ private struct ConversationCard: View {
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
                             .background(TTokens.gradientPrimary, in: Capsule())
-                            .shadow(color: .tint.opacity(0.3), radius: 4, y: 2)
+                            .shadow(color: Color.tint.opacity(0.3), radius: 4, y: 2)
                     } else if isUnread {
                         Circle()
-                            .fill(.tint)
+                            .fill(Color.tint)
                             .frame(width: 8, height: 8)
                     }
                 }
@@ -496,7 +496,7 @@ private struct FriendCard: View {
             AvatarRing(
                 imageURL: nil,
                 size: 50,
-                ringColor: .tint,
+                ringColor: Color.tint,
                 ringWidth: 2
             )
             
@@ -545,4 +545,3 @@ private struct FriendCard: View {
         .floatingCard()
     }
 }
-

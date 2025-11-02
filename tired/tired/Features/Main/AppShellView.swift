@@ -110,7 +110,7 @@ private struct GroupsTab: View {
                                 Text(m.role.displayName).font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
-                            if m.id == active.id { Image(systemName: "checkmark").foregroundStyle(.tint) }
+                            if m.id == active.id { Image(systemName: "checkmark").foregroundStyle(Color.tint) }
                         }
                         .contentShape(Rectangle())
                         .onTapGesture { onSwitch(m.id) }

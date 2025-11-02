@@ -77,7 +77,7 @@ struct PostRowView: View {
                             Link(destination: url) {
                                 HStack(spacing: 6) {
                                     Image(systemName: "link.circle.fill")
-                                        .foregroundStyle(.tint)
+                                        .foregroundStyle(Color.tint)
                                     Text(displayName(for: url))
                                         .font(.caption)
                                         .lineLimit(1)
@@ -159,4 +159,3 @@ struct PostRowView: View {
         url.lastPathComponent.isEmpty ? url.host ?? "連結" : url.lastPathComponent
     }
 }
-

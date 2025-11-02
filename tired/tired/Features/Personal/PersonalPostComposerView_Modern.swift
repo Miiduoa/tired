@@ -270,7 +270,7 @@ struct PersonalPostComposerView_Modern: View {
                     ForEach(attachments) { attachment in
                         HStack(spacing: TTokens.spacingMD) {
                             Image(systemName: "link.circle.fill")
-                                .foregroundStyle(.tint)
+                                .foregroundStyle(Color.tint)
                             
                             Text(attachment.displayName)
                                 .font(.caption)
@@ -393,4 +393,3 @@ struct PersonalPostComposerView_Modern: View {
 }
 
 // MARK: - 表單字段組件已在 PageTemplates.swift 中定義，此處移除重複
-
