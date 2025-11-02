@@ -31,34 +31,70 @@ enum TTokens {
     static let shadowElevated: (color: Color, radius: CGFloat, x: CGFloat, y: CGFloat) = 
         (.black.opacity(0.16), 32, 0, 12)
     
-    // MARK: - 漸層系統 (溫暖的漸層帶來舒適感)
+    // MARK: - 漸層系統 (情感化色彩流動 - 心理學驅動)
+    
+    // 主品牌漸層：信任 + 專業 + 未來感
     static let gradientPrimary = LinearGradient(
         colors: [
-            Color(red: 0.235, green: 0.949, blue: 0.784), // 清新的薄荷綠
-            Color(red: 0.0, green: 0.682, blue: 0.937)    // 專業的藍色
+            Color(red: 0.32, green: 0.68, blue: 1.0),     // 天空藍
+            Color(red: 0.18, green: 0.52, blue: 0.95)     // 深海藍
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
     
+    // 薄荷漸層：清新 + 療癒 + 放鬆
+    static let gradientMint = LinearGradient(
+        colors: [
+            Color(red: 0.28, green: 0.95, blue: 0.82),    // 薄荷綠
+            Color(red: 0.18, green: 0.82, blue: 0.92)     // 青色
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    
+    // 溫暖漸層：友好 + 活力 + 積極
     static let gradientWarm = LinearGradient(
         colors: [
-            Color(red: 1.0, green: 0.596, blue: 0.353),    // 溫暖的橙黃
-            Color(red: 0.964, green: 0.325, blue: 0.486) // 柔和的粉紅
+            Color(red: 1.0, green: 0.68, blue: 0.42),     // 橙色
+            Color(red: 1.0, green: 0.52, blue: 0.58)      // 珊瑚粉
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
     
+    // 成功漸層：成長 + 正向 + 成就
     static let gradientSuccess = LinearGradient(
         colors: [
-            Color(red: 0.2, green: 0.85, blue: 0.5),      // 充滿活力的綠色
-            Color(red: 0.1, green: 0.75, blue: 0.4)
+            Color(red: 0.45, green: 0.9, blue: 0.6),      // 淺綠
+            Color(red: 0.22, green: 0.82, blue: 0.4)      // 鮮綠
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
     
+    // 紫色漸層：創意 + 高級 + 神秘
+    static let gradientCreative = LinearGradient(
+        colors: [
+            Color(red: 0.85, green: 0.58, blue: 0.95),    // 淺紫
+            Color(red: 0.68, green: 0.35, blue: 0.88)     // 深紫
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    
+    // 日落漸層：溫暖 + 浪漫 + 柔和
+    static let gradientSunset = LinearGradient(
+        colors: [
+            Color(red: 1.0, green: 0.75, blue: 0.58),     // 橙黃
+            Color(red: 0.98, green: 0.52, blue: 0.72),    // 粉橙
+            Color(red: 0.88, green: 0.42, blue: 0.85)     // 紫粉
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    
+    // 微妙漸層：極簡 + 高級 + 克制
     static let gradientSubtle = LinearGradient(
         colors: [
             Color(uiColor: .systemBackground),
@@ -66,6 +102,16 @@ enum TTokens {
         ],
         startPoint: .top,
         endPoint: .bottom
+    )
+    
+    // 玻璃漸層：現代 + 透明 + 層次
+    static let gradientGlass = LinearGradient(
+        colors: [
+            Color.white.opacity(0.4),
+            Color.white.opacity(0.1)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
     )
     
     // MARK: - 動畫時序 (符合人體工學的反應時間)
@@ -91,50 +137,67 @@ enum TTokens {
     static let opacityFull: Double = 1.0
 }
 
-// MARK: - 顏色系統 (心理學驅動的顏色選擇)
+// MARK: - 顏色系統 (心理學驅動的顏色選擇 - 升級版)
 
 extension Color {
-    // MARK: - 基礎色彩
+    // MARK: - 基礎色彩（動態適配）
     static let bg = Color(uiColor: .systemBackground)
     static let bg2 = Color(uiColor: .secondarySystemBackground)
     static let bg3 = Color(uiColor: .tertiarySystemBackground)
     static let card = Color(uiColor: .systemGroupedBackground)
     static let separator = Color(uiColor: .separator)
     
-    // MARK: - 文字顏色 (確保可讀性)
+    // MARK: - 文字顏色（可讀性優化）
     static let labelPrimary = Color(uiColor: .label)
     static let labelSecondary = Color(uiColor: .secondaryLabel)
     static let labelTertiary = Color(uiColor: .tertiaryLabel)
     
-    // MARK: - 語意化顏色 (心理學優化)
-    // 藍色：信任、專業、穩定
-    static let tint = Color(red: 0.0, green: 0.478, blue: 1.0)
-    static let tintLight = Color(red: 0.4, green: 0.7, blue: 1.0)
-    static let tintDark = Color(red: 0.0, green: 0.3, blue: 0.8)
+    // MARK: - 品牌色彩（情感化設計）
+    // 藍色：信任、專業、穩定 - 升級為更柔和的色調
+    static let tint = Color(red: 0.2, green: 0.58, blue: 1.0)  // 更溫暖的藍
+    static let tintLight = Color(red: 0.5, green: 0.75, blue: 1.0)
+    static let tintDark = Color(red: 0.0, green: 0.35, blue: 0.85)
+    static let tintUltraLight = Color(red: 0.85, green: 0.92, blue: 1.0)  // 新增：極淺色用於背景
     
-    // 綠色：成功、成長、積極
-    static let success = Color(red: 0.2, green: 0.78, blue: 0.35)
-    static let successLight = Color(red: 0.4, green: 0.88, blue: 0.55)
-    static let successDark = Color(red: 0.1, green: 0.65, blue: 0.25)
+    // 綠色：成功、成長、積極 - 更有生命力
+    static let success = Color(red: 0.22, green: 0.82, blue: 0.4)
+    static let successLight = Color(red: 0.45, green: 0.9, blue: 0.6)
+    static let successDark = Color(red: 0.1, green: 0.68, blue: 0.28)
+    static let successBg = Color(red: 0.9, green: 0.98, blue: 0.93)  // 新增：背景色
     
-    // 橙色：警告、注意、溫暖
-    static let warn = Color(red: 1.0, green: 0.584, blue: 0.0)
-    static let warnLight = Color(red: 1.0, green: 0.75, blue: 0.4)
-    static let warnDark = Color(red: 0.8, green: 0.45, blue: 0.0)
+    // 橙色：警告、注意、溫暖 - 更友好
+    static let warn = Color(red: 1.0, green: 0.62, blue: 0.15)
+    static let warnLight = Color(red: 1.0, green: 0.78, blue: 0.45)
+    static let warnDark = Color(red: 0.85, green: 0.48, blue: 0.0)
+    static let warnBg = Color(red: 1.0, green: 0.96, blue: 0.88)  // 新增：背景色
     
-    // 紅色：錯誤、緊急、停止
-    static let danger = Color(red: 1.0, green: 0.231, blue: 0.188)
-    static let dangerLight = Color(red: 1.0, green: 0.5, blue: 0.5)
-    static let dangerDark = Color(red: 0.8, green: 0.15, blue: 0.15)
+    // 紅色：錯誤、緊急 - 更克制
+    static let danger = Color(red: 1.0, green: 0.28, blue: 0.24)
+    static let dangerLight = Color(red: 1.0, green: 0.55, blue: 0.52)
+    static let dangerDark = Color(red: 0.85, green: 0.18, blue: 0.18)
+    static let dangerBg = Color(red: 1.0, green: 0.95, blue: 0.95)  // 新增：背景色
     
-    // 紫色：創意、高級、神秘
-    static let creative = Color(red: 0.686, green: 0.322, blue: 0.871)
-    static let creativeLight = Color(red: 0.8, green: 0.5, blue: 0.9)
+    // 紫色：創意、高級、神秘 - 更優雅
+    static let creative = Color(red: 0.72, green: 0.38, blue: 0.90)
+    static let creativeLight = Color(red: 0.85, green: 0.58, blue: 0.95)
+    static let creativeDark = Color(red: 0.58, green: 0.25, blue: 0.75)
+    static let creativeBg = Color(red: 0.96, green: 0.93, blue: 0.98)  // 新增：背景色
     
-    // 中性色調（減少視覺疲勞）
+    // 薄荷綠：清新、療癒、放鬆（新增）
+    static let mint = Color(red: 0.28, green: 0.95, blue: 0.82)
+    static let mintLight = Color(red: 0.58, green: 0.98, blue: 0.92)
+    static let mintBg = Color(red: 0.92, green: 0.99, blue: 0.98)
+    
+    // 珊瑚色：溫暖、友好、活力（新增）
+    static let coral = Color(red: 1.0, green: 0.65, blue: 0.52)
+    static let coralLight = Color(red: 1.0, green: 0.82, blue: 0.75)
+    static let coralBg = Color(red: 1.0, green: 0.96, blue: 0.94)
+    
+    // 中性色調（高級灰）
     static let neutral = Color(uiColor: .systemGray)
     static let neutralLight = Color(uiColor: .systemGray5)
     static let neutralDark = Color(uiColor: .systemGray2)
+    static let neutralBg = Color(uiColor: .systemGray6)
 }
 
 // MARK: - View 擴充 (愉悅的互動體驗)
@@ -165,14 +228,52 @@ extension View {
             )
     }
     
-    // MARK: - 玻璃態效果 (現代感的模糊背景)
-    func glassEffect(intensity: CGFloat = 0.7) -> some View {
+    // MARK: - 玻璃態效果（Glassmorphism - iOS 風格）
+    func glassEffect(
+        intensity: CGFloat = 0.7,
+        radius: CGFloat = TTokens.radiusLG,
+        borderOpacity: Double = 0.3
+    ) -> some View {
         self
-            .background(.ultraThinMaterial.opacity(intensity), in: RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous))
+            .background(.ultraThinMaterial.opacity(intensity), in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [.white.opacity(borderOpacity), .white.opacity(borderOpacity * 0.3)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.2
+                    )
+            }
+            .shadow(color: .black.opacity(0.08), radius: 12, y: 8)
+    }
+    
+    // MARK: - 漸層玻璃卡片（現代感強烈）
+    func gradientGlassCard(gradient: LinearGradient = TTokens.gradientPrimary) -> some View {
+        self
+            .padding(TTokens.spacingLG)
+            .background {
+                ZStack {
+                    RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                        .fill(gradient.opacity(0.15))
+                    RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                }
+            }
             .overlay {
                 RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
-                    .strokeBorder(.white.opacity(0.2), lineWidth: 1)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [.white.opacity(0.4), .clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.5
+                    )
             }
+            .shadow(color: TTokens.shadowLevel2.color, radius: TTokens.shadowLevel2.radius, y: TTokens.shadowLevel2.y)
     }
     
     // MARK: - 標準間距

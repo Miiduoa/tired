@@ -7,16 +7,26 @@ enum DynamicBackgroundStyle {
 
 struct DynamicBackground: View {
     let style: DynamicBackgroundStyle
+    @Environment(\.colorScheme) private var scheme
     
     var body: some View {
         switch style {
         case .glassmorphism:
             ZStack {
-                // Break gradient into smaller parts to help the type-checker
-                let gradientColors: [Color] = [
-                    Color(red: 0.96, green: 0.98, blue: 1.0),
-                    Color(red: 0.92, green: 0.96, blue: 1.0)
-                ]
+                // Dark/Light adaptive background
+                let gradientColors: [Color] = {
+                    if scheme == .dark {
+                        return [
+                            Color(red: 0.08, green: 0.10, blue: 0.14),
+                            Color(red: 0.05, green: 0.07, blue: 0.11)
+                        ]
+                    } else {
+                        return [
+                            Color(red: 0.96, green: 0.98, blue: 1.0),
+                            Color(red: 0.92, green: 0.96, blue: 1.0)
+                        ]
+                    }
+                }()
                 let background = LinearGradient(
                     gradient: Gradient(colors: gradientColors),
                     startPoint: .topLeading,
@@ -24,17 +34,17 @@ struct DynamicBackground: View {
                 )
                 background
                 Circle()
-                    .fill(Color.blue.opacity(0.12))
+                    .fill((scheme == .dark ? Color.indigo : Color.blue).opacity(scheme == .dark ? 0.10 : 0.12))
                     .frame(width: 280, height: 280)
                     .blur(radius: 60)
                     .offset(x: -120, y: -220)
                 Circle()
-                    .fill(Color.mint.opacity(0.12))
+                    .fill((scheme == .dark ? Color.teal : Color.mint).opacity(scheme == .dark ? 0.10 : 0.12))
                     .frame(width: 320, height: 320)
                     .blur(radius: 70)
                     .offset(x: 140, y: -180)
                 RoundedRectangle(cornerRadius: 40)
-                    .fill(Color.purple.opacity(0.10))
+                    .fill(Color.purple.opacity(scheme == .dark ? 0.08 : 0.10))
                     .frame(width: 360, height: 360)
                     .rotationEffect(.degrees(35))
                     .blur(radius: 80)
@@ -45,10 +55,11 @@ struct DynamicBackground: View {
             TimelineView(.animation) { timeline in
                 let t = timeline.date.timeIntervalSinceReferenceDate
                 Canvas { context, size in
-                    // Prefer SwiftUI Color and precompute to reduce inference work
-                    let c1: Color = Color(UIColor.systemTeal).opacity(0.20)
-                    let c2: Color = Color(UIColor.systemIndigo).opacity(0.18)
-                    let c3: Color = Color(UIColor.systemPink).opacity(0.16)
+                    // Adaptive blobs
+                    let base: Double = (scheme == .dark ? 0.14 : 0.20)
+                    let c1: Color = Color(UIColor.systemTeal).opacity(base)
+                    let c2: Color = Color(UIColor.systemIndigo).opacity(base - 0.02)
+                    let c3: Color = Color(UIColor.systemPink).opacity(base - 0.04)
                     
                     // Convert trig (Double) to CGFloat explicitly
                     let width = size.width
