@@ -1,47 +1,11 @@
 import SwiftUI
 
+// 輕量殼層：直接承載新版 MainAppView，確保登入後呈現現代化 UI
 struct AppShellView: View {
-    @StateObject private var sessionStore = AppSessionStore()
-    @StateObject private var moduleManager = TenantModuleManager()
-    
     var body: some View {
-        Group {
-            switch sessionStore.state {
-            case .loading:
-                ProgressView("載入中…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .signedOut:
-                AuthView().environmentObject(sessionStore.authService)
-            case .error(let message):
-                VStack(spacing: 16) {
-                    Image(systemName: "wifi.exclamationmark").font(.system(size: 48)).foregroundStyle(.orange)
-                    Text(message).font(.headline).multilineTextAlignment(.center)
-                    Button("重新整理") { Task { await sessionStore.refreshMemberships() } }
-                        .buttonStyle(.borderedProminent)
-                }
-                .padding()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .ready(let session):
-                if let membership = session.activeMembership ?? session.allMemberships.first {
-                    OrganizationShellView(
-                        session: session,
-                        membership: membership,
-                        onSwitchTenant: { id in sessionStore.switchActiveMembership(to: id) }
-                    )
-                        .environmentObject(sessionStore.authService)
-                } else {
-                    PersonalShellView(session: session)
-                        .environmentObject(sessionStore.authService)
-                }
-            }
-        }
-        .task {
-            if case .loading = sessionStore.state {
-                await sessionStore.refreshMemberships()
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.bg.ignoresSafeArea(.all))
+        MainAppView()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.bg.ignoresSafeArea(.all))
     }
 }
 
@@ -94,31 +58,4 @@ private struct OrganizationShellView: View {
     }
 }
 
-private struct GroupsTab: View {
-    let session: AppSession
-    let active: TenantMembership
-    let onSwitch: (String) -> Void
-    
-    var body: some View {
-        NavigationStack {
-            List {
-                Section("我的組織") {
-                    ForEach(session.allMemberships, id: \.id) { m in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(m.tenant.name).font(.subheadline.weight(.semibold))
-                                Text(m.role.displayName).font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if m.id == active.id { Image(systemName: "checkmark").foregroundStyle(Color.tint) }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture { onSwitch(m.id) }
-                    }
-                }
-            }
-            .navigationTitle("組織")
-            .background(Color.bg.ignoresSafeArea())
-        }
-    }
-}
+// 舊版 OrganizationShellView/GroupsTab 不再使用，統一走 MainAppView 的現代化路由
