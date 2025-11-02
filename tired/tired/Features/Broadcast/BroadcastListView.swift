@@ -150,6 +150,7 @@ struct BroadcastListView: View {
                             Haptics.impact(.light)
                             let expires = Date().addingTimeInterval(600)
                             SnoozeStore.shared.snooze(id: item.id, until: expires)
+                            Task { await SnoozeSyncService.shared.saveSnooze(id: item.id, title: item.title, subtitle: item.body, expires: expires, kind: "broadcast") }
                             NotificationService.shared.scheduleLocalNotification(
                                 id: "snooze-b-\(item.id)",
                                 title: "提醒：\(item.title)",
@@ -158,6 +159,7 @@ struct BroadcastListView: View {
                             )
                             ToastCenter.shared.show("已延後 10 分鐘", style: .info, actionTitle: "撤銷", action: {
                                 SnoozeStore.shared.snooze(id: item.id, until: Date())
+                                Task { await SnoozeSyncService.shared.clearSnooze(id: item.id) }
                             })
                         }
                     }

@@ -1,5 +1,5 @@
-
 import SwiftUI
+import Combine
 
 struct AuthView: View {
     @EnvironmentObject private var authService: AuthService
@@ -121,7 +121,10 @@ struct AuthView: View {
             
             // 主要操作按鈕
             VStack(spacing: TTokens.spacingMD) {
-                Button(action: handleSubmit) {
+                Button(action: {
+                    HapticFeedback.medium()
+                    handleSubmit()
+                }) {
                     HStack {
                         if authService.isLoading {
                             ProgressView()
@@ -133,16 +136,17 @@ struct AuthView: View {
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, TTokens.spacingMD)
-                    .background(isFormValid ? AnyShapeStyle(TTokens.gradientPrimary) : AnyShapeStyle(Color.gray.opacity(0.3)))
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: TTokens.radiusMD, style: .continuous))
+                    .frame(height: TTokens.touchTargetComfortable)
                 }
+                .fluidButton(gradient: isFormValid ? TTokens.gradientPrimary : LinearGradient(colors: [Color.gray.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing))
                 .disabled(!isFormValid || authService.isLoading)
                 .animation(.easeInOut(duration: 0.2), value: isFormValid)
                 
                 // 切換登入/註冊
-                Button(action: { withAnimation(.spring(response: 0.3)) { isSignUp.toggle() } }) {
+                Button(action: { 
+                    HapticFeedback.selection()
+                    withAnimation(.spring(response: 0.3)) { isSignUp.toggle() } 
+                }) {
                     HStack(spacing: TTokens.spacingXS) {
                         Text(isSignUp ? "已有帳號？" : "還沒有帳號？")
                             .foregroundStyle(.secondary)
@@ -151,6 +155,7 @@ struct AuthView: View {
                             .foregroundStyle(Color.tint)
                     }
                     .font(.subheadline)
+                    .padding(.vertical, TTokens.spacingSM)
                 }
             }
             .padding(.horizontal, TTokens.spacingLG)

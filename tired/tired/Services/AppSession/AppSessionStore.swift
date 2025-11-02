@@ -89,6 +89,8 @@ final class AppSessionStore: ObservableObject {
             return
         }
 
+        // 註冊當前裝置推播資訊（若已取得 APNS token）
+        await DeviceRegistry.registerCurrentDevice()
         await loadMemberships(for: user, forceRefresh: false)
     }
     

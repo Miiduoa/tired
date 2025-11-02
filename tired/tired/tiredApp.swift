@@ -1,6 +1,8 @@
 import SwiftUI
 import FirebaseCore
 import GoogleSignIn
+import FirebaseAuth
+import FirebaseFirestore
 
 @main
 struct TiredApp: App {
@@ -58,6 +60,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         NotificationService.shared.requestAuthorization()
 
         return true
+    }
+    
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        Task { await DeviceRegistry.saveAPNSToken(deviceToken) }
+    }
+    
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("⚠️ 無法註冊 APNS：\(error.localizedDescription)")
     }
     
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
