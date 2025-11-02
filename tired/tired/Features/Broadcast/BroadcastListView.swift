@@ -211,6 +211,17 @@ private struct BroadcastCard: View {
         .opacity(isAcked ? 0.8 : 1.0)
         .animation(TTokens.animationQuick, value: isPressed)
         .animation(TTokens.animationStandard, value: isAcked)
+        .contextMenu {
+            Button("已知悉", systemImage: "checkmark.circle") {
+                Haptics.impact(.light)
+                onAck()
+                ToastCenter.shared.show("已確認公告", style: .success)
+            }
+            Button("延後 10 分鐘", systemImage: "clock") {
+                Haptics.impact(.light)
+                ToastCenter.shared.show("將於 10 分鐘後提醒（示意）", style: .info)
+            }
+        }
         .onTapGesture {
             withAnimation(TTokens.animationQuick) {
                 isPressed = true

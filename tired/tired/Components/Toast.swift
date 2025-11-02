@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 enum ToastStyle {
     case success, warning, error, info
@@ -22,10 +23,12 @@ enum ToastStyle {
     }
 }
 
-struct ToastMessage: Identifiable, Equatable {
+struct ToastMessage: Identifiable {
     let id = UUID()
     let text: String
     let style: ToastStyle
+    let actionTitle: String?
+    let action: (() -> Void)?
 }
 
 @MainActor
@@ -35,8 +38,8 @@ final class ToastCenter: ObservableObject {
     private var isPresenting = false
     private init() {}
     
-    func show(_ text: String, style: ToastStyle = .info, haptics: Bool = true) {
-        let msg = ToastMessage(text: text, style: style)
+    func show(_ text: String, style: ToastStyle = .info, actionTitle: String? = nil, haptics: Bool = true, action: (() -> Void)? = nil) {
+        let msg = ToastMessage(text: text, style: style, actionTitle: actionTitle, action: action)
         queue.append(msg)
         if haptics {
             switch style {
@@ -85,6 +88,16 @@ struct ToastHostView: View {
                 .foregroundStyle(Color.labelPrimary)
                 .font(.subheadline)
             Spacer(minLength: 0)
+            if let title = msg.actionTitle, msg.action != nil {
+                Button(title) {
+                    msg.action?()
+                    withAnimation(TTokens.animationQuick) { dismiss() }
+                }
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(msg.style.color.opacity(0.12), in: Capsule())
+            }
             Button {
                 withAnimation(TTokens.animationQuick) { dismiss() }
             } label: {
@@ -122,4 +135,3 @@ struct ToastHostView: View {
         }
     }
 }
-

@@ -281,41 +281,94 @@ extension View {
         self.padding(TTokens.spacingLG)
     }
     
-    // MARK: - 增加觸覺反饋的按鈕樣式
-    func interactiveButtonStyle() -> some View {
+    // MARK: - 💫 情感化微交互（Delightful Microinteractions）
+    
+    /// 彈性按壓效果 - 適用於按鈕，帶觸覺反饋
+    func bouncyPress(isPressed: Bool = false) -> some View {
         self
-            .scaleEffect(1.0)
-            .animation(TTokens.animationQuick, value: false)
+            .scaleEffect(isPressed ? 0.94 : 1.0)
+            .animation(TTokens.animationBouncy, value: isPressed)
     }
     
-    // MARK: - 微動畫的出現效果
-    func fadeInScale(delay: Double = 0) -> some View {
+    /// 漸入放大 - 列表項目進場動畫
+    func fadeInScale(delay: Double = 0, scale: CGFloat = 0.92) -> some View {
         self
             .opacity(0)
-            .scaleEffect(0.95)
+            .scaleEffect(scale)
             .onAppear {
-                withAnimation(TTokens.animationStandard.delay(delay)) {
+                withAnimation(TTokens.animationSmooth.delay(delay)) {
                     // SwiftUI 會自動處理，這裡只是標記
                 }
             }
     }
     
-    // MARK: - 脈衝效果（用於吸引注意力）
-    func pulseEffect(isActive: Bool = true) -> some View {
+    /// 呼吸脈衝 - 吸引注意力的柔和動畫
+    func breathingPulse(isActive: Bool = true, scale: CGFloat = 1.02, duration: Double = 2.0) -> some View {
         self
-            .scaleEffect(isActive ? 1.05 : 1.0)
+            .scaleEffect(isActive ? scale : 1.0)
+            .opacity(isActive ? 0.95 : 1.0)
             .animation(
-                isActive ? 
-                    .easeInOut(duration: 1.0).repeatForever(autoreverses: true) :
+                isActive ?
+                    .easeInOut(duration: duration).repeatForever(autoreverses: true) :
                     .easeInOut(duration: 0.3),
                 value: isActive
             )
     }
     
-    // MARK: - 懸浮效果（提升互動感）
-    func hoverEffect() -> some View {
+    /// 懸浮提升 - 卡片互動時的深度感
+    func floatingLift(isLifted: Bool = false) -> some View {
         self
-            .shadow(color: TTokens.shadowLevel2.color, radius: TTokens.shadowLevel2.radius, y: TTokens.shadowLevel2.y)
+            .shadow(
+                color: .black.opacity(isLifted ? 0.15 : 0.06),
+                radius: isLifted ? 20 : 8,
+                y: isLifted ? 12 : 4
+            )
+            .scaleEffect(isLifted ? 1.02 : 1.0)
+            .animation(TTokens.animationSmooth, value: isLifted)
+    }
+    
+    /// 漣漪擴散 - 點擊反饋動畫
+    func rippleEffect(at point: CGPoint = .zero, isActive: Bool = false) -> some View {
+        self
+            .overlay {
+                if isActive {
+                    Circle()
+                        .fill(Color.tint.opacity(0.3))
+                        .frame(width: 20, height: 20)
+                        .position(point)
+                        .scaleEffect(isActive ? 5 : 1)
+                        .opacity(isActive ? 0 : 0.8)
+                        .animation(.easeOut(duration: 0.5), value: isActive)
+                }
+            }
+    }
+    
+    /// 彈出出現 - 驚喜元素動畫
+    func popIn(delay: Double = 0) -> some View {
+        self
+            .opacity(0)
+            .scaleEffect(0.5)
+            .onAppear {
+                withAnimation(TTokens.animationBouncy.delay(delay)) {
+                    // SwiftUI 會自動處理
+                }
+            }
+    }
+    
+    /// 搖晃提示 - 錯誤或需要注意時
+    func shakeEffect(trigger: Int = 0) -> some View {
+        self
+            .modifier(ShakeEffect(shakes: trigger))
+    }
+    
+    /// 閃爍高亮 - 臨時突出顯示
+    func highlightFlash(isActive: Bool = false, color: Color = .tint) -> some View {
+        self
+            .background(
+                RoundedRectangle(cornerRadius: TTokens.radiusSM, style: .continuous)
+                    .fill(color.opacity(isActive ? 0.2 : 0))
+                    .animation(.easeInOut(duration: 0.3).repeatCount(2, autoreverses: true), value: isActive)
+            )
     }
 
     // MARK: - 統一按鈕樣式（主要/次要）
@@ -393,6 +446,21 @@ struct BreathingCard: ViewModifier {
                     breathing = true
                 }
             }
+    }
+}
+
+// MARK: - 搖晃效果（錯誤提示）
+
+struct ShakeEffect: GeometryEffect {
+    var shakes: Int
+    var animatableData: CGFloat {
+        get { CGFloat(shakes) }
+        set { shakes = Int(newValue) }
+    }
+    
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        let offset = 8 * sin(animatableData * 2 * .pi * 3)
+        return ProjectionTransform(CGAffineTransform(translationX: offset, y: 0))
     }
 }
 

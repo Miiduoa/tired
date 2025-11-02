@@ -102,7 +102,7 @@ struct GlobalFeedView: View {
                                 }
                             } label: { Image(systemName: "plus.circle") }
                         }
-                        if personalTimelineStore != nil {
+                    if personalTimelineStore != nil {
                             Button { showComposer = true } label: { Image(systemName: "square.and.pencil") }
                         }
                     }
@@ -284,8 +284,8 @@ struct GlobalFeedView: View {
                         Label(membership?.tenant.name ?? "我的組織", systemImage: "building.2.fill")
                     }
                 }
-                Image(systemName: "line.3.horizontal.decrease.circle")
-            }
+            Image(systemName: "line.3.horizontal.decrease.circle")
+        }
         }
     }
     
@@ -368,7 +368,7 @@ struct GlobalFeedView: View {
         .background(color.opacity(0.15), in: Capsule())
         .foregroundStyle(color)
     }
-
+    
     @MainActor
     private func refresh() async {
         async let timelineTask = loadPersonalTimeline()

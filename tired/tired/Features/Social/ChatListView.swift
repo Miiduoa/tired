@@ -53,7 +53,11 @@ struct ChatListView: View {
                                 Spacer()
                                 Text(convo.updatedAt, style: .time).font(.caption2).foregroundStyle(.secondary)
                             }
+                            .padding(10)
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+                            .overlay { RoundedRectangle(cornerRadius: 14).stroke(Color.separator.opacity(0.3), lineWidth: 0.6) }
                         }
+                        .listRowBackground(Color.clear)
                         .swipeActions(edge: .trailing) {
                             Button("標為已讀") {
                                 Task { await markAsRead(convo) }
