@@ -65,9 +65,13 @@ struct BroadcastListView: View {
                 Color.bg.ignoresSafeArea()
                 
                 if viewModel.isLoading && viewModel.items.isEmpty {
-                    loadingView
+                    AppLoadingView(title: L.s("broadcast.loading"))
                 } else if filteredItems.isEmpty {
-                    emptyStateView
+                    AppEmptyStateView(
+                        systemImage: "megaphone.fill",
+                        title: L.s("broadcast.empty.title"),
+                        subtitle: L.s("broadcast.empty.subtitle")
+                    )
                 } else {
                     contentView
                 }
@@ -121,42 +125,7 @@ struct BroadcastListView: View {
     
     // MARK: - Loading View
     
-    private var loadingView: some View {
-        VStack(spacing: TTokens.spacingLG) {
-            ProgressView()
-                .scaleEffect(1.2)
-                .tint(Color.tint)
-            Text("載入公告中...")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-    }
-    
-    // MARK: - Empty State
-    
-    private var emptyStateView: some View {
-        VStack(spacing: TTokens.spacingXL) {
-            ZStack {
-                Circle()
-                    .fill(TTokens.gradientPrimary.opacity(0.1))
-                    .frame(width: 120, height: 120)
-                
-                Image(systemName: "megaphone.fill")
-                    .font(.system(size: 50))
-                    .foregroundStyle(TTokens.gradientPrimary)
-            }
-            
-            VStack(spacing: TTokens.spacingSM) {
-                Text("目前沒有公告")
-                    .font(.title2.weight(.semibold))
-                
-                Text("當有新公告時會顯示在這裡")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
+    // loading/empty 改用通用元件
 }
 
 // MARK: - Broadcast Card
@@ -230,23 +199,7 @@ private struct BroadcastCard: View {
                 }
             }
         }
-        .padding(TTokens.spacingLG)
-        .background(
-            RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
-                .fill(Color.card)
-                .overlay {
-                    RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
-                        .strokeBorder(
-                            isAcked ? Color.green.opacity(0.3) : Color.separator.opacity(0.5),
-                            lineWidth: isAcked ? 1.5 : 0.5
-                        )
-                }
-        )
-        .shadow(
-            color: TTokens.shadowLevel1.color,
-            radius: TTokens.shadowLevel1.radius,
-            y: TTokens.shadowLevel1.y
-        )
+        .cardStyle(padding: TTokens.spacingLG, radius: TTokens.radiusLG, shadowLevel: 1)
         .scaleEffect(isPressed ? 0.98 : 1.0)
         .opacity(isAcked ? 0.8 : 1.0)
         .animation(TTokens.animationQuick, value: isPressed)

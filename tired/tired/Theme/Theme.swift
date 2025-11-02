@@ -216,6 +216,32 @@ extension View {
         self
             .shadow(color: TTokens.shadowLevel2.color, radius: TTokens.shadowLevel2.radius, y: TTokens.shadowLevel2.y)
     }
+
+    // MARK: - 統一按鈕樣式（主要/次要）
+    func tPrimaryButton(fullWidth: Bool = false) -> some View {
+        self
+            .font(.headline)
+            .foregroundStyle(.white)
+            .padding(.horizontal, TTokens.spacingLG)
+            .padding(.vertical, TTokens.spacingSM)
+            .frame(maxWidth: fullWidth ? .infinity : nil)
+            .background(TTokens.gradientPrimary, in: RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous))
+            .shadow(color: TTokens.shadowLevel1.color, radius: TTokens.shadowLevel1.radius, y: TTokens.shadowLevel1.y)
+    }
+
+    func tSecondaryButton(fullWidth: Bool = false) -> some View {
+        self
+            .font(.headline)
+            .foregroundStyle(Color.tint)
+            .padding(.horizontal, TTokens.spacingLG)
+            .padding(.vertical, TTokens.spacingSM)
+            .frame(maxWidth: fullWidth ? .infinity : nil)
+            .background(Color.neutralLight, in: RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                    .strokeBorder(Color.separator.opacity(0.5), lineWidth: 0.5)
+            }
+    }
 }
 
 // MARK: - Material 擴充

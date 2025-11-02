@@ -48,10 +48,13 @@ struct ClockView: View {
     var body: some View {
         List {
             if viewModel.isLoading && viewModel.records.isEmpty {
-                ProgressView("同步中…")
+                AppLoadingView(title: "同步中…")
             } else if filteredRecords.isEmpty {
-                Text("目前沒有打卡紀錄")
-                    .foregroundStyle(.secondary)
+                AppEmptyStateView(
+                    systemImage: "mappin.and.ellipse",
+                    title: "目前沒有打卡紀錄",
+                    subtitle: "完成第一次打卡後會顯示在此"
+                )
             } else {
                 ForEach(filteredRecords) { record in
                     HStack(spacing: 12) {
@@ -94,6 +97,7 @@ struct ClockView: View {
         }
         .task { await viewModel.load() }
         .refreshable { await viewModel.load() }
+        .background(Color.bg.ignoresSafeArea())
     }
 
     private func submitClock() async {

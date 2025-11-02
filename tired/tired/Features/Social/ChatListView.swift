@@ -92,6 +92,7 @@ struct ChatListView: View {
                 ChatThreadView(session: session, conversation: convo, chatService: chatService)
             }
         }
+        .background(Color.bg.ignoresSafeArea(.all))
     }
 
     private var filtered: [Conversation] {

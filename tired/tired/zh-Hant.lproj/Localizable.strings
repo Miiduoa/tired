@@ -1,0 +1,16 @@
+"action.retry" = "重新整理";
+
+"feed.loading" = "載入貼文…";
+"feed.empty.title" = "目前沒有符合的貼文";
+"feed.empty.subtitle" = "嘗試調整篩選條件，或發佈一則新貼文。";
+
+"broadcast.loading" = "載入公告中…";
+"broadcast.empty.title" = "目前沒有公告";
+"broadcast.empty.subtitle" = "當有新公告時會顯示在這裡";
+
+"inbox.loading" = "載入中…";
+"inbox.empty.title" = "收件匣是空的";
+"inbox.empty.subtitle.all" = "所有項目都已完成";
+"inbox.empty.subtitle.filtered" = "目前沒有符合條件的項目";
+
+

@@ -5,6 +5,10 @@ struct AccountView: View {
     @EnvironmentObject private var authService: AuthService
     @State private var showSignOutConfirmation = false
     @State private var showDeleteAccountConfirmation = false
+    @State private var showChangePasswordSheet = false
+    @State private var showAddPhoneSheet = false
+    @State private var showDeletePasswordSheet = false
+    @State private var deletePasswordInput: String = ""
     
     var body: some View {
         List {
@@ -53,12 +57,40 @@ struct AccountView: View {
         }
         .confirmationDialog("刪除帳號", isPresented: $showDeleteAccountConfirmation, titleVisibility: .visible) {
             Button("刪除帳號", role: .destructive) {
-                // TODO: 實現刪除帳號功能
-                authService.activeAlert = .init(kind: .info, message: "刪除帳號功能開發中")
+                if authService.currentUser?.provider == "password" {
+                    showDeletePasswordSheet = true
+                } else {
+                    authService.deleteAccount()
+                }
             }
             Button("取消", role: .cancel) {}
         } message: {
             Text("此操作無法復原，所有資料將永久刪除")
+        }
+        .sheet(isPresented: $showChangePasswordSheet) {
+            NavigationStack { ChangePasswordSheet { oldPwd, newPwd in
+                authService.changePassword(currentPassword: oldPwd, newPassword: newPwd)
+            } onClose: {
+                showChangePasswordSheet = false
+            } }
+            .presentationDetents([.height(320), .medium])
+        }
+        .sheet(isPresented: $showAddPhoneSheet) {
+            NavigationStack { AddPhoneSheet()
+                    .environmentObject(authService)
+            }
+            .presentationDetents([.height(360), .medium])
+        }
+        .sheet(isPresented: $showDeletePasswordSheet) {
+            NavigationStack {
+                DeleteAccountSheet(password: $deletePasswordInput) {
+                    authService.deleteAccount(password: deletePasswordInput)
+                } onClose: {
+                    deletePasswordInput = ""
+                    showDeletePasswordSheet = false
+                }
+            }
+            .presentationDetents([.height(260), .medium])
         }
     }
     
@@ -151,7 +183,7 @@ struct AccountView: View {
                         .foregroundStyle(.secondary)
                 }
             } else {
-                Button(action: {}) {
+                Button(action: { showAddPhoneSheet = true }) {
                     Label("新增手機號碼", systemImage: "phone.badge.plus")
                 }
             }
@@ -165,7 +197,7 @@ struct AccountView: View {
     private var securitySection: some View {
         Section {
             // 密碼管理
-            Button(action: {}) {
+            Button(action: { showChangePasswordSheet = true }) {
                 Label("變更密碼", systemImage: "key.fill")
             }
             
@@ -261,5 +293,89 @@ private struct VerificationStatusBadge: View {
         .padding(.vertical, TTokens.spacingXS)
         .background(status.color.opacity(0.15), in: Capsule())
         .foregroundStyle(status.color)
+    }
+}
+
+// MARK: - Sheets
+
+private struct ChangePasswordSheet: View {
+    @State private var oldPassword: String = ""
+    @State private var newPassword: String = ""
+    let onSubmit: (_ old: String, _ new: String) -> Void
+    let onClose: () -> Void
+    
+    var body: some View {
+        Form {
+            Section("變更密碼") {
+                SecureField("目前密碼", text: $oldPassword)
+                    .textContentType(.password)
+                SecureField("新密碼（至少 6 碼）", text: $newPassword)
+                    .textContentType(.newPassword)
+            }
+            Section {
+                Button("更新密碼") { onSubmit(oldPassword, newPassword) }
+                    .disabled(oldPassword.isEmpty || newPassword.count < 6)
+                Button("取消", role: .cancel) { onClose() }
+            }
+        }
+        .navigationTitle("變更密碼")
+    }
+}
+
+private struct AddPhoneSheet: View {
+    @EnvironmentObject private var authService: AuthService
+    @State private var phoneNumber: String = ""
+    @State private var code: String = ""
+    @State private var sent: Bool = false
+    
+    var body: some View {
+        Form {
+            Section(sent ? "輸入簡訊驗證碼" : "新增手機號碼") {
+                if !sent {
+                    TextField("例如：+886912345678", text: $phoneNumber)
+                        .keyboardType(.phonePad)
+                        .textContentType(.telephoneNumber)
+                } else {
+                    SecureField("6 位數驗證碼", text: $code)
+                        .keyboardType(.numberPad)
+                }
+            }
+            Section {
+                if !sent {
+                    Button("傳送驗證碼") {
+                        authService.startPhoneVerification(phoneNumber: phoneNumber)
+                        sent = true
+                    }
+                    .disabled(phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty)
+                } else {
+                    Button("驗證手機號碼") {
+                        authService.verifyPhone(with: code)
+                    }
+                    .disabled(code.count < 6)
+                }
+            }
+        }
+        .navigationTitle("新增手機號碼")
+    }
+}
+
+private struct DeleteAccountSheet: View {
+    @Binding var password: String
+    let onDelete: () -> Void
+    let onClose: () -> Void
+    
+    var body: some View {
+        Form {
+            Section("為安全起見，請重新輸入密碼") {
+                SecureField("帳號密碼", text: $password)
+                    .textContentType(.password)
+            }
+            Section {
+                Button("永久刪除帳號", role: .destructive) { onDelete() }
+                    .disabled(password.isEmpty)
+                Button("取消", role: .cancel) { onClose() }
+            }
+        }
+        .navigationTitle("刪除帳號")
     }
 }

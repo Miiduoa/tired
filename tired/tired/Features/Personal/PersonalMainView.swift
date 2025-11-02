@@ -36,6 +36,8 @@ struct PersonalMainView: View {
             .tabItem { Label("我", systemImage: "person.fill") }
             .tag(PersonalTab.profile)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.bg.ignoresSafeArea(.all))
     }
 }
 
@@ -231,6 +233,10 @@ private struct PersonalExploreView: View {
     @State private var experiences: [Experience] = []
     @State private var isLoading = false
     @State private var searchText: String = ""
+    // 篩選條件（探索）
+    @State private var selectedCategories: Set<PostCategory> = []
+    @State private var selectedVisibility: PostVisibility? = nil
+    @State private var showFilterSheet = false
     
     var body: some View {
         NavigationStack {
@@ -256,10 +262,9 @@ private struct PersonalExploreView: View {
             .task {
                 await loadContent()
             }
-            .refreshable {
-                await loadContent(force: true)
-            }
+            .refreshable { await loadContent(force: true) }
             .searchable(text: $searchText, prompt: "搜尋職缺或組織")
+            .sheet(isPresented: $showFilterSheet) { filterSheet }
         }
     }
     
@@ -294,13 +299,17 @@ private struct PersonalExploreView: View {
     }
     
     private var filteredOpportunities: [Post] {
-        guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return recommendedPosts }
-        let token = searchText.lowercased()
-        return recommendedPosts.filter { post in
-            post.summary.lowercased().contains(token) ||
-            post.content.lowercased().contains(token) ||
-            post.tags.contains(where: { $0.lowercased().contains(token) }) ||
-            (post.organizationName?.lowercased().contains(token) ?? false)
+        let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let base: [Post] = keyword.isEmpty ? recommendedPosts : recommendedPosts.filter { post in
+            post.summary.lowercased().contains(keyword) ||
+            post.content.lowercased().contains(keyword) ||
+            post.tags.contains(where: { $0.lowercased().contains(keyword) }) ||
+            (post.organizationName?.lowercased().contains(keyword) ?? false)
+        }
+        return base.filter { post in
+            let categoryOK = selectedCategories.isEmpty || selectedCategories.contains(post.category)
+            let visibilityOK = (selectedVisibility == nil) || (post.visibility == selectedVisibility!)
+            return categoryOK && visibilityOK
         }
     }
     
@@ -359,9 +368,7 @@ private struct PersonalExploreView: View {
                 Text("熱門職缺與專案")
                     .font(.headline)
                 Spacer()
-                Button("篩選") {
-                    // TODO: 打開更進階的篩選條件
-                }
+                Button("篩選") { showFilterSheet = true }
                 .font(.footnote)
             }
             if filteredOpportunities.isEmpty {
@@ -449,6 +456,41 @@ private struct PersonalExploreView: View {
             return OrganizationSuggestion.defaults
         }
         return Array(results.prefix(8))
+    }
+}
+
+// MARK: - Filter Sheet
+private extension PersonalExploreView {
+    var filterSheet: some View {
+        NavigationStack {
+            Form {
+                Section("類別") {
+                    ForEach(PostCategory.allCases) { cat in
+                        let isOn = selectedCategories.contains(cat)
+                        Toggle(isOn: Binding(
+                            get: { isOn },
+                            set: { value in
+                                if value { selectedCategories.insert(cat) } else { selectedCategories.remove(cat) }
+                            }
+                        )) { Text(cat.displayName) }
+                    }
+                }
+                Section("可見度") {
+                    Picker("可見度", selection: Binding(
+                        get: { selectedVisibility ?? .public },
+                        set: { newValue in selectedVisibility = newValue }
+                    )) {
+                        Text("（不限）").tag(PostVisibility.public as PostVisibility)
+                        ForEach(PostVisibility.allCases) { vis in
+                            Text(vis.label).tag(vis)
+                        }
+                    }
+                }
+                Section { Button("清除篩選") { selectedCategories.removeAll(); selectedVisibility = nil } }
+            }
+            .navigationTitle("篩選條件")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("完成") { showFilterSheet = false } } }
+        }
     }
 }
 

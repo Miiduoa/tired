@@ -36,6 +36,25 @@ final class AppSessionStore: ObservableObject {
     init(authService: AuthService? = nil, tenantService: TenantServiceProtocol? = nil) {
         self.authService = authService ?? AuthService()
         self.tenantService = tenantService ?? TenantService()
+        // UI 測試快速導入：跳過認證，直接進入已登入狀態
+        if Self.isUITestAutoLogin {
+            let user = User(
+                id: "u_test",
+                email: "ui@test",
+                displayName: "UI Test",
+                provider: "ui-test",
+                isEmailVerified: true
+            )
+            let memberships = TenantContentProvider.demoMemberships(for: user)
+            let session = AppSession(
+                user: user,
+                activeMembership: memberships.first,
+                allMemberships: memberships,
+                personalProfile: PersonalProfile.default(for: user)
+            )
+            self.state = .ready(session)
+            return
+        }
         bindAuthChanges()
     }
     
@@ -157,6 +176,17 @@ final class AppSessionStore: ObservableObject {
                 state = .error("載入租戶資訊失敗：\(error.localizedDescription)")
             }
         }
+    }
+}
+
+private extension AppSessionStore {
+    static var isUITestAutoLogin: Bool {
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-ui-test-autologin") { return true }
+        let env = ProcessInfo.processInfo.environment
+        // XCUI_TESTING 由測試執行器自動注入，足以辨識為 UI 測試情境
+        if env["XCUI_TESTING"] == "1" { return true }
+        return env["UI_TEST_AUTLOGIN"] == "1" || env["UI_TEST_MODE"] == "1"
     }
 }
 

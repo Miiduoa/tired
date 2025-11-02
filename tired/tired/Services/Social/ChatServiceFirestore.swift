@@ -77,6 +77,19 @@ final class ChatServiceFirestore: ChatServiceProtocol, ChatRealtimeListening, Re
         return Conversation(id: ref.documentID, title: title, participantIds: participantIds, lastMessagePreview: "", updatedAt: now)
     }
 
+    func conversation(id: String, for userId: String) async -> Conversation? {
+        do {
+            let doc = try await db.collection("conversations").document(id).getDocument()
+            guard doc.exists else { return nil }
+            let data = doc.data() ?? [:]
+            guard let pids = data["participantIds"] as? [String], pids.contains(userId) else { return nil }
+            let title = data["title"] as? String ?? "對話"
+            let preview = data["lastMessagePreview"] as? String ?? ""
+            let updated = (data["updatedAt"] as? Timestamp)?.dateValue() ?? Date()
+            return Conversation(id: id, title: title, participantIds: pids, lastMessagePreview: preview, updatedAt: updated)
+        } catch { return nil }
+    }
+
     func markRead(conversationId: String, userId: String) async {
         let ref = db.collection("conversations").document(conversationId).collection("reads").document(userId)
         _ = try? await ref.setData(["lastReadAt": FieldValue.serverTimestamp(), "uid": userId], merge: true)
@@ -187,4 +200,3 @@ enum ChatServiceRouter {
         ChatServiceFirestore()
     }
 }
-

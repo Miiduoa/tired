@@ -16,7 +16,7 @@ enum TenantIntegrationFactory {
         case .rest:
             return RESTTenantIntegration(context: context, configuration: configuration)
         case .graphQL:
-            return RESTTenantIntegration(context: context, configuration: configuration) // TODO: 建置 GraphQL Adapter
+            return GraphQLTenantIntegration(context: context, configuration: configuration)
         case .custom:
             return FirebaseTenantIntegration(context: context)
         }

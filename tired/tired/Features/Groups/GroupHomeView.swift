@@ -15,17 +15,18 @@ struct GroupHomeView: View {
                     }
                     TCard(title: "10 秒點名", subtitle: "資料庫 H501", trailingSystemImage: "qrcode.viewfinder") {
                         Button("開始點名") { }
-                            .gradientPrimary()
+                            .tPrimaryButton(fullWidth: true)
                     }
                     TCard(title: "打卡", subtitle: "資管系辦公室", trailingSystemImage: "mappin.circle") {
                         Button("到站打卡") { }
-                            .gradientPrimary()
+                            .tPrimaryButton(fullWidth: true)
                     }
                     TCard(title: "ESG 月報", subtitle: "11 月待上傳帳單", trailingSystemImage: "leaf") {
-                        HStack {
-                            Button("上傳帳單") { }.gradientPrimary()
-                            Spacer()
-                            Button("查看報告") { }.buttonStyle(.borderedProminent)
+                        HStack(spacing: TTokens.spacingSM) {
+                            Button("上傳帳單") { }
+                                .tPrimaryButton()
+                            Button("查看報告") { }
+                                .tSecondaryButton()
                         }
                     }
                 }

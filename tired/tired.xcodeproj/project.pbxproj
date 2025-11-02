@@ -37,7 +37,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		697FAC6D2EB1010400864EEC /* Exceptions for "tired" folder in "tired" target */ = {
+		69FFFEEE2EB3F00A00AAA001 /* Exceptions for "tired" folder in "tired" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -50,7 +50,7 @@
 		6966100E2EAA503E00E2E3F9 /* tired */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				697FAC6D2EB1010400864EEC /* Exceptions for "tired" folder in "tired" target */,
+				69FFFEEE2EB3F00A00AAA001 /* Exceptions for "tired" folder in "tired" target */,
 			);
 			path = tired;
 			sourceTree = "<group>";
@@ -432,7 +432,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = PGF4D2DHVF;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = tired/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -465,7 +465,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = PGF4D2DHVF;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = tired/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

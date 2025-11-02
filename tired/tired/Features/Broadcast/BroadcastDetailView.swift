@@ -17,18 +17,13 @@ struct BroadcastDetailView: View {
                         Text("截止 " + deadline.formatted(date: .abbreviated, time: .shortened))
                     }.foregroundStyle(.secondary)
                 }
-                .padding(16)
-                .background(Color.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .strokeBorder(Color(uiColor: .separator), lineWidth: 0.5)
-                }
+                .cardStyle(padding: 16, radius: 24, shadowLevel: 1)
                 .padding(.horizontal, 16)
             }
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 12) {
                     Button("已知悉") { }
-                        .gradientPrimary()
+                        .tPrimaryButton(fullWidth: true)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)

@@ -27,31 +27,70 @@ final class TenantModuleManager: ObservableObject {
     }
     
     func metadata(for module: AppModule, membership: TenantMembership) -> TenantModuleMetadata {
+        // 預設值
+        var meta: TenantModuleMetadata
         switch module {
         case .home:
-            return TenantModuleMetadata(title: "首頁", systemImage: "house.fill", accentColor: .accentColor)
+            meta = TenantModuleMetadata(title: "首頁", systemImage: "house.fill", accentColor: .accentColor)
         case .broadcast:
-            return TenantModuleMetadata(title: "公告", systemImage: "megaphone.fill", accentColor: .purple)
+            meta = TenantModuleMetadata(title: "公告", systemImage: "megaphone.fill", accentColor: .purple)
         case .inbox:
-            return TenantModuleMetadata(title: "收件匣", systemImage: "tray.fill", accentColor: .blue)
+            meta = TenantModuleMetadata(title: "收件匣", systemImage: "tray.fill", accentColor: .blue)
         case .attendance:
-            return TenantModuleMetadata(title: "出勤", systemImage: "person.badge.clock.fill", accentColor: .orange)
+            meta = TenantModuleMetadata(title: "出勤", systemImage: "person.badge.clock.fill", accentColor: .orange)
         case .clock:
-            return TenantModuleMetadata(title: "打卡", systemImage: "location.fill", accentColor: .green)
+            meta = TenantModuleMetadata(title: "打卡", systemImage: "location.fill", accentColor: .green)
         case .esg:
-            return TenantModuleMetadata(title: "ESG", systemImage: "leaf.fill", accentColor: .mint)
+            meta = TenantModuleMetadata(title: "ESG", systemImage: "leaf.fill", accentColor: .mint)
         case .activities:
-            return TenantModuleMetadata(title: "活動", systemImage: "calendar", accentColor: .pink)
+            meta = TenantModuleMetadata(title: "活動", systemImage: "calendar", accentColor: .pink)
         case .insights:
-            return TenantModuleMetadata(title: "分析", systemImage: "chart.line.uptrend.xyaxis", accentColor: .indigo)
+            meta = TenantModuleMetadata(title: "分析", systemImage: "chart.line.uptrend.xyaxis", accentColor: .indigo)
         case .feed:
-            return TenantModuleMetadata(title: "動態", systemImage: "square.grid.2x2", accentColor: .cyan)
+            meta = TenantModuleMetadata(title: "動態", systemImage: "square.grid.2x2", accentColor: .cyan)
         case .chat:
-            return TenantModuleMetadata(title: "訊息", systemImage: "message.fill", accentColor: .blue)
+            meta = TenantModuleMetadata(title: "訊息", systemImage: "message.fill", accentColor: .blue)
         case .friends:
-            return TenantModuleMetadata(title: "好友", systemImage: "person.2.fill", accentColor: .teal)
+            meta = TenantModuleMetadata(title: "好友", systemImage: "person.2.fill", accentColor: .teal)
         case .profile:
-            return TenantModuleMetadata(title: "個人", systemImage: "person.crop.circle", accentColor: .gray)
+            meta = TenantModuleMetadata(title: "個人", systemImage: "person.crop.circle", accentColor: .gray)
+        }
+
+        // 套用租戶層級覆寫：
+        // - module.<rawValue>.title / icon / color
+        let keyPrefix = "module.\(module.rawValue)"
+        if let title = membership.tenant.metadata["\(keyPrefix).title"], !title.isEmpty {
+            meta = TenantModuleMetadata(title: title, systemImage: meta.systemImage, accentColor: meta.accentColor)
+        }
+        if let icon = membership.tenant.metadata["\(keyPrefix).icon"], !icon.isEmpty {
+            meta = TenantModuleMetadata(title: meta.title, systemImage: icon, accentColor: meta.accentColor)
+        }
+        if let colorHex = membership.tenant.metadata["\(keyPrefix).color"], let color = parseColor(hex: colorHex) {
+            meta = TenantModuleMetadata(title: meta.title, systemImage: meta.systemImage, accentColor: color)
+        }
+        return meta
+    }
+
+    private func parseColor(hex: String) -> Color? {
+        let trimmed = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("#") else { return nil }
+        let hexStr = String(trimmed.dropFirst())
+        var value: UInt64 = 0
+        guard Scanner(string: hexStr).scanHexInt64(&value) else { return nil }
+        switch hexStr.count {
+        case 6: // RRGGBB
+            let r = Double((value & 0xFF0000) >> 16) / 255.0
+            let g = Double((value & 0x00FF00) >> 8) / 255.0
+            let b = Double(value & 0x0000FF) / 255.0
+            return Color(red: r, green: g, blue: b)
+        case 8: // RRGGBBAA
+            let r = Double((value & 0xFF000000) >> 24) / 255.0
+            let g = Double((value & 0x00FF0000) >> 16) / 255.0
+            let b = Double((value & 0x0000FF00) >> 8) / 255.0
+            let a = Double(value & 0x000000FF) / 255.0
+            return Color(.sRGB, red: r, green: g, blue: b, opacity: a)
+        default:
+            return nil
         }
     }
     

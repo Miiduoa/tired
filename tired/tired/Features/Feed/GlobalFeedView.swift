@@ -20,30 +20,20 @@ struct GlobalFeedView: View {
         NavigationStack {
             Group {
                 if isInitialLoading && mergedPosts.isEmpty {
-                    ProgressView("載入貼文…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.bg.opacity(0.6))
+                    AppLoadingView(title: L.s("feed.loading"))
                 } else if filteredPosts.isEmpty {
-                    VStack(spacing: 16) {
-                        Image(systemName: "square.and.pencil")
-                            .font(.system(size: 48))
-                            .foregroundStyle(.secondary)
-                        Text("目前沒有符合的貼文")
-                            .font(.headline)
-                        Text("嘗試調整篩選條件，或發佈一則新貼文。")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.bg.opacity(0.6))
+                    AppEmptyStateView(
+                        systemImage: "square.and.pencil",
+                        title: L.s("feed.empty.title"),
+                        subtitle: L.s("feed.empty.subtitle")
+                    )
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 12) {
                             ForEach(filteredPosts) { post in
                                 PostRowView(post: post)
+                                    .cardStyle(padding: 16, radius: TTokens.radiusLG, shadowLevel: 1)
                                     .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                    .background(Color.clear)
                                     .onAppear {
                                         guard post.id == filteredPosts.last?.id else { return }
                                         Task { await loadPage(reset: false) }
@@ -60,6 +50,7 @@ struct GlobalFeedView: View {
                                 }
                                 .font(.footnote)
                                 .padding(.vertical, 12)
+                                .tSecondaryButton()
                             }
                         }
                         .padding(.top, 12)

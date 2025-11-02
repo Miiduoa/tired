@@ -85,7 +85,13 @@ final class TenantService: TenantServiceProtocol {
             )
         }
         
-        return memberships.sorted { $0.tenant.name.localizedCaseInsensitiveCompare($1.tenant.name) == .orderedAscending }
+        var result = memberships.sorted { $0.tenant.name.localizedCaseInsensitiveCompare($1.tenant.name) == .orderedAscending }
+        #if DEBUG
+        if let override = loadLocalOverride() {
+            result = applyLocalOverride(override, to: result)
+        }
+        #endif
+        return result
     }
 }
 
@@ -109,3 +115,61 @@ fileprivate struct FirestoreMember: Codable {
     let integrationCredentials: [String: String]?
     let integrationOptions: [String: String]?
 }
+
+#if DEBUG
+// MARK: - Debug local tenant override
+private extension TenantService {
+    struct TenantConfigOverride: Decodable {
+        let targetMembershipId: String?
+        let targetTenantId: String?
+        let id: String
+        let adapter: TenantConfiguration.AdapterType
+        let rest: TenantConfiguration.RESTConfiguration?
+        let featureFlags: TenantConfiguration.FeatureFlags?
+        let options: [String: String]
+    }
+
+    func loadLocalOverride() -> TenantConfigOverride? {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        if let url = Bundle.main.url(forResource: "tenant-config.override", withExtension: "json"),
+           let data = try? Data(contentsOf: url),
+           let file = try? decoder.decode(TenantConfigOverride.self, from: data) {
+            print("[TenantService] Loaded local tenant override: \(file.id) (adapter=\(file.adapter))")
+            return file
+        }
+        return nil
+    }
+
+    func applyLocalOverride(_ file: TenantConfigOverride, to memberships: [TenantMembership]) -> [TenantMembership] {
+        guard !memberships.isEmpty else { return memberships }
+        var result = memberships
+
+        let targetIndex: Int = {
+            if let mid = file.targetMembershipId, let idx = memberships.firstIndex(where: { $0.id == mid }) { return idx }
+            if let tid = file.targetTenantId, let idx = memberships.firstIndex(where: { $0.tenant.id == tid }) { return idx }
+            return 0
+        }()
+
+        let old = memberships[targetIndex]
+        let cfg = TenantConfiguration(
+            id: file.id,
+            adapter: file.adapter,
+            rest: file.rest,
+            featureFlags: file.featureFlags ?? TenantConfiguration.FeatureFlags(enabledModules: old.capabilityPack.enabledModules),
+            options: file.options
+        )
+        let updated = TenantMembership(
+            id: old.id,
+            tenant: old.tenant,
+            role: old.role,
+            capabilityPack: old.capabilityPack,
+            enabledModulesOverride: old.enabledModulesOverride,
+            configuration: cfg,
+            metadata: old.metadata
+        )
+        result[targetIndex] = updated
+        return result
+    }
+}
+#endif

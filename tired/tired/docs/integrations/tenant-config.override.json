@@ -1,0 +1,16 @@
+{
+  "targetMembershipId": null,
+  "targetTenantId": null,
+  "id": "override-local",
+  "adapter": "graphQL",
+  "rest": null,
+  "featureFlags": {
+    "enabledModules": ["home", "broadcast", "inbox", "activities", "insights", "profile"],
+    "extra": {}
+  },
+  "options": {
+    "graphql.endpoint": "https://graphql.example.com/",
+    "graphql.header.Authorization": "Bearer YOUR_ACCESS_TOKEN"
+  }
+}
+

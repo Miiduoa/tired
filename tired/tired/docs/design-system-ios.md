@@ -17,6 +17,17 @@
 
 備註：顏色全面採用 iOS Semantic Colors，自動支援深/淺色與高對比。
 
+### 最新補充（2025-10）
+
+- 新增按鈕樣式 API：
+  - `tPrimaryButton(fullWidth:)`、`tSecondaryButton(fullWidth:)`
+- 卡片樣式：
+  - `cardStyle(padding:radius:shadowLevel:)`；統一邊框/陰影/留白
+- 狀態元件：
+  - `AppLoadingView`、`AppEmptyStateView`、`AppErrorView`
+- 多語系封裝：
+  - `L.s("key")`；新增 `zh-Hant.lproj` 與 `en.lproj`
+
 ## 版面與導覽
 
 - Tab Bar：收件匣｜訊息｜群組｜我
@@ -25,7 +36,7 @@
 
 ## 元件映射（關鍵路徑）
 
-- 統一收件匣：List Inset Grouped + 行動按鈕
+- 統一收件匣：卡片列表 + `AppEmptyStateView`/`AppLoadingView`
 - 廣播詳情：Sheet + 固定 CTA（ack/form/vote）
 - 10 秒點名：FullScreenCover + 大號 QR + 倒數
 - 打卡：MapKit + Floating Panel（地理圍欄內顯示主按鈕）
@@ -37,6 +48,7 @@
 
 - 文字對比 ≥ 4.5:1，尊重「提高對比度」與「動作減少」
 - 觸控目標 ≥ 44x44pt，VoiceOver 具備替代文案
+- 動態字級：使用 `.font(.headline/.body)` 等可縮放字體，避免自訂固定尺寸
 
 ## Haptics
 

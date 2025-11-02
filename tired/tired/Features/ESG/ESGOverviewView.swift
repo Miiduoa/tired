@@ -79,8 +79,7 @@ struct ESGOverviewView: View {
             }
             .pickerStyle(.segmented)
         }
-        .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .cardStyle(padding: TTokens.spacingLG, radius: 20, shadowLevel: 1)
     }
     
     private var reductionCard: some View {
@@ -94,8 +93,7 @@ struct ESGOverviewView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .cardStyle(padding: TTokens.spacingLG, radius: 20, shadowLevel: 1)
     }
     
     private var recordsSection: some View {
@@ -103,17 +101,17 @@ struct ESGOverviewView: View {
             Text("近期紀錄")
                 .font(.headline)
             if viewModel.isLoading && viewModel.summary == nil {
-                ProgressView("讀取中…")
-                    .progressViewStyle(.circular)
-                    .frame(maxWidth: .infinity)
+                AppLoadingView(title: "讀取中…")
             } else if let records = viewModel.summary?.records, !records.isEmpty {
                 ForEach(records.sorted { $0.timestamp > $1.timestamp }) { record in
                     ESGRecordRow(record: record)
                 }
             } else {
-                Text("尚未有 ESG 相關紀錄，請上傳本期資料。")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                AppEmptyStateView(
+                    systemImage: "leaf.fill",
+                    title: "沒有 ESG 紀錄",
+                    subtitle: "請上傳或同步本期資料"
+                )
             }
         }
     }
@@ -141,7 +139,6 @@ private struct ESGRecordRow: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
-        .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .cardStyle(padding: TTokens.spacingLG, radius: 16, shadowLevel: 1)
     }
 }

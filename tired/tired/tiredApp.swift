@@ -5,10 +5,17 @@ import GoogleSignIn
 @main
 struct TiredApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    @StateObject private var deepLinkRouter = DeepLinkRouter.shared
     
     var body: some Scene {
         WindowGroup {
-            MainAppView()
+            ZStack {
+                Color.bg.ignoresSafeArea(.all)
+                AppShellView()
+                    .environmentObject(deepLinkRouter)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .preferredColorScheme(.light)
         }
     }
 }
@@ -20,6 +27,20 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             FirebaseApp.configure()
         }
         
+        // 全域外觀：確保導覽列/分頁列為不透明且背景非黑色，避免頂/底黑邊
+        let navAppearance = UINavigationBarAppearance()
+        navAppearance.configureWithOpaqueBackground()
+        navAppearance.backgroundColor = UIColor.systemBackground
+        UINavigationBar.appearance().standardAppearance = navAppearance
+        UINavigationBar.appearance().scrollEdgeAppearance = navAppearance
+        UINavigationBar.appearance().compactAppearance = navAppearance
+
+        let tabAppearance = UITabBarAppearance()
+        tabAppearance.configureWithOpaqueBackground()
+        tabAppearance.backgroundColor = UIColor.systemBackground
+        UITabBar.appearance().standardAppearance = tabAppearance
+        UITabBar.appearance().scrollEdgeAppearance = tabAppearance
+
         // 初始化 Google Sign-In
         guard let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
               let plist = NSDictionary(contentsOfFile: path),
@@ -42,6 +63,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         if GIDSignIn.sharedInstance.handle(url) {
             return true
         }
+        if DeepLinkRouter.shared.handle(url) { return true }
         return false
     }
 }

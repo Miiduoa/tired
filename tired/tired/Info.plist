@@ -2,12 +2,38 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundleVersion</key>
+    <string>$(CURRENT_PROJECT_VERSION)</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$(MARKETING_VERSION)</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
     <key>NSCameraUsageDescription</key>
     <string>掃描課堂 QR Code 以完成點名與功能操作。</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>選取照片作為聊天附件或更新個人資料。</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>儲存照片與影片到相簿。</string>
+
+    <!-- App URL Schemes: Google Sign-In reversed client ID + custom deep link scheme -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>com.googleusercontent.apps.566724358335-04e0heqf7hato4hv2kb62pkfk9fgd366</string>
+                <string>tired</string>
+            </array>
+        </dict>
+    </array>
+
+    <!-- App feature tuning -->
     <key>CHAT_UNREAD_SAMPLE_LIMIT</key>
     <integer>50</integer>
     <key>MAX_UPLOAD_IMAGE_BYTES</key>
@@ -20,16 +46,11 @@
     <integer>200</integer>
     <key>VIDEO_THUMB_TTL_DAYS</key>
     <integer>14</integer>
-    <key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>com.googleusercontent.apps.566724358335-04e0heqf7hato4hv2kb62pkfk9fgd366</string>
-			</array>
-		</dict>
-	</array>
+    <key>UIUserInterfaceStyle</key>
+    <string>Light</string>
+    <key>UIRequiresFullScreen</key>
+    <true/>
+    <key>UILaunchStoryboardName</key>
+    <string>LaunchScreen</string>
 </dict>
 </plist>
