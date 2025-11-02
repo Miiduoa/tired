@@ -15,7 +15,6 @@ struct TiredApp: App {
                     .environmentObject(deepLinkRouter)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .preferredColorScheme(.light)
         }
     }
 }

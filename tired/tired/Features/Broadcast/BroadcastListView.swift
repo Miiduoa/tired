@@ -109,8 +109,10 @@ struct BroadcastListView: View {
                                 try await BroadcastAPI.ack(broadcastId: item.id, uid: uid, idempotencyKey: key)
                                 // 成功後嘗試清空 outbox（會移除剛入列的同鍵項）
                                 await OutboxService.shared.flush(for: uid)
+                                ToastCenter.shared.show("已確認公告", style: .success)
                             } catch {
                                 // 保留 outbox 項目，稍後重試
+                                ToastCenter.shared.show("離線中，稍後自動同步", style: .warning)
                             }
                             AckStore.shared.ack(item.id)
                             viewModel.ack(item)

@@ -122,5 +122,6 @@ struct ClockView: View {
             // 留給 outbox 重試
         }
         withAnimation { viewModel.insertLocalRecord(site: siteName, time: ts, status: .ok) }
+        ToastCenter.shared.show("打卡成功", style: .success)
     }
 }

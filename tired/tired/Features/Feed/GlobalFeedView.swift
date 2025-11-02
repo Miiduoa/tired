@@ -203,6 +203,27 @@ struct GlobalFeedView: View {
         .buttonStyle(.plain)
     }
 
+    // MARK: - Quick Composer
+    private var quickComposerCard: some View {
+        Button {
+            showComposer = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "square.and.pencil").foregroundStyle(.tint)
+                Text("發佈新貼文…")
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(12)
+            .background(Color.card, in: RoundedRectangle(cornerRadius: TTokens.radiusMD, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: TTokens.radiusMD, style: .continuous)
+                    .strokeBorder(Color.separator.opacity(0.5), lineWidth: 0.5)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
     private var mergedPosts: [Post] {
         var combined = posts
         if let personalPosts = personalTimelineStore?.posts {

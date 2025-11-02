@@ -151,6 +151,7 @@ struct AttendanceView: View {
                         Button("結束點名") {
                             Haptics.impact(.light)
                             Task { await closeAttendanceSession() }
+                            ToastCenter.shared.show("已結束點名", style: .info)
                         }
                         .tSecondaryButton()
                     }
