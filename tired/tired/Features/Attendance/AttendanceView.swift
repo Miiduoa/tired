@@ -133,7 +133,8 @@ struct AttendanceView: View {
                 .resizable()
                 .scaledToFit()
                     .frame(width: 240, height: 240)
-                    .cardStyle(padding: TTokens.spacingLG, radius: TTokens.radiusLG, shadowLevel: 1)
+                    .glassEffect(intensity: 0.7)
+                    .shadow(color: TTokens.shadowLevel1.color, radius: TTokens.shadowLevel1.radius, y: TTokens.shadowLevel1.y)
                 
                 Text("QR Code 將在 \(viewModel.ttl) 秒後更新")
                     .font(.callout)
@@ -142,11 +143,13 @@ struct AttendanceView: View {
                 if membership.role.isManagerial {
                     HStack(spacing: 12) {
                         Button("開始點名") {
+                            Haptics.impact(.medium)
                             Task { await createAttendanceSession() }
                         }
                         .tPrimaryButton()
                         
                         Button("結束點名") {
+                            Haptics.impact(.light)
                             Task { await closeAttendanceSession() }
                         }
                         .tSecondaryButton()
@@ -158,12 +161,14 @@ struct AttendanceView: View {
                             .autocorrectionDisabled()
                             .textFieldStyle(.roundedBorder)
                         Button {
+                            Haptics.impact(.light)
                             showScanner = true
                         } label: {
                             Label("掃描 QR", systemImage: "qrcode.viewfinder")
                         }
                         .tSecondaryButton()
                         Button {
+                            Haptics.impact(.medium)
                             Task { await submitAttendanceCheck(using: enteredSessId) }
                         } label: {
                             Label("我已到", systemImage: "hand.raised")
@@ -174,7 +179,8 @@ struct AttendanceView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .cardStyle(padding: TTokens.spacingLG, radius: TTokens.radiusLG, shadowLevel: 1)
+        .glassEffect(intensity: 0.7)
+        .shadow(color: TTokens.shadowLevel1.color, radius: TTokens.shadowLevel1.radius, y: TTokens.shadowLevel1.y)
     }
     
     private var statsSection: some View {
@@ -204,7 +210,8 @@ struct AttendanceView: View {
                             .font(.caption)
                     }
                 }
-                .cardStyle(padding: TTokens.spacingLG, radius: TTokens.radiusLG, shadowLevel: 1)
+                .glassEffect(intensity: 0.7)
+                .shadow(color: TTokens.shadowLevel1.color, radius: TTokens.shadowLevel1.radius, y: TTokens.shadowLevel1.y)
             }
         }
     }
@@ -225,7 +232,8 @@ struct AttendanceView: View {
                         }
                     }
                 }
-                .cardStyle(padding: TTokens.spacingLG, radius: TTokens.radiusLG, shadowLevel: 1)
+                .glassEffect(intensity: 0.7)
+                .shadow(color: TTokens.shadowLevel1.color, radius: TTokens.shadowLevel1.radius, y: TTokens.shadowLevel1.y)
             }
         }
     }

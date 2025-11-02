@@ -41,6 +41,10 @@ struct GlobalFeedView: View {
                     ScrollView {
                         filterBar
                             .padding(.vertical, 4)
+                        if personalTimelineStore != nil {
+                            quickComposerCard
+                                .padding(.horizontal, 16)
+                        }
                         LazyVStack(spacing: 12) {
                             if let m = membership, showCapabilityPanel {
                                 capabilityPanel(for: m)

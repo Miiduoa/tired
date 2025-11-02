@@ -89,7 +89,9 @@ struct ClockView: View {
             }
             ToolbarItem(placement: .bottomBar) {
                 Button {
+                    Haptics.impact(.rigid)
                     Task { await submitClock() }
+                    Haptics.success()
                 } label: {
                     Label("立即打卡", systemImage: "mappin.and.ellipse")
                 }

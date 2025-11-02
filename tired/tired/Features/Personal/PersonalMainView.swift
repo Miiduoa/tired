@@ -168,6 +168,7 @@ struct PostRowView: View {
     @State private var liked: Bool = false
     @State private var likeCount: Int = 0
     @State private var showComments: Bool = false
+    private let interaction: PostInteractionServiceProtocol = PostInteractionService()
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -214,8 +215,15 @@ struct PostRowView: View {
             Divider().padding(.vertical, 4)
             HStack(spacing: 16) {
                 Button {
-                    liked.toggle()
-                    likeCount += liked ? 1 : -1
+                    Task {
+                        liked.toggle()
+                        likeCount += liked ? 1 : -1
+                        if liked {
+                            await interaction.like(postId: post.id, userId: post.sourceId)
+                        } else {
+                            await interaction.unlike(postId: post.id, userId: post.sourceId)
+                        }
+                    }
                 } label: {
                     Label("\(likeCount)", systemImage: liked ? "heart.fill" : "heart")
                         .foregroundStyle(liked ? .red : .secondary)
@@ -239,8 +247,10 @@ struct PostRowView: View {
         }
         .padding()
         .background(Color.card, in: RoundedRectangle(cornerRadius: TTokens.radiusMD, style: .continuous))
-        .onAppear {
-            if let raw = post.metadata["likes"], let n = Int(raw) { likeCount = n }
+        .task {
+            likeCount = await interaction.likeCount(postId: post.id)
+            // 若需要 userId，可由環境或 post.sourceId 判斷，這裡以 post.sourceId 做基準（個人文作者）
+            liked = await interaction.isLiked(postId: post.id, userId: post.sourceId)
         }
         .sheet(isPresented: $showComments) {
             NavigationStack {

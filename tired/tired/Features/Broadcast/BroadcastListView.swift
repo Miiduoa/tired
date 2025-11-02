@@ -161,7 +161,11 @@ private struct BroadcastCard: View {
                         .font(.title3)
                         .foregroundStyle(.green)
                 } else if item.requiresAck {
-                    Button(action: onAck) {
+                    Button(action: {
+                        Haptics.impact(.light)
+                        onAck()
+                        Haptics.success()
+                    }) {
                         Image(systemName: "circle")
                             .font(.title3)
                             .foregroundStyle(.tint)
@@ -199,7 +203,8 @@ private struct BroadcastCard: View {
                 }
             }
         }
-        .cardStyle(padding: TTokens.spacingLG, radius: TTokens.radiusLG, shadowLevel: 1)
+        .glassEffect(intensity: 0.7)
+        .shadow(color: TTokens.shadowLevel1.color, radius: TTokens.shadowLevel1.radius, y: TTokens.shadowLevel1.y)
         .scaleEffect(isPressed ? 0.98 : 1.0)
         .opacity(isAcked ? 0.8 : 1.0)
         .animation(TTokens.animationQuick, value: isPressed)

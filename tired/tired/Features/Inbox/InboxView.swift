@@ -225,12 +225,18 @@ private struct InboxItemCard: View {
             }
         }
         .padding(TTokens.spacingLG)
-        .background(cardBackground)
-        .shadow(
-            color: TTokens.shadowLevel1.color,
-            radius: TTokens.shadowLevel1.radius,
-            y: TTokens.shadowLevel1.y
+        .background(
+            RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay {
+                    RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                        .strokeBorder(
+                            item.isUrgent ? Color.danger.opacity(0.3) : Color.separator.opacity(0.3),
+                            lineWidth: item.isUrgent ? 1.2 : 0.6
+                        )
+                }
         )
+        .shadow(color: TTokens.shadowLevel1.color, radius: TTokens.shadowLevel1.radius, y: TTokens.shadowLevel1.y)
         .scaleEffect(isPressed ? 0.98 : 1.0)
         .animation(TTokens.animationQuick, value: isPressed)
         .onTapGesture {
