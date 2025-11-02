@@ -77,7 +77,7 @@ struct PersonalPostComposerView_Modern: View {
                     if isSubmitting {
                         ProgressView()
                             .progressViewStyle(.circular)
-                            .tint(.tint)
+                            .tint(Color.tint)
                     } else {
                         Button {
                             HapticFeedback.medium()
@@ -164,7 +164,7 @@ struct PersonalPostComposerView_Modern: View {
                 if let contentError {
                     Text(contentError)
                         .font(.caption)
-                        .foregroundStyle(.danger)
+                        .foregroundColor(Color.danger)
                 }
             }
         }
@@ -270,7 +270,7 @@ struct PersonalPostComposerView_Modern: View {
                     ForEach(attachments) { attachment in
                         HStack(spacing: TTokens.spacingMD) {
                             Image(systemName: "link.circle.fill")
-                                .foregroundStyle(Color.tint)
+                                .foregroundStyle(.tint)
                             
                             Text(attachment.displayName)
                                 .font(.caption)
@@ -322,7 +322,7 @@ struct PersonalPostComposerView_Modern: View {
             if let attachmentError {
                 Text(attachmentError)
                     .font(.caption)
-                    .foregroundStyle(.danger)
+                    .foregroundColor(Color.danger)
             } else {
                 Text("可選填，提供作品集、社群或活動報名連結")
                     .font(.caption)

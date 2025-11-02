@@ -172,12 +172,12 @@ struct ESGOverviewView_Modern: View {
                 // 趨勢圖標
                 ZStack {
                     Circle()
-                        .fill((isReduction ? Color.success : .danger).opacity(0.15))
+                        .fill((isReduction ? Color.success : Color.danger).opacity(0.15))
                         .frame(width: 64, height: 64)
                     
                     Image(systemName: "chart.line.uptrend.xyaxis")
                         .font(.title2)
-                        .foregroundStyle(isReduction ? .success : .danger)
+                        .foregroundStyle(isReduction ? Color.success : Color.danger)
                 }
             }
             
@@ -320,4 +320,3 @@ private struct HotspotTag: View {
         .background(Color.mint.opacity(0.15), in: Capsule())
     }
 }
-

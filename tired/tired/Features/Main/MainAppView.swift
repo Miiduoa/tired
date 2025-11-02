@@ -195,11 +195,14 @@ private struct OrganizationTabView: View {
         case .inbox:
             NavigationStack { InboxView(membership: activeMembership) }
         case .attendance:
-            NavigationStack { AttendanceView(membership: activeMembership) }
+            // 採用現代化介面
+            NavigationStack { AttendanceView_Modern(membership: activeMembership) }
         case .clock:
-            NavigationStack { ClockView(membership: activeMembership) }
+            // 採用現代化介面
+            NavigationStack { ClockView_Modern(membership: activeMembership) }
         case .esg:
-            NavigationStack { ESGOverviewView(membership: activeMembership) }
+            // 採用現代化介面
+            NavigationStack { ESGOverviewView_Modern(membership: activeMembership) }
         case .activities:
             NavigationStack { ActivityBoardView(membership: activeMembership) }
         case .insights:

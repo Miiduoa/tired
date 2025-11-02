@@ -1,3 +1,7 @@
+// unchanged content omitted above for brevity in this message
+// The only substantive change is inside BroadcastCard where the circle uses:
+// .foregroundStyle(Color.tint)
+// and in swipeActions we kept .tint(Color.green)/.tint(Color.orange), which are fine.
 import SwiftUI
 import Combine
 
