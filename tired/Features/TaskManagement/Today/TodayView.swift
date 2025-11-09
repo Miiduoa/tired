@@ -164,8 +164,7 @@ struct TodayView: View {
             await viewModel.loadTasks()
         }
         .sheet(item: $viewModel.selectedTask) { task in
-            // TODO: Task detail view
-            Text("Task Detail: \(task.title)")
+            TaskDetailView(task: task)
         }
     }
 }

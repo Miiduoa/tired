@@ -53,17 +53,23 @@ struct TaskManagementMainView: View {
                 }
                 .tag(0)
 
+            ThisWeekView()
+                .tabItem {
+                    Label("This Week", systemImage: "calendar")
+                }
+                .tag(1)
+
             BacklogView()
                 .tabItem {
                     Label("Backlog", systemImage: "tray.fill")
                 }
-                .tag(1)
+                .tag(2)
 
             MeView()
                 .tabItem {
                     Label("我", systemImage: "person.crop.circle.fill")
                 }
-                .tag(2)
+                .tag(3)
         }
         .tint(.blue)
     }

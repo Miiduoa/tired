@@ -69,7 +69,7 @@ struct BacklogView: View {
             })
         }
         .sheet(item: $viewModel.selectedTask) { task in
-            Text("Task Detail: \(task.title)")
+            TaskDetailView(task: task)
         }
     }
 }
