@@ -36,6 +36,10 @@ final class AuthService: NSObject, ObservableObject {
     @Published private(set) var currentUser: User?
     @Published private(set) var isLoading = false
     @Published var activeAlert: AuthAlert?
+
+    var currentUserId: String? {
+        currentUser?.id
+    }
     
     private let firebase = FirebaseService.shared
     private var authHandle: AuthStateDidChangeListenerHandle?
