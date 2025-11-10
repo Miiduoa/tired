@@ -73,10 +73,12 @@ struct MeView: View {
             await viewModel.loadStats()
         }
         .sheet(isPresented: $viewModel.showTermSettings) {
-            Text("Term Settings")
+            TermSettingsView()
+                .environmentObject(appCoordinator)
         }
         .sheet(isPresented: $viewModel.showCapacitySettings) {
-            Text("Capacity Settings")
+            CapacitySettingsView()
+                .environmentObject(appCoordinator)
         }
         .alert("匯出經歷", isPresented: $viewModel.showExportSheet) {
             Button("複製到剪貼簿") {

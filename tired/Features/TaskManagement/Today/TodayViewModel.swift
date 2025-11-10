@@ -148,9 +148,11 @@ class TodayViewModel: ObservableObject {
     func completeTask(_ task: Task) async {
         do {
             try await taskService.completeTask(task)
+            ToastManager.shared.showSuccess("任務「\(task.title)」已完成")
             await loadTasks()
         } catch {
             print("❌ Error completing task: \(error.localizedDescription)")
+            ToastManager.shared.showError("完成任務失敗")
         }
     }
 
@@ -163,9 +165,17 @@ class TodayViewModel: ObservableObject {
                 todayDate: Date(),
                 allTasks: allTodayTasks
             )
+
+            if newFocusState {
+                ToastManager.shared.showSuccess("已設為今日專注")
+            } else {
+                ToastManager.shared.showInfo("已取消今日專注")
+            }
+
             await loadTasks()
         } catch {
             print("❌ Error toggling focus: \(error.localizedDescription)")
+            ToastManager.shared.showError("專注設定失敗")
         }
     }
 }

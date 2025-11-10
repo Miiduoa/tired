@@ -70,8 +70,10 @@ class TaskDetailViewModel: ObservableObject {
             try await taskService.updateTask(editedTask)
             task = editedTask
             isEditing = false
+            ToastManager.shared.showSuccess("任務已儲存")
         } catch {
             print("❌ Error saving task: \(error.localizedDescription)")
+            ToastManager.shared.showError("儲存失敗")
         }
     }
 
@@ -82,9 +84,10 @@ class TaskDetailViewModel: ObservableObject {
 
         do {
             let allTasks = try await taskService.getTasks(userId: userId)
+            let newFocusState = !task.isTodayFocus
             _ = try await taskService.setTodayFocus(
                 task,
-                isFocus: !task.isTodayFocus,
+                isFocus: newFocusState,
                 todayDate: Date(),
                 allTasks: allTasks
             )
@@ -94,8 +97,15 @@ class TaskDetailViewModel: ObservableObject {
                 task = updated
                 editedTask = updated
             }
+
+            if newFocusState {
+                ToastManager.shared.showSuccess("已設為今日專注")
+            } else {
+                ToastManager.shared.showInfo("已取消今日專注")
+            }
         } catch {
             print("❌ Error toggling focus: \(error.localizedDescription)")
+            ToastManager.shared.showError("專注設定失敗")
         }
     }
 
@@ -106,8 +116,10 @@ class TaskDetailViewModel: ObservableObject {
     func deleteTask() async {
         do {
             try await taskService.deleteTask(id: task.id)
+            ToastManager.shared.showSuccess("任務已刪除")
         } catch {
             print("❌ Error deleting task: \(error.localizedDescription)")
+            ToastManager.shared.showError("刪除失敗")
         }
     }
 
@@ -122,8 +134,11 @@ class TaskDetailViewModel: ObservableObject {
                 task = updated
                 editedTask = updated
             }
+
+            ToastManager.shared.showSuccess("佐證已新增")
         } catch {
             print("❌ Error adding evidence: \(error.localizedDescription)")
+            ToastManager.shared.showError("新增佐證失敗")
         }
     }
 
@@ -136,8 +151,11 @@ class TaskDetailViewModel: ObservableObject {
                 task = updated
                 editedTask = updated
             }
+
+            ToastManager.shared.showSuccess("佐證已刪除")
         } catch {
             print("❌ Error deleting evidence: \(error.localizedDescription)")
+            ToastManager.shared.showError("刪除佐證失敗")
         }
     }
 }

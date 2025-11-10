@@ -110,8 +110,26 @@ struct ThisWeekView: View {
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: { viewModel.goToNextWeek() }) {
-                        Image(systemName: "chevron.right")
+                    HStack(spacing: 12) {
+                        // Autoplan button
+                        Button(action: {
+                            Task {
+                                await viewModel.runAutoplan()
+                            }
+                        }) {
+                            if viewModel.isRunningAutoplan {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle())
+                            } else {
+                                Image(systemName: "sparkles")
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                        .disabled(viewModel.isRunningAutoplan)
+
+                        Button(action: { viewModel.goToNextWeek() }) {
+                            Image(systemName: "chevron.right")
+                        }
                     }
                 }
             }
@@ -121,6 +139,16 @@ struct ThisWeekView: View {
         }
         .sheet(item: $viewModel.selectedTask) { task in
             TaskDetailView(task: task)
+        }
+        .sheet(isPresented: $viewModel.showAutoplanResult) {
+            if let result = viewModel.autoplanResult {
+                AutoplanResultSheet(
+                    result: result,
+                    onDismiss: {
+                        viewModel.showAutoplanResult = false
+                    }
+                )
+            }
         }
     }
 }
@@ -223,6 +251,197 @@ struct DailyLoadCard: View {
     private func loadLevelColor(_ ratio: Double) -> Color {
         let level = CapacityCalculator.loadLevel(for: ratio)
         return Color(hex: level.color) ?? .blue
+    }
+}
+
+// MARK: - Autoplan Result Sheet
+struct AutoplanResultSheet: View {
+    let result: AutoplanResult
+    let onDismiss: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                LinearGradient(
+                    colors: [.blue.opacity(0.15), .purple.opacity(0.15)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Success Summary
+                        GlassCard {
+                            VStack(spacing: 12) {
+                                HStack {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 32))
+                                        .foregroundColor(.green)
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("自動排程完成")
+                                            .font(.system(size: 18, weight: .bold))
+
+                                        Text("已排程 \(result.scheduledTasks.count) 個任務")
+                                            .font(.system(size: 14))
+                                            .foregroundColor(.secondary)
+                                    }
+
+                                    Spacer()
+                                }
+                            }
+                        }
+
+                        // Scheduled Tasks
+                        if !result.scheduledTasks.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("已排程任務")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.primary)
+                                    .padding(.horizontal)
+
+                                ForEach(result.scheduledTasks) { task in
+                                    GlassCard {
+                                        HStack(spacing: 12) {
+                                            Image(systemName: "checkmark.circle")
+                                                .foregroundColor(.green)
+
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(task.title)
+                                                    .font(.system(size: 14, weight: .medium))
+
+                                                if let planned = task.plannedWorkDate {
+                                                    Text(DateUtils.formatDisplayDate(planned))
+                                                        .font(.system(size: 12))
+                                                        .foregroundColor(.secondary)
+                                                }
+                                            }
+
+                                            Spacer()
+
+                                            GlassBadge(
+                                                text: task.priority.displayName,
+                                                style: badgeStyle(for: task.priority)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Failed Tasks
+                        if !result.failedTasks.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("無法排程的任務")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.primary)
+                                    .padding(.horizontal)
+
+                                ForEach(result.failedTasks, id: \.task.id) { failedItem in
+                                    GlassCard {
+                                        VStack(alignment: .leading, spacing: 12) {
+                                            HStack(spacing: 12) {
+                                                Image(systemName: "exclamationmark.triangle.fill")
+                                                    .foregroundColor(.orange)
+
+                                                VStack(alignment: .leading, spacing: 4) {
+                                                    Text(failedItem.task.title)
+                                                        .font(.system(size: 14, weight: .medium))
+
+                                                    Text(failedItem.reason.description)
+                                                        .font(.system(size: 12))
+                                                        .foregroundColor(.orange)
+                                                }
+
+                                                Spacer()
+                                            }
+
+                                            // Action Buttons
+                                            HStack(spacing: 8) {
+                                                GlassButton(
+                                                    title: "手動排程",
+                                                    style: .ghost,
+                                                    icon: "calendar.badge.plus",
+                                                    action: {
+                                                        // TODO: Navigate to task detail for manual scheduling
+                                                    }
+                                                )
+                                                .frame(maxWidth: .infinity)
+
+                                                if failedItem.reason == .deadlineTooClose {
+                                                    GlassButton(
+                                                        title: "調整截止日期",
+                                                        style: .ghost,
+                                                        icon: "calendar.badge.clock",
+                                                        action: {
+                                                            // TODO: Show date picker to adjust deadline
+                                                        }
+                                                    )
+                                                    .frame(maxWidth: .infinity)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Suggestions
+                        if !result.failedTasks.isEmpty {
+                            GlassCard {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    HStack {
+                                        Image(systemName: "lightbulb.fill")
+                                            .foregroundColor(.yellow)
+                                        Text("建議")
+                                            .font(.system(size: 16, weight: .semibold))
+                                    }
+
+                                    Text(suggestionText(for: result))
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    }
+                    .padding()
+                }
+            }
+            .navigationTitle("自動排程結果")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") {
+                        onDismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private func badgeStyle(for priority: TaskPriority) -> GlassBadge.Style {
+        switch priority {
+        case .P0: return .destructive
+        case .P1: return .warning
+        case .P2: return .primary
+        case .P3: return .secondary
+        case .P4: return .secondary
+        }
+    }
+
+    private func suggestionText(for result: AutoplanResult) -> String {
+        let failureReasons = result.failedTasks.map { $0.reason }
+
+        if failureReasons.contains(.capacityOverload) {
+            return "本週容量已滿。考慮：1) 延後部分任務到下週 2) 調整每日容量設定 3) 減少事件佔用時間"
+        } else if failureReasons.contains(.deadlineTooClose) {
+            return "某些任務的截止日期太近。建議盡快手動排程或調整截止日期。"
+        } else if failureReasons.contains(.dependencyNotScheduled) {
+            return "某些任務的前置任務尚未完成。請先處理前置任務。"
+        } else {
+            return "某些任務暫時無法排程。可以嘗試手動排程或調整任務屬性。"
+        }
     }
 }
 

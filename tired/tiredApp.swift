@@ -30,6 +30,24 @@ struct TiredApp: App {
                     await appCoordinator.initialize(userId: userId)
                 }
             }
+            .alert("偵測到中斷的專注模式", isPresented: $appCoordinator.showFocusRecovery) {
+                Button("繼續專注") {
+                    appCoordinator.restoreFocusSession()
+                }
+                Button("放棄", role: .destructive) {
+                    Task {
+                        await appCoordinator.discardFocusSession()
+                    }
+                }
+            } message: {
+                if let task = appCoordinator.crashedFocusTask,
+                   let state = appCoordinator.crashedFocusState {
+                    let elapsedMin = Int((Date().timeIntervalSince(state.sessionStart)) / 60)
+                    Text("任務「\(task.title)」的專注模式在 \(elapsedMin) 分鐘前中斷。是否要繼續？")
+                } else {
+                    Text("是否要恢復先前的專注模式？")
+                }
+            }
         }
     }
 }
@@ -43,6 +61,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 
 // MARK: - Task Management Main View
 struct TaskManagementMainView: View {
+    @EnvironmentObject var appCoordinator: AppCoordinator
     @State private var selectedTab = 0
 
     var body: some View {
@@ -72,5 +91,18 @@ struct TaskManagementMainView: View {
                 .tag(3)
         }
         .tint(.blue)
+        .withToast()
+        .fullScreenCover(isPresented: $appCoordinator.shouldRestoreFocus) {
+            if let task = appCoordinator.crashedFocusTask {
+                FocusModeView(task: task)
+                    .onDisappear {
+                        appCoordinator.focusRestorationCompleted()
+                    }
+            }
+        }
+        .sheet(isPresented: $appCoordinator.showTermCleanup) {
+            TermCleanupView()
+                .environmentObject(appCoordinator)
+        }
     }
 }

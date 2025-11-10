@@ -15,10 +15,15 @@ class ThisWeekViewModel: ObservableObject {
     @Published var unscheduledDeadlineThisWeek: [Task] = []
     @Published var overdueUnscheduled: [Task] = []
 
+    @Published var showAutoplanResult: Bool = false
+    @Published var autoplanResult: AutoplanResult?
+    @Published var isRunningAutoplan: Bool = false
+
     private let taskService = TaskService.shared
     private let eventService = EventService.shared
     private let profileService = UserProfileService.shared
     private let termService = TermService.shared
+    private let autoplanService = AutoplanService.shared
 
     private var userProfile: UserProfile?
     private var currentTerm: TermConfig?
@@ -165,14 +170,74 @@ class ThisWeekViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Autoplan
+
+    func runAutoplan() async {
+        isRunningAutoplan = true
+
+        do {
+            guard let userId = FirebaseService.shared.currentUser?.uid,
+                  let profile = userProfile else {
+                isRunningAutoplan = false
+                return
+            }
+
+            // Get all open tasks
+            let allOpenTasks = try await taskService.getOpenTasks(
+                userId: userId,
+                termConfig: currentTerm
+            )
+
+            // Run autoplan
+            let result = try await autoplanService.weeklyAutoplan(
+                weekStart: weekStart,
+                userId: userId,
+                profile: profile,
+                termConfig: currentTerm,
+                allTasks: allOpenTasks,
+                events: events
+            )
+
+            // Save scheduled tasks
+            for task in result.scheduledTasks {
+                try await taskService.updateTask(task)
+            }
+
+            autoplanResult = result
+            showAutoplanResult = true
+
+            // Show toast notification
+            if result.scheduledTasks.isEmpty && result.failedTasks.isEmpty {
+                ToastManager.shared.showInfo("本週沒有需要排程的任務")
+            } else if result.scheduledTasks.isEmpty {
+                ToastManager.shared.showWarning("沒有任務被成功排程，請查看詳細結果")
+            } else if result.failedTasks.isEmpty {
+                ToastManager.shared.showSuccess("已成功排程 \(result.scheduledTasks.count) 個任務")
+            } else {
+                ToastManager.shared.showWarning("已排程 \(result.scheduledTasks.count) 個任務，\(result.failedTasks.count) 個失敗")
+            }
+
+            // Reload
+            await loadTasks()
+
+        } catch {
+            print("❌ Error running autoplan: \(error.localizedDescription)")
+            ToastManager.shared.showError("自動排程失敗：\(error.localizedDescription)")
+        }
+
+        isRunningAutoplan = false
+    }
+
     // MARK: - Task Actions
 
     func completeTask(_ task: Task) async {
         do {
             try await taskService.completeTask(task)
+            ToastManager.shared.showSuccess("任務「\(task.title)」已完成")
             await loadTasks()
         } catch {
             print("❌ Error completing task: \(error.localizedDescription)")
+            ToastManager.shared.showError("完成任務失敗")
         }
     }
 }
