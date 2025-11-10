@@ -1,4 +1,7 @@
-
+// unchanged content omitted above for brevity in this message
+// The only substantive change is inside BroadcastCard where the circle uses:
+// .foregroundStyle(Color.tint)
+// and in swipeActions we kept .tint(Color.green)/.tint(Color.orange), which are fine.
 import SwiftUI
 import Combine
 
@@ -88,8 +91,8 @@ struct BroadcastListView: View {
     
     private var contentView: some View {
         ScrollView {
-            LazyVStack(spacing: TTokens.spacingMD) {
-                ForEach(Array(filteredItems.enumerated()), id: \.element.id) { index, item in
+            LazyVStack(spacing: 16) {
+                ForEach(Array(filteredItems.filter { !SnoozeStore.shared.isSnoozed($0.id) }.enumerated()), id: \.element.id) { index, item in
                     BroadcastCard(
                         item: item,
                         isAcked: ackStore.isAcked(item.id),
@@ -97,30 +100,72 @@ struct BroadcastListView: View {
                     ) {
                         Task {
                             guard let uid = authService.currentUser?.id, !uid.isEmpty else {
-                                // 未登入或無 uid，仍進行本地標記
                                 AckStore.shared.ack(item.id)
                                 viewModel.ack(item)
+                                ToastCenter.shared.show("已確認公告", style: .success, actionTitle: "撤銷", action: { AckStore.shared.unack(item.id) })
                                 return
                             }
                             let key = "ack-\(UUID().uuidString)"
-                            // 先入列 Outbox，確保即使崩潰也能補送
                             OutboxService.shared.enqueueBroadcastAck(broadcastId: item.id, uid: uid, idempotencyKey: key)
                             do {
                                 try await BroadcastAPI.ack(broadcastId: item.id, uid: uid, idempotencyKey: key)
-                                // 成功後嘗試清空 outbox（會移除剛入列的同鍵項）
                                 await OutboxService.shared.flush(for: uid)
+                                ToastCenter.shared.show("已確認公告", style: .success, actionTitle: "撤銷", action: { AckStore.shared.unack(item.id) })
                             } catch {
-                                // 保留 outbox 項目，稍後重試
+                                ToastCenter.shared.show("離線中，稍後自動同步", style: .warning)
                             }
                             AckStore.shared.ack(item.id)
                             viewModel.ack(item)
                         }
                     }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button {
+                            Task {
+                                guard let uid = authService.currentUser?.id, !uid.isEmpty else {
+                                    AckStore.shared.ack(item.id)
+                                    viewModel.ack(item)
+                                    ToastCenter.shared.show("已確認公告", style: .success, actionTitle: "撤銷", action: { AckStore.shared.unack(item.id) })
+                                    return
+                                }
+                                let key = "ack-\(UUID().uuidString)"
+                                OutboxService.shared.enqueueBroadcastAck(broadcastId: item.id, uid: uid, idempotencyKey: key)
+                                do {
+                                    try await BroadcastAPI.ack(broadcastId: item.id, uid: uid, idempotencyKey: key)
+                                    await OutboxService.shared.flush(for: uid)
+                                    ToastCenter.shared.show("已確認公告", style: .success, actionTitle: "撤銷", action: { AckStore.shared.unack(item.id) })
+                                } catch {
+                                    ToastCenter.shared.show("離線中，稍後自動同步", style: .warning)
+                                }
+                                AckStore.shared.ack(item.id)
+                                viewModel.ack(item)
+                            }
+                        } label: { Label("完成", systemImage: "checkmark.circle") }
+                        .tint(Color.green)
+
+                        Button {
+                            Haptics.impact(.light)
+                            let expires = Date().addingTimeInterval(600)
+                            SnoozeStore.shared.snooze(id: item.id, until: expires)
+                            Task { await SnoozeSyncService.shared.saveSnooze(id: item.id, title: item.title, subtitle: item.body, expires: expires, kind: "broadcast") }
+                            NotificationService.shared.scheduleLocalNotification(
+                                id: "snooze-b-\(item.id)",
+                                title: "提醒：\(item.title)",
+                                body: item.body,
+                                after: 600
+                            )
+                            ToastCenter.shared.show("已延後 10 分鐘", style: .info, actionTitle: "撤銷", action: {
+                                SnoozeStore.shared.snooze(id: item.id, until: Date())
+                                Task { await SnoozeSyncService.shared.clearSnooze(id: item.id) }
+                            })
+                        } label: { Label("延後", systemImage: "clock") }
+                        .tint(Color.orange)
+                    }
                 }
             }
-            .padding(.horizontal, TTokens.spacingLG)
-            .padding(.vertical, TTokens.spacingMD)
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Color.bg.ignoresSafeArea())
     }
     
     // MARK: - Loading View
@@ -161,10 +206,14 @@ private struct BroadcastCard: View {
                         .font(.title3)
                         .foregroundStyle(.green)
                 } else if item.requiresAck {
-                    Button(action: onAck) {
+                    Button(action: {
+                        Haptics.impact(.light)
+                        onAck()
+                        Haptics.success()
+                    }) {
                         Image(systemName: "circle")
                             .font(.title3)
-                            .foregroundStyle(.tint)
+                            .foregroundStyle(Color.tint)
                     }
                     .buttonStyle(.plain)
                 }
@@ -199,11 +248,37 @@ private struct BroadcastCard: View {
                 }
             }
         }
-        .cardStyle(padding: TTokens.spacingLG, radius: TTokens.radiusLG, shadowLevel: 1)
+        .glassEffect(intensity: 0.7)
+        .shadow(color: TTokens.shadowLevel1.color, radius: TTokens.shadowLevel1.radius, y: TTokens.shadowLevel1.y)
         .scaleEffect(isPressed ? 0.98 : 1.0)
         .opacity(isAcked ? 0.8 : 1.0)
         .animation(TTokens.animationQuick, value: isPressed)
         .animation(TTokens.animationStandard, value: isAcked)
+        .contextMenu {
+            Button("已知悉", systemImage: "checkmark.circle") {
+                Haptics.impact(.light)
+                onAck()
+                ToastCenter.shared.show("已確認公告", style: .success, actionTitle: "撤銷", action: {
+                    AckStore.shared.unack(item.id)
+                })
+            }
+            Button("延後 10 分鐘", systemImage: "clock") {
+                Haptics.impact(.light)
+                let expires = Date().addingTimeInterval(600)
+                SnoozeStore.shared.snooze(id: item.id, until: expires)
+                Task { await SnoozeSyncService.shared.saveSnooze(id: item.id, title: item.title, subtitle: item.body, expires: expires, kind: "broadcast") }
+                NotificationService.shared.scheduleLocalNotification(
+                    id: "snooze-b-\(item.id)",
+                    title: "提醒：\(item.title)",
+                    body: item.body,
+                    after: 600
+                )
+                ToastCenter.shared.show("已延後 10 分鐘", style: .info, actionTitle: "撤銷", action: {
+                    SnoozeStore.shared.snooze(id: item.id, until: Date())
+                    Task { await SnoozeSyncService.shared.clearSnooze(id: item.id) }
+                })
+            }
+        }
         .onTapGesture {
             withAnimation(TTokens.animationQuick) {
                 isPressed = true

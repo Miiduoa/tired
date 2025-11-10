@@ -36,36 +36,139 @@ struct ProfileView: View {
     @State var bio = ProfileField(key: "簡介", value: "資管系 / 喜歡 AI & UX", visibility: .friends)
     @State var link = ProfileField(key: "連結", value: "https://tired.app", visibility: .public)
     @State var studentId = ProfileField(key: "學號", value: "A1234567", visibility: .org)
+    @State private var showSettings = false
+    @State private var showSearch = false
     
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: TTokens.spacingLG) {
-                    // 頭像區
-                    HStack(spacing: TTokens.spacingLG) {
-                        Circle().fill(Color.card).frame(width: 72, height: 72)
-                            .overlay(Image(systemName: "person.crop.circle").font(.system(size: 36)).foregroundStyle(.secondary))
-                        VStack(alignment: .leading) {
-                            Text(displayName.value).font(.title2).bold()
-                            Text("@pine-52").foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: TTokens.spacingXL) {
+                    // 英雄頭像區（漸層背景 + 玻璃態卡片）
+                    HeroCard(
+                        title: displayName.value,
+                        subtitle: "@pine-52 · 資管系 / 喜歡 AI & UX",
+                        gradient: TTokens.gradientPrimary
+                    ) {
+                        HStack(spacing: TTokens.spacingLG) {
+                            // 漸層環形頭像
+                            AvatarRing(
+                                imageURL: nil,
+                                size: 80,
+                                ringColor: .mint,
+                                ringWidth: 3
+                            )
+                            .shadow(color: .mint.opacity(0.5), radius: 12, y: 6)
+                            
+                            Spacer()
+                            
+                            Button {
+                                HapticFeedback.light()
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "camera.fill")
+                                    Text("更換")
+                                }
+                                .font(.subheadline.weight(.medium))
+                            }
+                            .neumorphicButton(color: .tint, isActive: false)
                         }
-                        Spacer()
-                        Button { } label: { Image(systemName: "camera") }
-                            .buttonStyle(.bordered)
+                        
+                        // 狀態徽章
+                        HStack(spacing: 8) {
+                            TagBadge("開放工作機會", color: .success, icon: "briefcase.fill")
+                            TagBadge("精選創作者", color: .creative, icon: "star.fill")
+                        }
+                        .padding(.top, TTokens.spacingSM)
                     }
                     
-                    ProfileEditableField(field: $displayName)
-                    ProfileEditableField(field: $bio, multiline: true)
-                    ProfileEditableField(field: $link, keyboard: .URL)
-                    ProfileEditableField(field: $studentId)
+                    // 可編輯欄位區（玻璃態卡片）
+                    VStack(spacing: TTokens.spacingMD) {
+                        GlassmorphicCard(tint: .tint) {
+                            ProfileEditableField(field: $displayName)
+                        }
+                        
+                        GlassmorphicCard(tint: .mint) {
+                            ProfileEditableField(field: $bio, multiline: true)
+                        }
+                        
+                        GlassmorphicCard(tint: .coral) {
+                            ProfileEditableField(field: $link, keyboard: .URL)
+                        }
+                        
+                        GlassmorphicCard(tint: .creative) {
+                            ProfileEditableField(field: $studentId)
+                        }
+                    }
+                    
+                    // 統計資訊卡片
+                    HStack(spacing: TTokens.spacingMD) {
+                        StatCard(value: "256", label: "追蹤中", color: .tint)
+                        StatCard(value: "1.2K", label: "追蹤者", color: .success)
+                        StatCard(value: "42", label: "貼文", color: .creative)
+                    }
                     
                     Spacer(minLength: TTokens.spacingXL)
                 }
-                .standardPadding()
+                .padding(TTokens.spacingLG)
             }
-            .background(Color.bg.ignoresSafeArea())
+            .background(
+                ZStack {
+                    Color.bg.ignoresSafeArea()
+                    GradientMeshBackground()
+                        .opacity(0.3)
+                        .ignoresSafeArea()
+                }
+            )
             .navigationTitle("我")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: TTokens.spacingSM) {
+                        Button {
+                            showSearch = true
+                            HapticFeedback.light()
+                        } label: {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundStyle(Color.tint)
+                        }
+                        
+                        Button {
+                            showSettings = true
+                            HapticFeedback.light()
+                        } label: {
+                            Image(systemName: "gearshape.fill")
+                                .foregroundStyle(Color.tint)
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+            }
+            .sheet(isPresented: $showSearch) {
+                GlobalSearchView()
+            }
         }
+    }
+}
+
+/// 統計卡片（Stats Card）
+private struct StatCard: View {
+    let value: String
+    let label: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 6) {
+            Text(value)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(color.gradient)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, TTokens.spacingLG)
+        .floatingCard()
     }
 }
 

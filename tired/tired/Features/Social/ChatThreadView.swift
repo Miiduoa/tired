@@ -27,8 +27,8 @@ struct ChatThreadView: View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 8) {
-                        ForEach(messages) { m in
+                    LazyVStack(spacing: 12) {
+                        ForEach(Array(messages.enumerated()), id: \.element.id) { index, m in
                             ChatBubble(
                                 message: m,
                                 isMe: m.senderId == session.user.id,
@@ -43,12 +43,26 @@ struct ChatThreadView: View {
                                 }
                             )
                             .id(m.id)
+                            .transition(.asymmetric(
+                                insertion: .scale(scale: 0.8, anchor: m.senderId == session.user.id ? .bottomTrailing : .bottomLeading)
+                                    .combined(with: .opacity),
+                                removal: .scale(scale: 0.9).combined(with: .opacity)
+                            ))
+                            .animation(
+                                .spring(response: 0.4, dampingFraction: 0.75)
+                                    .delay(Double(index % 5) * 0.03),
+                                value: messages.count
+                            )
                         }
                     }
-                    .padding(12)
+                    .padding(16)
                 }
                 .onChange(of: messages) { _, _ in
-                    if let last = messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                    if let last = messages.last { 
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            proxy.scrollTo(last.id, anchor: .bottom)
+                        }
+                    }
                 }
             }
             inputBar
@@ -103,18 +117,42 @@ struct ChatThreadView: View {
                 TextField("輸入訊息…", text: $inputText, axis: .vertical)
                     .lineLimit(1...4)
                     .textFieldStyle(.roundedBorder)
+                    .onChange(of: inputText) { _, newValue in
+                        if !newValue.isEmpty {
+                            HapticFeedback.selection()
+                        }
+                    }
 
                 Button {
-                    Task { await send() }
+                    HapticFeedback.medium()
+                    Task {
+                        await send()
+                        HapticFeedback.success()
+                    }
                 } label: {
                     Image(systemName: "paperplane.fill")
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(TTokens.gradientPrimary, in: Capsule())
+                        .font(.body.weight(.semibold))
+                        .frame(width: 36, height: 36)
+                        .background {
+                            if uploadingTotal > 0 || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Circle()
+                                    .fill(Color.gray.opacity(0.3))
+                            } else {
+                                Circle()
+                                    .fill(TTokens.gradientPrimary)
+                            }
+                        }
+                        .shadow(
+                            color: (uploadingTotal > 0 || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) 
+                                ? .clear 
+                                : .tint.opacity(0.3),
+                            radius: 8,
+                            y: 4
+                        )
                 }
                 .disabled(uploadingTotal > 0 || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .opacity((uploadingTotal > 0 || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? 0.5 : 1.0)
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: inputText.isEmpty)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -295,18 +333,44 @@ private struct ChatBubble: View {
                                 .foregroundStyle(.primary)
                         }
                     }
-                    .padding(8)
-                    .background(isMe ? Color.blue.opacity(0.85) : Color.gray.opacity(0.2), in: RoundedRectangle(cornerRadius: 12))
+                    .padding(10)
+                    .background(
+                        isMe
+                            ? AnyShapeStyle(TTokens.gradientPrimary)
+                            : AnyShapeStyle(.ultraThinMaterial),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    )
+                    .overlay {
+                        if !isMe {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(Color.separator.opacity(0.25), lineWidth: 0.6)
+                        }
+                    }
                     .foregroundStyle(isMe ? .white : .primary)
                 } else {
                     Text(message.text)
                         .padding(10)
-                        .background(isMe ? Color.blue.opacity(0.85) : Color.gray.opacity(0.2), in: RoundedRectangle(cornerRadius: 12))
+                        .background(
+                            isMe
+                                ? AnyShapeStyle(TTokens.gradientPrimary)
+                                : AnyShapeStyle(.ultraThinMaterial),
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        )
+                        .overlay {
+                            if !isMe {
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .strokeBorder(Color.separator.opacity(0.25), lineWidth: 0.6)
+                            }
+                        }
                         .foregroundStyle(isMe ? .white : .primary)
                 }
-                Text(message.createdAt, style: .time)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                HStack {
+                    if isMe { Spacer() }
+                    Text(message.createdAt, style: .time)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    if !isMe { Spacer() }
+                }
             }
             if !isMe { Spacer() }
         }

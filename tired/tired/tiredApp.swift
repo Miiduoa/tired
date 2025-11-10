@@ -1,6 +1,9 @@
 import SwiftUI
 import FirebaseCore
 import GoogleSignIn
+import FirebaseMessaging
+import FirebaseAuth
+import FirebaseFirestore
 
 @main
 struct TiredApp: App {
@@ -10,12 +13,11 @@ struct TiredApp: App {
     var body: some Scene {
         WindowGroup {
             ZStack {
-                Color.bg.ignoresSafeArea(.all)
+                DynamicBackground(style: .glassmorphism)
                 AppShellView()
                     .environmentObject(deepLinkRouter)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .preferredColorScheme(.light)
         }
     }
 }
@@ -40,7 +42,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         tabAppearance.backgroundColor = UIColor.systemBackground
         UITabBar.appearance().standardAppearance = tabAppearance
         UITabBar.appearance().scrollEdgeAppearance = tabAppearance
-
+        
         // 初始化 Google Sign-In
         guard let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
               let plist = NSDictionary(contentsOfFile: path),
@@ -55,7 +57,22 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             print("✅ Google Sign-In 已配置，CLIENT_ID: \(clientId.prefix(30))...")
         }
         
+        // 請求通知權限（用於 Snooze 提醒）
+        NotificationService.shared.requestAuthorization()
+        Messaging.messaging().delegate = self
+        DispatchQueue.main.async {
+            UIApplication.shared.registerForRemoteNotifications()
+        }
+
         return true
+    }
+    
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        Task { await DeviceRegistry.saveAPNSToken(deviceToken) }
+    }
+    
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("⚠️ 無法註冊 APNS：\(error.localizedDescription)")
     }
     
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
@@ -65,5 +82,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         }
         if DeepLinkRouter.shared.handle(url) { return true }
         return false
+    }
+}
+
+extension AppDelegate: MessagingDelegate {
+    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        guard let token = fcmToken, !token.isEmpty else { return }
+        Task { await DeviceRegistry.saveFCMToken(token) }
     }
 }

@@ -9,7 +9,7 @@ private enum PersonalTab: Hashable {
 
 struct PersonalMainView: View {
     let session: AppSession
-    @State private var selection: PersonalTab = .home
+    @State private var selection: PersonalTab = .feed
     @StateObject private var timelineStore: PersonalTimelineStore
     private let feedService: GlobalFeedServiceProtocol = GlobalFeedService()
     private let talentService: TalentServiceProtocol = TalentService()
@@ -162,66 +162,6 @@ private struct PersonalHomeView: View {
             .foregroundStyle(color)
     }
 }
-
-struct PostRowView: View {
-    let post: Post
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: post.sourceType == .personal ? "person.crop.circle" : "building.2")
-                    .foregroundStyle(post.sourceType == .personal ? Color.blue : Color.purple)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(post.authorName).font(.subheadline.weight(.semibold))
-                    if let org = post.organizationName {
-                        Text(org).font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                Spacer()
-                Text(post.createdAt, style: .relative)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Text(post.summary)
-                .font(.subheadline)
-            Text(post.content)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .lineLimit(3)
-            if !post.attachmentURLs.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(post.attachmentURLs, id: \.absoluteString) { url in
-                        Link(destination: url) {
-                            Label(displayName(for: url), systemImage: "link")
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.blue)
-                    }
-                }
-            }
-            HStack(spacing: 12) {
-                Label(post.category.displayName, systemImage: "tag")
-                Label(post.visibility.label, systemImage: "eye")
-            }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-        }
-        .padding()
-        .background(Color.card, in: RoundedRectangle(cornerRadius: TTokens.radiusMD, style: .continuous))
-    }
-}
-
-private extension PostRowView {
-    func displayName(for url: URL) -> String {
-        if let host = url.host {
-            let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            return path.isEmpty ? host : "\(host)/\(path)"
-        }
-        return url.absoluteString
-    }
-}
-
-
 
 private struct PersonalExploreView: View {
     let session: AppSession

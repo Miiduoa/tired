@@ -42,6 +42,16 @@ final class AckStore: ObservableObject {
         persist()
     }
 
+    func unack(_ id: String) {
+        let uid = Self.currentUserKey
+        var set = ackedByUser[uid] ?? []
+        if set.contains(id) {
+            set.remove(id)
+            ackedByUser[uid] = set
+            persist()
+        }
+    }
+
     private func persist() {
         let encodable = ackedByUser.mapValues { Array($0) }
         if let data = try? JSONEncoder().encode(encodable) {

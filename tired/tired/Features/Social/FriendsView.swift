@@ -37,6 +37,39 @@ final class FriendsViewModel: ObservableObject {
         try? await service.decline(requestId: request.id, for: userId)
         await load()
     }
+
+    func sendRequest(to identifier: String) async -> Result<Void, Error> {
+        let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return .failure(FriendsError.emptyIdentifier)
+        }
+        do {
+            try await service.sendRequest(from: userId, to: trimmed)
+            return .success(())
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    func remove(_ friend: Friend) async -> Result<Void, Error> {
+        do {
+            try await service.removeFriend(friendId: friend.user.id, for: userId)
+            await load()
+            return .success(())
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    enum FriendsError: LocalizedError {
+        case emptyIdentifier
+
+        var errorDescription: String? {
+            switch self {
+            case .emptyIdentifier: return "請輸入好友帳號或 ID"
+            }
+        }
+    }
 }
 
 struct FriendsView: View {

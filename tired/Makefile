@@ -47,7 +47,7 @@ webhook-test: webhook-serve
 
 # iOS helpers
 ios-run:
-	@DEVICE="$(or $(DEVICE),)" TIRED_API_URL="$(TIRED_API_URL)" bash tired/scripts/ios_build_run.sh
+	@DEVICE="$(or $(DEVICE),)" TIRED_API_URL="$(TIRED_API_URL)" bash tired/tired/scripts/ios_build_run.sh
 
 ios-uitest:
-	@bash tired/scripts/ios_ui_test.sh
+	@bash tired/tired/scripts/ios_ui_test.sh

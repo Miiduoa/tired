@@ -17,12 +17,16 @@ struct BroadcastDetailView: View {
                         Text("截止 " + deadline.formatted(date: .abbreviated, time: .shortened))
                     }.foregroundStyle(.secondary)
                 }
-                .cardStyle(padding: 16, radius: 24, shadowLevel: 1)
+                .glassEffect(intensity: 0.7)
+                .shadow(color: TTokens.shadowLevel1.color, radius: TTokens.shadowLevel1.radius, y: TTokens.shadowLevel1.y)
                 .padding(.horizontal, 16)
             }
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 12) {
-                    Button("已知悉") { }
+                    Button("已知悉") {
+                        Haptics.impact(.light)
+                        ToastCenter.shared.show("已確認公告", style: .success)
+                    }
                         .tPrimaryButton(fullWidth: true)
                 }
                 .padding(.horizontal, 16)

@@ -1,4 +1,3 @@
-
 import SwiftUI
 
 // MARK: - 設計系統 Token (升級版 - 心理學設計原則)
@@ -31,34 +30,70 @@ enum TTokens {
     static let shadowElevated: (color: Color, radius: CGFloat, x: CGFloat, y: CGFloat) = 
         (.black.opacity(0.16), 32, 0, 12)
     
-    // MARK: - 漸層系統 (溫暖的漸層帶來舒適感)
+    // MARK: - 漸層系統 (情感化色彩流動 - 心理學驅動)
+    
+    // 主品牌漸層：信任 + 專業 + 未來感
     static let gradientPrimary = LinearGradient(
         colors: [
-            Color(red: 0.235, green: 0.949, blue: 0.784), // 清新的薄荷綠
-            Color(red: 0.0, green: 0.682, blue: 0.937)    // 專業的藍色
+            Color(red: 0.32, green: 0.68, blue: 1.0),     // 天空藍
+            Color(red: 0.18, green: 0.52, blue: 0.95)     // 深海藍
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
     
+    // 薄荷漸層：清新 + 療癒 + 放鬆
+    static let gradientMint = LinearGradient(
+        colors: [
+            Color(red: 0.28, green: 0.95, blue: 0.82),    // 薄荷綠
+            Color(red: 0.18, green: 0.82, blue: 0.92)     // 青色
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    
+    // 溫暖漸層：友好 + 活力 + 積極
     static let gradientWarm = LinearGradient(
         colors: [
-            Color(red: 1.0, green: 0.596, blue: 0.353),    // 溫暖的橙黃
-            Color(red: 0.964, green: 0.325, blue: 0.486) // 柔和的粉紅
+            Color(red: 1.0, green: 0.68, blue: 0.42),     // 橙色
+            Color(red: 1.0, green: 0.52, blue: 0.58)      // 珊瑚粉
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
     
+    // 成功漸層：成長 + 正向 + 成就
     static let gradientSuccess = LinearGradient(
         colors: [
-            Color(red: 0.2, green: 0.85, blue: 0.5),      // 充滿活力的綠色
-            Color(red: 0.1, green: 0.75, blue: 0.4)
+            Color(red: 0.45, green: 0.9, blue: 0.6),      // 淺綠
+            Color(red: 0.22, green: 0.82, blue: 0.4)      // 鮮綠
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
     
+    // 紫色漸層：創意 + 高級 + 神秘
+    static let gradientCreative = LinearGradient(
+        colors: [
+            Color(red: 0.85, green: 0.58, blue: 0.95),    // 淺紫
+            Color(red: 0.68, green: 0.35, blue: 0.88)     // 深紫
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    
+    // 日落漸層：溫暖 + 浪漫 + 柔和
+    static let gradientSunset = LinearGradient(
+        colors: [
+            Color(red: 1.0, green: 0.75, blue: 0.58),     // 橙黃
+            Color(red: 0.98, green: 0.52, blue: 0.72),    // 粉橙
+            Color(red: 0.88, green: 0.42, blue: 0.85)     // 紫粉
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    
+    // 微妙漸層：極簡 + 高級 + 克制
     static let gradientSubtle = LinearGradient(
         colors: [
             Color(uiColor: .systemBackground),
@@ -68,6 +103,16 @@ enum TTokens {
         endPoint: .bottom
     )
     
+    // 玻璃漸層：現代 + 透明 + 層次
+    static let gradientGlass = LinearGradient(
+        colors: [
+            Color.white.opacity(0.4),
+            Color.white.opacity(0.1)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    
     // MARK: - 動畫時序 (符合人體工學的反應時間)
     static let animationQuick: Animation = .easeInOut(duration: 0.15)
     static let animationStandard: Animation = .spring(response: 0.3, dampingFraction: 0.8)
@@ -75,7 +120,7 @@ enum TTokens {
     static let animationGentle: Animation = .spring(response: 0.5, dampingFraction: 0.9)
     static let animationBouncy: Animation = .spring(response: 0.35, dampingFraction: 0.6)
     
-    // MARK: - 文字大小階層 (清晰的信息架構)
+    // MARK: - 文字大小階層 (清晰的信息架構 - 基於黃金比例)
     static let fontSizeXS: CGFloat = 11
     static let fontSizeSM: CGFloat = 13
     static let fontSizeMD: CGFloat = 15
@@ -83,58 +128,91 @@ enum TTokens {
     static let fontSizeXL: CGFloat = 20
     static let fontSizeXXL: CGFloat = 24
     static let fontSizeXXXL: CGFloat = 32
+    static let fontSizeHero: CGFloat = 48  // 英雄標題
     
     // MARK: - 不透明度 (層次感和重點突出)
     static let opacityDisabled: Double = 0.4
     static let opacitySecondary: Double = 0.6
     static let opacityTertiary: Double = 0.8
     static let opacityFull: Double = 1.0
+    
+    // MARK: - 觸控目標尺寸（菲茨定律 - 易於點擊）
+    static let touchTargetMin: CGFloat = 44  // iOS 最小觸控目標
+    static let touchTargetComfortable: CGFloat = 56  // 舒適觸控尺寸
+    static let touchTargetLarge: CGFloat = 64  // 大按鈕
+    
+    // MARK: - 視覺權重（認知負荷優化）
+    static let weightUltraLight: Font.Weight = .ultraLight
+    static let weightLight: Font.Weight = .light
+    static let weightRegular: Font.Weight = .regular
+    static let weightMedium: Font.Weight = .medium
+    static let weightSemibold: Font.Weight = .semibold
+    static let weightBold: Font.Weight = .bold
+    static let weightHeavy: Font.Weight = .heavy
+    static let weightBlack: Font.Weight = .black
 }
 
-// MARK: - 顏色系統 (心理學驅動的顏色選擇)
+// MARK: - 顏色系統 (心理學驅動的顏色選擇 - 升級版)
 
 extension Color {
-    // MARK: - 基礎色彩
+    // MARK: - 基礎色彩（動態適配）
     static let bg = Color(uiColor: .systemBackground)
     static let bg2 = Color(uiColor: .secondarySystemBackground)
     static let bg3 = Color(uiColor: .tertiarySystemBackground)
     static let card = Color(uiColor: .systemGroupedBackground)
     static let separator = Color(uiColor: .separator)
     
-    // MARK: - 文字顏色 (確保可讀性)
+    // MARK: - 文字顏色（可讀性優化）
     static let labelPrimary = Color(uiColor: .label)
     static let labelSecondary = Color(uiColor: .secondaryLabel)
     static let labelTertiary = Color(uiColor: .tertiaryLabel)
     
-    // MARK: - 語意化顏色 (心理學優化)
-    // 藍色：信任、專業、穩定
-    static let tint = Color(red: 0.0, green: 0.478, blue: 1.0)
-    static let tintLight = Color(red: 0.4, green: 0.7, blue: 1.0)
-    static let tintDark = Color(red: 0.0, green: 0.3, blue: 0.8)
+    // MARK: - 品牌色彩（情感化設計）
+    // 藍色：信任、專業、穩定 - 升級為更柔和的色調
+    static let tint = Color(red: 0.2, green: 0.58, blue: 1.0)  // 更溫暖的藍
+    static let tintLight = Color(red: 0.5, green: 0.75, blue: 1.0)
+    static let tintDark = Color(red: 0.0, green: 0.35, blue: 0.85)
+    static let tintUltraLight = Color(red: 0.85, green: 0.92, blue: 1.0)  // 新增：極淺色用於背景
     
-    // 綠色：成功、成長、積極
-    static let success = Color(red: 0.2, green: 0.78, blue: 0.35)
-    static let successLight = Color(red: 0.4, green: 0.88, blue: 0.55)
-    static let successDark = Color(red: 0.1, green: 0.65, blue: 0.25)
+    // 綠色：成功、成長、積極 - 更有生命力
+    static let success = Color(red: 0.22, green: 0.82, blue: 0.4)
+    static let successLight = Color(red: 0.45, green: 0.9, blue: 0.6)
+    static let successDark = Color(red: 0.1, green: 0.68, blue: 0.28)
+    static let successBg = Color(red: 0.9, green: 0.98, blue: 0.93)  // 新增：背景色
     
-    // 橙色：警告、注意、溫暖
-    static let warn = Color(red: 1.0, green: 0.584, blue: 0.0)
-    static let warnLight = Color(red: 1.0, green: 0.75, blue: 0.4)
-    static let warnDark = Color(red: 0.8, green: 0.45, blue: 0.0)
+    // 橙色：警告、注意、溫暖 - 更友好
+    static let warn = Color(red: 1.0, green: 0.62, blue: 0.15)
+    static let warnLight = Color(red: 1.0, green: 0.78, blue: 0.45)
+    static let warnDark = Color(red: 0.85, green: 0.48, blue: 0.0)
+    static let warnBg = Color(red: 1.0, green: 0.96, blue: 0.88)  // 新增：背景色
     
-    // 紅色：錯誤、緊急、停止
-    static let danger = Color(red: 1.0, green: 0.231, blue: 0.188)
-    static let dangerLight = Color(red: 1.0, green: 0.5, blue: 0.5)
-    static let dangerDark = Color(red: 0.8, green: 0.15, blue: 0.15)
+    // 紅色：錯誤、緊急 - 更克制
+    static let danger = Color(red: 1.0, green: 0.28, blue: 0.24)
+    static let dangerLight = Color(red: 1.0, green: 0.55, blue: 0.52)
+    static let dangerDark = Color(red: 0.85, green: 0.18, blue: 0.18)
+    static let dangerBg = Color(red: 1.0, green: 0.95, blue: 0.95)  // 新增：背景色
     
-    // 紫色：創意、高級、神秘
-    static let creative = Color(red: 0.686, green: 0.322, blue: 0.871)
-    static let creativeLight = Color(red: 0.8, green: 0.5, blue: 0.9)
+    // 紫色：創意、高級、神秘 - 更優雅
+    static let creative = Color(red: 0.72, green: 0.38, blue: 0.90)
+    static let creativeLight = Color(red: 0.85, green: 0.58, blue: 0.95)
+    static let creativeDark = Color(red: 0.58, green: 0.25, blue: 0.75)
+    static let creativeBg = Color(red: 0.96, green: 0.93, blue: 0.98)  // 新增：背景色
     
-    // 中性色調（減少視覺疲勞）
+    // 薄荷綠：清新、療癒、放鬆（新增）
+    static let mint = Color(red: 0.28, green: 0.95, blue: 0.82)
+    static let mintLight = Color(red: 0.58, green: 0.98, blue: 0.92)
+    static let mintBg = Color(red: 0.92, green: 0.99, blue: 0.98)
+    
+    // 珊瑚色：溫暖、友好、活力（新增）
+    static let coral = Color(red: 1.0, green: 0.65, blue: 0.52)
+    static let coralLight = Color(red: 1.0, green: 0.82, blue: 0.75)
+    static let coralBg = Color(red: 1.0, green: 0.96, blue: 0.94)
+    
+    // 中性色調（高級灰）
     static let neutral = Color(uiColor: .systemGray)
     static let neutralLight = Color(uiColor: .systemGray5)
     static let neutralDark = Color(uiColor: .systemGray2)
+    static let neutralBg = Color(uiColor: .systemGray6)
 }
 
 // MARK: - View 擴充 (愉悅的互動體驗)
@@ -165,14 +243,52 @@ extension View {
             )
     }
     
-    // MARK: - 玻璃態效果 (現代感的模糊背景)
-    func glassEffect(intensity: CGFloat = 0.7) -> some View {
+    // MARK: - 玻璃態效果（Glassmorphism - iOS 風格）
+    func glassEffect(
+        intensity: CGFloat = 0.7,
+        radius: CGFloat = TTokens.radiusLG,
+        borderOpacity: Double = 0.3
+    ) -> some View {
         self
-            .background(.ultraThinMaterial.opacity(intensity), in: RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous))
+            .background(.ultraThinMaterial.opacity(intensity), in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [.white.opacity(borderOpacity), .white.opacity(borderOpacity * 0.3)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.2
+                    )
+            }
+            .shadow(color: .black.opacity(0.08), radius: 12, y: 8)
+    }
+    
+    // MARK: - 漸層玻璃卡片（現代感強烈）
+    func gradientGlassCard(gradient: LinearGradient = TTokens.gradientPrimary) -> some View {
+        self
+            .padding(TTokens.spacingLG)
+            .background {
+                ZStack {
+                    RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                        .fill(gradient.opacity(0.15))
+                    RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                }
+            }
             .overlay {
                 RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
-                    .strokeBorder(.white.opacity(0.2), lineWidth: 1)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [.white.opacity(0.4), .clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.5
+                    )
             }
+            .shadow(color: TTokens.shadowLevel2.color, radius: TTokens.shadowLevel2.radius, y: TTokens.shadowLevel2.y)
     }
     
     // MARK: - 標準間距
@@ -180,41 +296,94 @@ extension View {
         self.padding(TTokens.spacingLG)
     }
     
-    // MARK: - 增加觸覺反饋的按鈕樣式
-    func interactiveButtonStyle() -> some View {
+    // MARK: - 💫 情感化微交互（Delightful Microinteractions）
+    
+    /// 彈性按壓效果 - 適用於按鈕，帶觸覺反饋
+    func bouncyPress(isPressed: Bool = false) -> some View {
         self
-            .scaleEffect(1.0)
-            .animation(TTokens.animationQuick, value: false)
+            .scaleEffect(isPressed ? 0.94 : 1.0)
+            .animation(TTokens.animationBouncy, value: isPressed)
     }
     
-    // MARK: - 微動畫的出現效果
-    func fadeInScale(delay: Double = 0) -> some View {
+    /// 漸入放大 - 列表項目進場動畫
+    func fadeInScale(delay: Double = 0, scale: CGFloat = 0.92) -> some View {
         self
             .opacity(0)
-            .scaleEffect(0.95)
+            .scaleEffect(scale)
             .onAppear {
-                withAnimation(TTokens.animationStandard.delay(delay)) {
+                withAnimation(TTokens.animationSmooth.delay(delay)) {
                     // SwiftUI 會自動處理，這裡只是標記
                 }
             }
     }
     
-    // MARK: - 脈衝效果（用於吸引注意力）
-    func pulseEffect(isActive: Bool = true) -> some View {
+    /// 呼吸脈衝 - 吸引注意力的柔和動畫
+    func breathingPulse(isActive: Bool = true, scale: CGFloat = 1.02, duration: Double = 2.0) -> some View {
         self
-            .scaleEffect(isActive ? 1.05 : 1.0)
+            .scaleEffect(isActive ? scale : 1.0)
+            .opacity(isActive ? 0.95 : 1.0)
             .animation(
-                isActive ? 
-                    .easeInOut(duration: 1.0).repeatForever(autoreverses: true) :
+                isActive ?
+                    .easeInOut(duration: duration).repeatForever(autoreverses: true) :
                     .easeInOut(duration: 0.3),
                 value: isActive
             )
     }
     
-    // MARK: - 懸浮效果（提升互動感）
-    func hoverEffect() -> some View {
+    /// 懸浮提升 - 卡片互動時的深度感
+    func floatingLift(isLifted: Bool = false) -> some View {
         self
-            .shadow(color: TTokens.shadowLevel2.color, radius: TTokens.shadowLevel2.radius, y: TTokens.shadowLevel2.y)
+            .shadow(
+                color: .black.opacity(isLifted ? 0.15 : 0.06),
+                radius: isLifted ? 20 : 8,
+                y: isLifted ? 12 : 4
+            )
+            .scaleEffect(isLifted ? 1.02 : 1.0)
+            .animation(TTokens.animationSmooth, value: isLifted)
+    }
+    
+    /// 漣漪擴散 - 點擊反饋動畫
+    func rippleEffect(at point: CGPoint = .zero, isActive: Bool = false) -> some View {
+        self
+            .overlay {
+                if isActive {
+                    Circle()
+                        .fill(Color.tint.opacity(0.3))
+                        .frame(width: 20, height: 20)
+                        .position(point)
+                        .scaleEffect(isActive ? 5 : 1)
+                        .opacity(isActive ? 0 : 0.8)
+                        .animation(.easeOut(duration: 0.5), value: isActive)
+                }
+            }
+    }
+    
+    /// 彈出出現 - 驚喜元素動畫
+    func popIn(delay: Double = 0) -> some View {
+        self
+            .opacity(0)
+            .scaleEffect(0.5)
+            .onAppear {
+                withAnimation(TTokens.animationBouncy.delay(delay)) {
+                    // SwiftUI 會自動處理
+                }
+            }
+    }
+    
+    /// 搖晃提示 - 錯誤或需要注意時
+    func shakeEffect(trigger: Int = 0) -> some View {
+        self
+            .modifier(ShakeEffect(shakes: trigger))
+    }
+    
+    /// 閃爍高亮 - 臨時突出顯示
+    func highlightFlash(isActive: Bool = false, color: Color = .tint) -> some View {
+        self
+            .background(
+                RoundedRectangle(cornerRadius: TTokens.radiusSM, style: .continuous)
+                    .fill(color.opacity(isActive ? 0.2 : 0))
+                    .animation(.easeInOut(duration: 0.3).repeatCount(2, autoreverses: true), value: isActive)
+            )
     }
 
     // MARK: - 統一按鈕樣式（主要/次要）
@@ -295,6 +464,22 @@ struct BreathingCard: ViewModifier {
     }
 }
 
+// MARK: - 搖晃效果（錯誤提示）
+
+struct ShakeEffect: GeometryEffect {
+    var shakes: Int
+    var animatableData: CGFloat {
+        get { CGFloat(shakes) }
+        set { shakes = Int(newValue) }
+    }
+    
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        let angle = Double(animatableData) * 2 * .pi * 3
+        let offset = 8 * CGFloat(sin(angle))
+        return ProjectionTransform(CGAffineTransform(translationX: offset, y: 0))
+    }
+}
+
 // MARK: - 動畫工具
 
 struct AnimationHelper {
@@ -304,5 +489,184 @@ struct AnimationHelper {
     
     static func springAnimation(response: Double = 0.3, damping: Double = 0.8) -> Animation {
         .spring(response: response, dampingFraction: damping)
+    }
+}
+
+// MARK: - 🎯 現代化互動組件（心理學驅動）
+
+/// 神經形態按鈕（Neumorphism - 感知深度）
+struct NeumorphicButtonStyle: ButtonStyle {
+    let color: Color
+    let isActive: Bool
+    
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.headline)
+            .foregroundStyle(color)
+            .padding(.horizontal, TTokens.spacingLG)
+            .padding(.vertical, TTokens.spacingMD)
+            .background {
+                ZStack {
+                    RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                        .fill(Color.bg)
+                    if !isActive {
+                        RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                            .stroke(Color.separator.opacity(0.3), lineWidth: 0.5)
+                    }
+                }
+                .shadow(color: .black.opacity(configuration.isPressed ? 0.1 : 0.08), radius: configuration.isPressed ? 4 : 8, x: configuration.isPressed ? 1 : 2, y: configuration.isPressed ? 2 : 4)
+                .shadow(color: .white.opacity(0.8), radius: configuration.isPressed ? 2 : 4, x: configuration.isPressed ? -1 : -2, y: configuration.isPressed ? -1 : -2)
+            }
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(TTokens.animationQuick, value: configuration.isPressed)
+    }
+}
+
+/// 流體按鈕（Fluid Animation - 流動感）
+struct FluidButtonStyle: ButtonStyle {
+    let gradient: LinearGradient
+    
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.headline.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, TTokens.spacingXL)
+            .padding(.vertical, TTokens.spacingMD)
+            .background {
+                ZStack {
+                    RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                        .fill(gradient)
+                    if configuration.isPressed {
+                        RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                            .fill(.black.opacity(0.1))
+                    }
+                }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                    .stroke(.white.opacity(0.2), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(configuration.isPressed ? 0.15 : 0.25), radius: configuration.isPressed ? 8 : 16, y: configuration.isPressed ? 4 : 8)
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+    }
+}
+
+/// 磁吸效果 ViewModifier（接近時產生吸引感）
+struct MagneticEffect: ViewModifier {
+    @State private var offset: CGSize = .zero
+    @State private var isNearTarget: Bool = false
+    
+    func body(content: Content) -> some View {
+        content
+            .offset(offset)
+            .scaleEffect(isNearTarget ? 1.05 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: offset)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isNearTarget)
+    }
+}
+
+/// 呼吸卡片（Breathing Card - 吸引注意力但不干擾）
+struct BreathingCardModifier: ViewModifier {
+    @State private var phase: CGFloat = 0
+    let isActive: Bool
+    
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(1 + (isActive ? CGFloat(sin(Double(phase))) * 0.008 : 0))  // 極微妙的呼吸
+            .shadow(
+                color: .tint.opacity(isActive ? 0.15 + CGFloat(sin(Double(phase))) * 0.05 : 0.05),
+                radius: 12 + (isActive ? CGFloat(sin(Double(phase))) * 4 : 0),
+                y: 6
+            )
+            .onAppear {
+                if isActive {
+                    withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: false)) {
+                        phase = .pi * 2
+                    }
+                }
+            }
+    }
+}
+
+/// 懸浮卡片（Floating Card - 深度感知）
+struct FloatingCardStyle: ViewModifier {
+    @State private var isHovered: Bool = false
+    let shadowLevel: Int
+    
+    func body(content: Content) -> some View {
+        content
+            .background {
+                RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                    .fill(Color.card)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [.white.opacity(0.5), .clear],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 0.5
+                            )
+                    }
+            }
+            .shadow(
+                color: .black.opacity(isHovered ? 0.2 : 0.08),
+                radius: isHovered ? 24 : 12,
+                y: isHovered ? 12 : 6
+            )
+            .scaleEffect(isHovered ? 1.02 : 1.0)
+            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: isHovered)
+    }
+}
+
+/// 粒子爆炸效果（Particle Burst - 慶祝時刻）
+struct ParticleBurst: View {
+    let count: Int = 12
+    let color: Color
+    @State private var animate = false
+    
+    var body: some View {
+        ZStack {
+            ForEach(0..<count, id: \.self) { index in
+                Circle()
+                    .fill(color.opacity(0.7))
+                    .frame(width: 6, height: 6)
+                    .offset(
+                        x: animate ? cos(Double(index) * .pi * 2 / Double(count)) * 60 : 0,
+                        y: animate ? sin(Double(index) * .pi * 2 / Double(count)) * 60 : 0
+                    )
+                    .opacity(animate ? 0 : 1)
+                    .scaleEffect(animate ? 0.5 : 1.0)
+            }
+        }
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.6)) {
+                animate = true
+            }
+        }
+    }
+}
+
+extension View {
+    /// 應用神經形態按鈕樣式
+    func neumorphicButton(color: Color = .tint, isActive: Bool = false) -> some View {
+        self.buttonStyle(NeumorphicButtonStyle(color: color, isActive: isActive))
+    }
+    
+    /// 應用流體按鈕樣式
+    func fluidButton(gradient: LinearGradient = TTokens.gradientPrimary) -> some View {
+        self.buttonStyle(FluidButtonStyle(gradient: gradient))
+    }
+    
+    /// 應用呼吸卡片效果
+    func breathingCard(isActive: Bool = true) -> some View {
+        self.modifier(BreathingCardModifier(isActive: isActive))
+    }
+    
+    /// 應用懸浮卡片效果
+    func floatingCard(shadowLevel: Int = 2) -> some View {
+        self.modifier(FloatingCardStyle(shadowLevel: shadowLevel))
     }
 }

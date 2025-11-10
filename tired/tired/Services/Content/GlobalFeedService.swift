@@ -1,7 +1,7 @@
 import Foundation
 import FirebaseFirestore
 
-struct FeedFilter: Sendable, Equatable {
+struct FeedFilter: Sendable, Equatable, Codable {
     var categories: [PostCategory] = []
     var visibility: PostVisibility?
     var onlyOrganizations: Bool = false

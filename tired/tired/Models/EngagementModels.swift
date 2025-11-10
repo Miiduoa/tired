@@ -32,8 +32,8 @@ struct ActivityListItem: Identifiable, Deduplicable {
     }
 }
 
-struct ClockRecordItem: Identifiable, Deduplicable {
-    enum Status: String {
+struct ClockRecordItem: Identifiable, Deduplicable, Codable {
+    enum Status: String, Codable {
         case ok
         case exception
     }
@@ -169,3 +169,4 @@ struct InsightSection: Identifiable, Codable {
     let title: String
     let entries: [InsightEntry]
 }
+

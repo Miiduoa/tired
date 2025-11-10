@@ -88,6 +88,8 @@ struct InboxView: View {
                 return item.title.lowercased().contains(query) ||
                        item.subtitle.lowercased().contains(query)
             }
+            // Snooze 過濾
+            if SnoozeStore.shared.isSnoozed(item.id) { return false }
             return true
         }
     }
@@ -141,20 +143,45 @@ struct InboxView: View {
     // MARK: - Content View
     
     private var contentView: some View {
-        ScrollView {
-            LazyVStack(spacing: TTokens.spacingMD) {
-                ForEach(Array(filteredItems.enumerated()), id: \.element.id) { index, item in
-                    InboxItemCard(item: item, index: index)
-                        .onTapGesture {
-                            Task {
-                                await viewModel.acknowledge(item: item)
-                            }
+        List {
+            ForEach(Array(filteredItems.enumerated()), id: \.element.id) { _, item in
+                InboxItemCard(item: item, index: 0)
+                    .listRowBackground(Color.clear)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button {
+                            Task { await viewModel.acknowledge(item: item) }
+                        } label: { Label("完成", systemImage: "checkmark.circle") }
+                        .tint(.green)
+                        Button {
+                            Haptics.impact(.light)
+                            let expires = Date().addingTimeInterval(600)
+                            SnoozeStore.shared.snooze(id: item.id, until: expires)
+                            Task { await SnoozeSyncService.shared.saveSnooze(id: item.id, title: item.title, subtitle: item.subtitle, expires: expires, kind: "inbox") }
+                            NotificationService.shared.scheduleLocalNotification(id: "snooze-\(item.id)", title: "提醒：\(item.title)", body: item.subtitle, after: 600)
+                            ToastCenter.shared.show("已延後 10 分鐘", style: .info)
+                        } label: { Label("延後", systemImage: "clock") }
+                        .tint(.orange)
+                    }
+                    .contextMenu {
+                        Button("標記完成", systemImage: "checkmark.circle") { Task { await viewModel.acknowledge(item: item) } }
+                        Button("延後 10 分鐘", systemImage: "clock") {
+                            Haptics.impact(.light)
+                            let expires = Date().addingTimeInterval(600)
+                            SnoozeStore.shared.snooze(id: item.id, until: expires)
+                            Task { await SnoozeSyncService.shared.saveSnooze(id: item.id, title: item.title, subtitle: item.subtitle, expires: expires, kind: "inbox") }
+                            NotificationService.shared.scheduleLocalNotification(id: "snooze-\(item.id)", title: "提醒：\(item.title)", body: item.subtitle, after: 600)
+                            ToastCenter.shared.show("已延後 10 分鐘", style: .info, actionTitle: "撤銷", action: {
+                                SnoozeStore.shared.snooze(id: item.id, until: Date())
+                                Task { await SnoozeSyncService.shared.clearSnooze(id: item.id) }
+                            })
                         }
-                }
+                    }
+                    .onTapGesture { Task { await viewModel.acknowledge(item: item) } }
             }
-            .padding(.horizontal, TTokens.spacingLG)
-            .padding(.vertical, TTokens.spacingMD)
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Color.bg.ignoresSafeArea())
     }
     
     // loading/empty 改用通用元件
@@ -225,12 +252,18 @@ private struct InboxItemCard: View {
             }
         }
         .padding(TTokens.spacingLG)
-        .background(cardBackground)
-        .shadow(
-            color: TTokens.shadowLevel1.color,
-            radius: TTokens.shadowLevel1.radius,
-            y: TTokens.shadowLevel1.y
+        .background(
+            RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay {
+                    RoundedRectangle(cornerRadius: TTokens.radiusLG, style: .continuous)
+                        .strokeBorder(
+                            item.isUrgent ? Color.danger.opacity(0.3) : Color.separator.opacity(0.3),
+                            lineWidth: item.isUrgent ? 1.2 : 0.6
+                        )
+                }
         )
+        .shadow(color: TTokens.shadowLevel1.color, radius: TTokens.shadowLevel1.radius, y: TTokens.shadowLevel1.y)
         .scaleEffect(isPressed ? 0.98 : 1.0)
         .animation(TTokens.animationQuick, value: isPressed)
         .onTapGesture {

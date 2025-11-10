@@ -12,7 +12,9 @@ final class AttendanceViewModel: ObservableObject {
     
     private let membership: TenantMembership
     private let service: TenantFeatureServiceProtocol
+    private let attendanceService = AttendanceService.shared
     private var timer: AnyCancellable?
+    private var currentUserId: String?
     
     init(membership: TenantMembership, service: TenantFeatureServiceProtocol) {
         self.membership = membership
@@ -24,11 +26,29 @@ final class AttendanceViewModel: ObservableObject {
         timer?.cancel()
     }
     
+    func updateUserId(_ id: String?) {
+        currentUserId = id
+    }
+    
     func load() async {
         isLoading = true
-        let snapshot = await service.attendanceSnapshot(for: membership)
-        self.snapshot = snapshot
-        ttl = snapshot.validDuration * 60
+        let baseSnapshot = await service.attendanceSnapshot(for: membership)
+        let merged = await attendanceService.mergedSnapshot(
+            base: baseSnapshot,
+            membership: membership,
+            userId: currentUserId
+        )
+        if merged.personalRecords.isEmpty,
+           let fallback = await attendanceService.localFallbackSnapshot(
+                membership: membership,
+                userId: currentUserId
+            ) {
+            self.snapshot = fallback
+            ttl = fallback.validDuration * 60
+        } else {
+            self.snapshot = merged
+            ttl = merged.validDuration * 60
+        }
         isLoading = false
     }
     
@@ -39,6 +59,44 @@ final class AttendanceViewModel: ObservableObject {
         } else {
             ttl = 30
         }
+    }
+
+    func appendPersonalRecord(_ record: AttendanceRecord) {
+        if let snapshot {
+            var records = snapshot.personalRecords
+            records.insert(record, at: 0)
+            records.sort { $0.date > $1.date }
+            let stats = AttendanceStats(
+                attended: snapshot.stats.attended + 1,
+                absent: snapshot.stats.absent,
+                late: snapshot.stats.late,
+                total: max(snapshot.stats.total, snapshot.stats.attended + snapshot.stats.absent + snapshot.stats.late + 1)
+            )
+            let updated = AttendanceSnapshot(
+                courseName: snapshot.courseName,
+                attendanceTime: snapshot.attendanceTime,
+                validDuration: snapshot.validDuration,
+                stats: stats,
+                personalRecords: records
+            )
+            self.snapshot = updated
+            ttl = updated.validDuration * 60
+        } else {
+            let stats = AttendanceStats(attended: 1, absent: 0, late: 0, total: 1)
+            let fallback = AttendanceSnapshot(
+                courseName: membership.tenant.name,
+                attendanceTime: Date(),
+                validDuration: 30,
+                stats: stats,
+                personalRecords: [record]
+            )
+            snapshot = fallback
+            ttl = fallback.validDuration * 60
+        }
+    }
+
+    func updateTTL(seconds: Int) {
+        ttl = max(0, seconds)
     }
     
     private func startTicker() {
@@ -83,8 +141,17 @@ struct AttendanceView: View {
         }
         .background(Color.bg.ignoresSafeArea())
         .navigationTitle("10 秒點名")
-        .task { await viewModel.load() }
-        .refreshable { await viewModel.load() }
+        .task {
+            viewModel.updateUserId(authService.currentUser?.id)
+            await viewModel.load()
+        }
+        .refreshable {
+            viewModel.updateUserId(authService.currentUser?.id)
+            await viewModel.load()
+        }
+        .onChange(of: authService.currentUser?.id) { _, newValue in
+            viewModel.updateUserId(newValue)
+        }
         .task(id: deepLink.pendingAttendanceSessId) {
             if let sess = deepLink.pendingAttendanceSessId, !sess.isEmpty {
                 await submitAttendanceCheck(using: sess)
@@ -133,7 +200,8 @@ struct AttendanceView: View {
                 .resizable()
                 .scaledToFit()
                     .frame(width: 240, height: 240)
-                    .cardStyle(padding: TTokens.spacingLG, radius: TTokens.radiusLG, shadowLevel: 1)
+                    .glassEffect(intensity: 0.7)
+                    .shadow(color: TTokens.shadowLevel1.color, radius: TTokens.shadowLevel1.radius, y: TTokens.shadowLevel1.y)
                 
                 Text("QR Code 將在 \(viewModel.ttl) 秒後更新")
                     .font(.callout)
@@ -142,12 +210,15 @@ struct AttendanceView: View {
                 if membership.role.isManagerial {
                     HStack(spacing: 12) {
                         Button("開始點名") {
+                            Haptics.impact(.medium)
                             Task { await createAttendanceSession() }
                         }
                         .tPrimaryButton()
                         
                         Button("結束點名") {
+                            Haptics.impact(.light)
                             Task { await closeAttendanceSession() }
+                            ToastCenter.shared.show("已結束點名", style: .info)
                         }
                         .tSecondaryButton()
                     }
@@ -158,12 +229,14 @@ struct AttendanceView: View {
                             .autocorrectionDisabled()
                             .textFieldStyle(.roundedBorder)
                         Button {
+                            Haptics.impact(.light)
                             showScanner = true
                         } label: {
                             Label("掃描 QR", systemImage: "qrcode.viewfinder")
                         }
                         .tSecondaryButton()
                         Button {
+                            Haptics.impact(.medium)
                             Task { await submitAttendanceCheck(using: enteredSessId) }
                         } label: {
                             Label("我已到", systemImage: "hand.raised")
@@ -174,7 +247,8 @@ struct AttendanceView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .cardStyle(padding: TTokens.spacingLG, radius: TTokens.radiusLG, shadowLevel: 1)
+        .glassEffect(intensity: 0.7)
+        .shadow(color: TTokens.shadowLevel1.color, radius: TTokens.shadowLevel1.radius, y: TTokens.shadowLevel1.y)
     }
     
     private var statsSection: some View {
@@ -204,7 +278,8 @@ struct AttendanceView: View {
                             .font(.caption)
                     }
                 }
-                .cardStyle(padding: TTokens.spacingLG, radius: TTokens.radiusLG, shadowLevel: 1)
+                .glassEffect(intensity: 0.7)
+                .shadow(color: TTokens.shadowLevel1.color, radius: TTokens.shadowLevel1.radius, y: TTokens.shadowLevel1.y)
             }
         }
     }
@@ -225,7 +300,8 @@ struct AttendanceView: View {
                         }
                     }
                 }
-                .cardStyle(padding: TTokens.spacingLG, radius: TTokens.radiusLG, shadowLevel: 1)
+                .glassEffect(intensity: 0.7)
+                .shadow(color: TTokens.shadowLevel1.color, radius: TTokens.shadowLevel1.radius, y: TTokens.shadowLevel1.y)
             }
         }
     }
@@ -304,45 +380,42 @@ extension AttendanceView {
     @MainActor
     private func submitAttendanceCheck(using sessIdRaw: String) async {
         let sessId = normalizeSessId(from: sessIdRaw)
-        guard let uid = authService.currentUser?.id, !uid.isEmpty else {
-            didLocalCheckIn = true
-            return
-        }
-        let key = "att-\(UUID().uuidString)"
-        let ts = Date()
-        OutboxService.shared.enqueueAttendanceCheck(sessId: sessId, uid: uid, idempotencyKey: key, ts: ts)
-        do {
-            _ = try await AttendanceAPI.submitCheck(sessId: sessId, uid: uid, idempotencyKey: key, ts: ts)
-            OutboxService.shared.remove(id: "outbox-att-\(sessId)-\(key)", for: uid)
-        } catch {
-            // 留待 outbox 重試
-        }
+        let uid = authService.currentUser?.id ?? "guest"
+        let record = await AttendanceService.shared.checkIn(
+            sessionId: sessId,
+            membershipId: membership.id,
+            userId: uid,
+            courseName: viewModel.snapshot?.courseName ?? membership.tenant.name
+        )
+        viewModel.appendPersonalRecord(record)
         didLocalCheckIn = true
     }
 
     @MainActor
     private func createAttendanceSession() async {
         let courseId = membership.metadata["activeCourseId"] ?? "course-\(membership.id)"
-        let now = Date()
-        let openAt = now
-        let closeAt = now.addingTimeInterval(Double((viewModel.snapshot?.validDuration ?? 30) * 60))
-        do {
-            let created = try await AttendanceAPI.createSession(courseId: courseId, openAt: openAt, closeAt: closeAt)
-            viewModel.currentSessionId = created.id
-            viewModel.qrSeed = created.qr_seed ?? created.id
-        } catch {
-            // 入列 outbox：稍後補送
-            OutboxService.shared.enqueueAttendanceSessionOpen(membershipId: membership.id, courseId: courseId, openAt: openAt, closeAt: closeAt)
-            viewModel.currentSessionId = "local-\(UUID().uuidString)"
-            viewModel.qrSeed = viewModel.currentSessionId ?? viewModel.qrSeed
-        }
+        let teacherId = authService.currentUser?.id ?? "anonymous"
+        let durationMinutes = viewModel.snapshot?.validDuration ?? 30
+        let result = await AttendanceService.shared.openSession(
+            membership: membership,
+            courseId: courseId,
+            teacherId: teacherId,
+            durationMinutes: durationMinutes
+        )
+        viewModel.currentSessionId = result.record.id
+        viewModel.qrSeed = result.record.qrSeed
+        viewModel.updateTTL(seconds: result.ttlSeconds)
     }
 
     @MainActor
     private func closeAttendanceSession() async {
         guard let sessId = viewModel.currentSessionId else { return }
-        do { try await AttendanceAPI.closeSession(sessId: sessId) }
-        catch { OutboxService.shared.enqueueAttendanceSessionClose(sessId: sessId) }
+        let teacherId = authService.currentUser?.id ?? "anonymous"
+        await AttendanceService.shared.closeSession(
+            sessionId: sessId,
+            membershipId: membership.id,
+            teacherId: teacherId
+        )
         viewModel.currentSessionId = nil
     }
 
