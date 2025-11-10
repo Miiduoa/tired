@@ -93,8 +93,9 @@ struct TaskManagementMainView: View {
         .tint(.blue)
         .withToast()
         .fullScreenCover(isPresented: $appCoordinator.shouldRestoreFocus) {
-            if let task = appCoordinator.crashedFocusTask {
-                FocusModeView(task: task)
+            if let task = appCoordinator.crashedFocusTask,
+               let state = appCoordinator.crashedFocusState {
+                FocusModeView(task: task, restoreFrom: state)
                     .onDisappear {
                         appCoordinator.focusRestorationCompleted()
                     }

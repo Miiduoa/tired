@@ -144,8 +144,12 @@ struct ThisWeekView: View {
             if let result = viewModel.autoplanResult {
                 AutoplanResultSheet(
                     result: result,
+                    onApply: {
+                        await viewModel.applyAutoplan()
+                    },
                     onDismiss: {
                         viewModel.showAutoplanResult = false
+                        viewModel.autoplanResult = nil
                     }
                 )
             }
@@ -257,7 +261,10 @@ struct DailyLoadCard: View {
 // MARK: - Autoplan Result Sheet
 struct AutoplanResultSheet: View {
     let result: AutoplanResult
+    let onApply: () async -> Void
     let onDismiss: () -> Void
+
+    @State private var isApplying = false
 
     var body: some View {
         NavigationStack {
@@ -408,13 +415,35 @@ struct AutoplanResultSheet: View {
                     .padding()
                 }
             }
-            .navigationTitle("自動排程結果")
+            .navigationTitle("自動排程預覽")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("取消") {
                         onDismiss()
                     }
+                    .disabled(isApplying)
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("套用排程") {
+                        Task {
+                            isApplying = true
+                            await onApply()
+                            isApplying = false
+                        }
+                    }
+                    .font(.system(size: 16, weight: .semibold))
+                    .disabled(result.scheduledTasks.isEmpty || isApplying)
+                }
+            }
+            .overlay {
+                if isApplying {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                    ProgressView("套用中...")
+                        .padding()
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
                 }
             }
         }

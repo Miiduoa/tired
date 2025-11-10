@@ -133,12 +133,18 @@ class AutoplanService {
                 return false
             }
 
-            // Respect date lock
-            if task.isDateLocked,
-               let planned = task.plannedWorkDate,
-               !DateUtils.isBefore(planned, weekStart),
-               !DateUtils.isAfter(planned, weekEnd) {
+            // Respect date lock - if task is manually scheduled, skip it entirely
+            if task.isDateLocked && task.plannedWorkDate != nil {
                 return false
+            }
+
+            // Skip tasks that are already scheduled this week (non-locked)
+            if let planned = task.plannedWorkDate,
+               !DateUtils.isBefore(planned, weekStart),
+               !DateUtils.isAfter(planned, weekEnd),
+               !task.isDateLocked {
+                // Task is already scheduled this week but not locked
+                // We can reschedule it if needed
             }
 
             // Include if:

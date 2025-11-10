@@ -6,6 +6,7 @@ struct Toast: Identifiable {
     let type: ToastType
     let message: String
     let duration: TimeInterval
+    let undoAction: (() async -> Void)?
 
     enum ToastType {
         case success
@@ -32,10 +33,11 @@ struct Toast: Identifiable {
         }
     }
 
-    init(type: ToastType, message: String, duration: TimeInterval = 3.0) {
+    init(type: ToastType, message: String, duration: TimeInterval = 3.0, undoAction: (() async -> Void)? = nil) {
         self.type = type
         self.message = message
         self.duration = duration
+        self.undoAction = undoAction
     }
 }
 
@@ -59,6 +61,19 @@ struct ToastView: View {
                 .lineLimit(3)
 
             Spacer()
+
+            if let undoAction = toast.undoAction {
+                Button(action: {
+                    Task {
+                        await undoAction()
+                        onDismiss()
+                    }
+                }) {
+                    Text("復原")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.blue)
+                }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -136,6 +151,18 @@ class ToastManager: ObservableObject {
 
     func showInfo(_ message: String, duration: TimeInterval = 3.0) {
         show(.info, message: message, duration: duration)
+    }
+
+    func showSuccessWithUndo(_ message: String, undoAction: @escaping () async -> Void, duration: TimeInterval = 10.0) {
+        // Dismiss current toast first if exists
+        if currentToast != nil {
+            currentToast = nil
+        }
+
+        // Show new toast with undo action (longer duration for undo)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.currentToast = Toast(type: .success, message: message, duration: duration, undoAction: undoAction)
+        }
     }
 
     func dismiss() {

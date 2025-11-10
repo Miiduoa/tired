@@ -5,8 +5,8 @@ struct FocusModeView: View {
     @StateObject private var viewModel: FocusModeViewModel
     @Environment(\.dismiss) var dismiss
 
-    init(task: Task) {
-        _viewModel = StateObject(wrappedValue: FocusModeViewModel(task: task))
+    init(task: Task, restoreFrom: FocusState? = nil) {
+        _viewModel = StateObject(wrappedValue: FocusModeViewModel(task: task, restoreFrom: restoreFrom))
     }
 
     var body: some View {

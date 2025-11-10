@@ -10,6 +10,10 @@ struct FocusState: Codable {
     var breakSessions: Int
     var isBreak: Bool
     var wasInterrupted: Bool
+    var lastSavedAt: Date
+    var remainingSeconds: Int
+    var totalSeconds: Int
+    var isRunning: Bool
 }
 
 // MARK: - Focus Mode View Model
@@ -45,15 +49,40 @@ class FocusModeViewModel: ObservableObject {
         return String(format: "%02d:%02d", minutes, seconds)
     }
 
-    init(task: Task) {
+    init(task: Task, restoreFrom: FocusState? = nil) {
         self.task = task
-        self.sessionStartTime = Date()
 
         // Load settings from UserProfile if available
         loadSettings()
 
-        // Start with work period
-        startWorkPeriod()
+        if let state = restoreFrom {
+            // Restore from crashed state
+            self.sessionStartTime = state.sessionStart
+            self.pomodoroCount = state.pomodoroCount
+            self.breakCount = state.breakSessions
+            self.isBreak = state.isBreak
+
+            // Calculate elapsed time since last save
+            let elapsedSinceLastSave = Date().timeIntervalSince(state.lastSavedAt)
+            let adjustedRemaining = max(0, state.remainingSeconds - Int(elapsedSinceLastSave))
+
+            self.remainingSeconds = adjustedRemaining
+            self.totalSeconds = state.totalSeconds
+            self.progress = adjustedRemaining > 0 ? Double(adjustedRemaining) / Double(state.totalSeconds) : 0
+
+            // Auto-start if it was running
+            if state.isRunning && adjustedRemaining > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    self?.startTimer()
+                }
+            }
+
+            ToastManager.shared.showSuccess("已恢復專注模式")
+        } else {
+            // Start fresh
+            self.sessionStartTime = Date()
+            startWorkPeriod()
+        }
 
         // Save focus state to localStorage
         saveFocusState()
@@ -101,6 +130,11 @@ class FocusModeViewModel: ObservableObject {
         remainingSeconds -= 1
         progress = Double(remainingSeconds) / Double(totalSeconds)
         totalMinutes = Int((Date().timeIntervalSince(sessionStartTime ?? Date())) / 60)
+
+        // Save state every 5 seconds to reduce overhead
+        if remainingSeconds % 5 == 0 {
+            saveFocusState()
+        }
     }
 
     // MARK: - Period Management
@@ -191,7 +225,11 @@ class FocusModeViewModel: ObservableObject {
             pomodoroCount: pomodoroCount,
             breakSessions: breakCount,
             isBreak: isBreak,
-            wasInterrupted: false
+            wasInterrupted: false,
+            lastSavedAt: Date(),
+            remainingSeconds: remainingSeconds,
+            totalSeconds: totalSeconds,
+            isRunning: isRunning
         )
 
         if let encoded = try? JSONEncoder().encode(state) {
