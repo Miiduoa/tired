@@ -1,5 +1,6 @@
 import Foundation
 import FirebaseFirestore
+import FirebaseFirestoreSwift
 import Combine
 
 /// 任务服务 - 核心业务逻辑

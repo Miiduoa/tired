@@ -12,6 +12,17 @@ struct TiredApp: App {
 
     var body: some Scene {
         WindowGroup {
+            RootView()
+                .environmentObject(authService)
+        }
+    }
+}
+
+struct RootView: View {
+    @EnvironmentObject var authService: AuthService
+    
+    var body: some View {
+        Group {
             if authService.isLoading {
                 ProgressView("加载中...")
             } else if authService.currentUser != nil {

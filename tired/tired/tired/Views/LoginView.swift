@@ -11,7 +11,7 @@ struct LoginView: View {
     @State private var isSignUp = false
     @State private var isLoading = false
     @State private var errorMessage: String?
-    
+
     // Helper to get root view controller
     private var rootViewController: UIViewController? {
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
@@ -69,7 +69,7 @@ struct LoginView: View {
                                     .font(.system(size: 13))
                                     .foregroundColor(.red)
                                     .multilineTextAlignment(.center)
-                                
+
                                 // 如果是「已被使用」錯誤，顯示切換提示
                                 if error.contains("已被使用") {
                                     Button {
@@ -122,7 +122,7 @@ struct LoginView: View {
                                 .frame(height: 1)
                         }
                         .padding(.vertical, 8)
-                        
+
                         // Google Sign In Button
                         Button(action: handleGoogleSignIn) {
                             HStack {
@@ -193,7 +193,7 @@ struct LoginView: View {
                     let nsError = error as NSError
                     if let description = nsError.userInfo[NSLocalizedDescriptionKey] as? String {
                         errorMessage = description
-                        
+
                         // 如果是「電子郵件已被使用」錯誤，自動切換到登入模式
                         if description.contains("已被使用") || nsError.code == 17007 {
                             withAnimation {
@@ -208,17 +208,17 @@ struct LoginView: View {
             }
         }
     }
-    
+
     private func handleGoogleSignIn() {
         errorMessage = nil
         isLoading = true
-        
+
         guard let presentingVC = rootViewController else {
             errorMessage = "無法獲取視圖控制器"
             isLoading = false
             return
         }
-        
+
         _Concurrency.Task {
             do {
                 try await authService.signInWithGoogle(presentingViewController: presentingVC)

@@ -1,6 +1,8 @@
 import Foundation
+import FirebaseCore
 import FirebaseAuth
 import FirebaseFirestore
+import FirebaseFirestoreSwift
 import Combine
 import GoogleSignIn
 import UIKit
@@ -41,8 +43,8 @@ class AuthService: ObservableObject {
     func fetchUserProfile(uid: String) {
         db.collection("users").document(uid).addSnapshotListener { [weak self] snapshot, error in
             guard let self = self else { return }
-            
-            defer { 
+
+            defer {
                 DispatchQueue.main.async {
                     self.isLoading = false
                 }
@@ -80,7 +82,7 @@ class AuthService: ObservableObject {
         guard FirebaseApp.app() != nil else {
             throw NSError(domain: "AuthService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Firebase 未正確初始化，請檢查 GoogleService-Info.plist 配置"])
         }
-        
+
         do {
             try await Auth.auth().signIn(withEmail: email, password: password)
             // 登入成功後，authStateListener 會自動觸發 fetchUserProfile
@@ -113,7 +115,7 @@ class AuthService: ObservableObject {
         guard FirebaseApp.app() != nil else {
             throw NSError(domain: "AuthService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Firebase 未正確初始化，請檢查 GoogleService-Info.plist 配置"])
         }
-        
+
         do {
             // 創建 Firebase Auth 用戶
             let result = try await Auth.auth().createUser(withEmail: email, password: password)
@@ -130,7 +132,7 @@ class AuthService: ObservableObject {
 
             // 保存 profile 到 Firestore
             try await createUserProfile(profile)
-            
+
             // 等待一下確保 profile 已寫入，然後手動觸發獲取
             try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000) // 0.5秒
             await MainActor.run {
@@ -161,38 +163,40 @@ class AuthService: ObservableObject {
     }
 
     // MARK: - Google Sign In
-    
+
     func signInWithGoogle(presentingViewController: UIViewController) async throws {
         // 確保 Firebase 已初始化
         guard FirebaseApp.app() != nil else {
             throw NSError(domain: "AuthService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Firebase 未正確初始化，請檢查 GoogleService-Info.plist 配置"])
         }
-        
+
         guard let clientID = FirebaseApp.app()?.options.clientID else {
             throw NSError(domain: "AuthService", code: -1, userInfo: [NSLocalizedDescriptionKey: "無法獲取 Google Client ID，請檢查 GoogleService-Info.plist"])
         }
-        
+
         // 創建 Google Sign-In 配置
         let config = GIDConfiguration(clientID: clientID)
         GIDSignIn.sharedInstance.configuration = config
-        
+
         // 執行 Google Sign-In
         let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: presentingViewController)
-        
+
         guard let idToken = result.user.idToken?.tokenString else {
             throw NSError(domain: "AuthService", code: -1, userInfo: [NSLocalizedDescriptionKey: "無法獲取 Google ID Token"])
         }
-        
+
         // 使用 Google ID Token 登入 Firebase
-        let credential = GoogleAuthProvider.credential(withIDToken: idToken,
-                                                       accessToken: result.user.accessToken.tokenString)
-        
+        let credential = GoogleAuthProvider.credential(
+            withIDToken: idToken,
+            accessToken: result.user.accessToken.tokenString
+        )
+
         let authResult = try await Auth.auth().signIn(with: credential)
         let uid = authResult.user.uid
-        
+
         // 檢查用戶 profile 是否存在，如果不存在則創建
         let userDoc = try? await db.collection("users").document(uid).getDocument()
-        
+
         if userDoc?.exists == false {
             // 創建新用戶 profile
             let profile = UserProfile(
@@ -203,19 +207,19 @@ class AuthService: ObservableObject {
                 timezone: TimeZone.current.identifier,
                 weeklyCapacityMinutes: 720
             )
-            
+
             try await createUserProfile(profile)
-            
+
             // 等待一下確保 profile 已寫入
             try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
         }
-        
+
         // 手動觸發獲取 profile
         await MainActor.run {
             self.fetchUserProfile(uid: uid)
         }
     }
-    
+
     func signOut() throws {
         // 登出 Google Sign-In
         GIDSignIn.sharedInstance.signOut()
