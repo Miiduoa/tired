@@ -117,6 +117,16 @@ class TasksViewModel: ObservableObject {
         }
     }
 
+    func updateTask(_ task: Task) {
+        _Concurrency.Task {
+            do {
+                try await taskService.updateTask(task)
+            } catch {
+                print("❌ Error updating task: \(error)")
+            }
+        }
+    }
+
     // MARK: - Auto Plan
 
     func runAutoplan(weeklyCapacity: Int = 600) {

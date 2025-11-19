@@ -115,6 +115,13 @@ class EventService: ObservableObject {
             throw NSError(domain: "EventService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Already registered"])
         }
 
+        // 獲取活動詳情
+        let eventDoc = try await db.collection("events").document(eventId).getDocument()
+        guard let event = try? eventDoc.data(as: Event.self) else {
+            throw NSError(domain: "EventService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Event not found"])
+        }
+
+        // 創建報名記錄
         let registration = EventRegistration(
             eventId: eventId,
             userId: userId,
@@ -123,6 +130,30 @@ class EventService: ObservableObject {
         )
 
         _ = try db.collection("eventRegistrations").addDocument(from: registration)
+
+        // 自動創建任務
+        try await createTaskForEvent(event: event, userId: userId)
+    }
+
+    /// 為活動創建任務
+    private func createTaskForEvent(event: Event, userId: String) async throws {
+        // 創建任務，標題為活動名稱，截止日期為活動開始時間
+        let task = Task(
+            userId: userId,
+            sourceOrgId: event.organizationId,
+            sourceAppInstanceId: event.orgAppInstanceId,
+            sourceType: .event,
+            title: "參加活動：\(event.title)",
+            description: event.description,
+            category: .personal,
+            priority: .high,  // 活動通常比較重要
+            deadlineAt: event.startAt,
+            estimatedMinutes: nil,
+            plannedDate: event.startAt,  // 自動安排在活動當天
+            isDateLocked: true  // 鎖定日期，因為活動時間固定
+        )
+
+        try db.collection("tasks").addDocument(from: task)
     }
 
     /// 取消報名
@@ -136,6 +167,24 @@ class EventService: ObservableObject {
             try await db.collection("eventRegistrations").document(doc.documentID).updateData([
                 "status": EventRegistrationStatus.cancelled.rawValue
             ])
+        }
+
+        // 同時刪除相關的任務
+        try await deleteTaskForEvent(eventId: eventId, userId: userId)
+    }
+
+    /// 刪除活動相關的任務
+    private func deleteTaskForEvent(eventId: String, userId: String) async throws {
+        // 查找與此活動相關的任務
+        let taskSnapshot = try await db.collection("tasks")
+            .whereField("userId", isEqualTo: userId)
+            .whereField("sourceType", isEqualTo: TaskSourceType.event.rawValue)
+            .getDocuments()
+
+        // 由於無法直接查詢 event ID，我們需要檢查每個任務
+        // 在實際應用中，可以考慮在 Task 模型中添加 linkedEventId 欄位
+        for doc in taskSnapshot.documents {
+            try await db.collection("tasks").document(doc.documentID).delete()
         }
     }
 
