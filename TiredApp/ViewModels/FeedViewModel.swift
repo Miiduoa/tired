@@ -9,6 +9,7 @@ class FeedViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     private let postService = PostService()
+    private let userService = UserService()
     private var cancellables = Set<AnyCancellable>()
 
     private var userId: String? {
@@ -45,9 +46,8 @@ class FeedViewModel: ObservableObject {
         var enrichedPosts: [PostWithAuthor] = []
 
         for post in posts {
-            // 獲取作者信息（簡化版）
-            // TODO: 實現真實的用戶信息獲取
-            let author: UserProfile? = nil
+            // 獲取作者信息
+            let author = try? await userService.fetchUserProfile(userId: post.authorUserId)
 
             // 獲取組織信息
             var organization: Organization? = nil

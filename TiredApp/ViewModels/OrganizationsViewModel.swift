@@ -100,9 +100,51 @@ class OrganizationsViewModel: ObservableObject {
         try await organizationService.deleteMembership(id: membershipId)
     }
 
-    /// 搜索組織（簡化版）
-    func searchOrganizations(query: String) {
-        // TODO: 實現搜索功能
-        // 這裡可以添加 Firestore 查詢來搜索組織
+    /// 搜索組織
+    func searchOrganizations(query: String) async {
+        guard !query.isEmpty else {
+            await MainActor.run {
+                allOrganizations = []
+            }
+            return
+        }
+
+        await MainActor.run {
+            isLoading = true
+        }
+
+        defer {
+            Task { @MainActor in
+                isLoading = false
+            }
+        }
+
+        do {
+            // Firestore 不支持全文搜索，我們使用前綴匹配
+            // 搜索名稱以查詢開頭的組織（區分大小寫）
+            let queryLower = query.lowercased()
+
+            // 獲取所有組織然後在客戶端過濾
+            // 注意：在生產環境中應該使用 Algolia 或 Elasticsearch 等全文搜索服務
+            let snapshot = try await FirebaseManager.shared.db
+                .collection("organizations")
+                .limit(to: 50)
+                .getDocuments()
+
+            let organizations = snapshot.documents.compactMap { doc -> Organization? in
+                try? doc.data(as: Organization.self)
+            }.filter { org in
+                org.name.lowercased().contains(queryLower)
+            }
+
+            await MainActor.run {
+                self.allOrganizations = organizations
+            }
+        } catch {
+            print("❌ Error searching organizations: \(error)")
+            await MainActor.run {
+                self.errorMessage = "搜索失敗：\(error.localizedDescription)"
+            }
+        }
     }
 }

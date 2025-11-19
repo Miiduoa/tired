@@ -4,6 +4,7 @@ import SwiftUI
 struct OrganizationsView: View {
     @StateObject private var viewModel = OrganizationsViewModel()
     @State private var showingCreateOrganization = false
+    @State private var showingSearch = false
 
     var body: some View {
         NavigationView {
@@ -16,11 +17,20 @@ struct OrganizationsView: View {
                                 .font(.system(size: 18, weight: .semibold))
                             Spacer()
                             Button {
+                                showingSearch = true
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "magnifyingglass")
+                                    Text("搜索")
+                                }
+                                .font(.system(size: 13))
+                            }
+                            Button {
                                 showingCreateOrganization = true
                             } label: {
                                 HStack(spacing: 4) {
                                     Image(systemName: "plus.circle.fill")
-                                    Text("創建組織")
+                                    Text("創建")
                                 }
                                 .font(.system(size: 13))
                             }
@@ -51,6 +61,9 @@ struct OrganizationsView: View {
             .navigationTitle("我的身份")
             .sheet(isPresented: $showingCreateOrganization) {
                 CreateOrganizationView(viewModel: viewModel)
+            }
+            .sheet(isPresented: $showingSearch) {
+                SearchOrganizationsView(viewModel: viewModel)
             }
         }
     }
@@ -257,5 +270,216 @@ struct InfoCard: View {
         .padding()
         .background(Color.appSecondaryBackground)
         .cornerRadius(12)
+    }
+}
+
+// MARK: - Search Organizations View
+
+@available(iOS 17.0, *)
+struct SearchOrganizationsView: View {
+    @ObservedObject var viewModel: OrganizationsViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var searchQuery = ""
+    @State private var isSearching = false
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Search bar
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                    TextField("搜索組織名稱", text: $searchQuery)
+                        .textFieldStyle(.plain)
+                        .submitLabel(.search)
+                        .onSubmit {
+                            performSearch()
+                        }
+
+                    if !searchQuery.isEmpty {
+                        Button {
+                            searchQuery = ""
+                            viewModel.allOrganizations = []
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .padding()
+                .background(Color.appSecondaryBackground)
+
+                Divider()
+
+                // Search results
+                if viewModel.isLoading {
+                    ProgressView("搜索中...")
+                        .padding()
+                } else if searchQuery.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 60))
+                            .foregroundColor(.secondary)
+                        Text("搜索組織")
+                            .font(.system(size: 18, weight: .semibold))
+                        Text("輸入組織名稱開始搜索")
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 60)
+                } else if viewModel.allOrganizations.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "questionmark.folder")
+                            .font(.system(size: 60))
+                            .foregroundColor(.secondary)
+                        Text("未找到組織")
+                            .font(.system(size: 18, weight: .semibold))
+                        Text("試試其他關鍵詞")
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 60)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(viewModel.allOrganizations) { org in
+                                SearchResultCard(
+                                    organization: org,
+                                    onJoin: {
+                                        joinOrganization(org)
+                                    }
+                                )
+                            }
+                        }
+                        .padding()
+                    }
+                }
+
+                Spacer()
+            }
+            .navigationTitle("搜索組織")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func performSearch() {
+        Task {
+            await viewModel.searchOrganizations(query: searchQuery)
+        }
+    }
+
+    private func joinOrganization(_ org: Organization) {
+        guard let orgId = org.id else { return }
+
+        Task {
+            do {
+                try await viewModel.joinOrganization(organizationId: orgId)
+                await MainActor.run {
+                    dismiss()
+                }
+            } catch {
+                print("❌ Error joining organization: \(error)")
+            }
+        }
+    }
+}
+
+// MARK: - Search Result Card
+
+@available(iOS 17.0, *)
+struct SearchResultCard: View {
+    let organization: Organization
+    let onJoin: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Avatar
+            if let avatarUrl = organization.avatarUrl {
+                AsyncImage(url: URL(string: avatarUrl)) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    organizationInitials
+                }
+                .frame(width: 50, height: 50)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            } else {
+                organizationInitials
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(organization.name)
+                        .font(.system(size: 15, weight: .medium))
+
+                    if organization.isVerified {
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundColor(.blue)
+                            .font(.system(size: 12))
+                    }
+                }
+
+                Text(organization.type.displayName)
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+
+                if let description = organization.description {
+                    Text(description)
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                }
+            }
+
+            Spacer()
+
+            Button {
+                onJoin()
+            } label: {
+                Text("加入")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
+                    .background(Color.blue)
+                    .cornerRadius(8)
+            }
+        }
+        .padding()
+        .background(Color.appBackground)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.appCardBorder, lineWidth: 1)
+        )
+    }
+
+    private var organizationInitials: some View {
+        RoundedRectangle(cornerRadius: 10)
+            .fill(colorForOrgType(organization.type))
+            .frame(width: 50, height: 50)
+            .overlay(
+                Text(String(organization.name.prefix(2)).uppercased())
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.white)
+            )
+    }
+
+    private func colorForOrgType(_ type: OrgType) -> Color {
+        switch type {
+        case .school: return .blue
+        case .department: return .cyan
+        case .club: return .purple
+        case .company: return .orange
+        case .project: return .green
+        case .other: return .gray
+        }
     }
 }

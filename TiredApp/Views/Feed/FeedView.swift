@@ -122,14 +122,24 @@ struct FeedPostCard: View {
                                     .font(.system(size: 10))
                             }
                         }
+                    } else if let author = postWithAuthor.author {
+                        Text(author.name)
+                            .font(.system(size: 14, weight: .semibold))
                     } else {
                         Text("用戶")
                             .font(.system(size: 14, weight: .semibold))
                     }
 
-                    Text(postWithAuthor.post.createdAt.formatShort())
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
+                    // 顯示作者名稱（如果有組織的話）
+                    if postWithAuthor.organization != nil, let author = postWithAuthor.author {
+                        Text(author.name)
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text(postWithAuthor.post.createdAt.formatShort())
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
                 }
 
                 Spacer()
@@ -202,6 +212,7 @@ struct CreatePostView: View {
     @ObservedObject var viewModel: FeedViewModel
     @Environment(\.dismiss) private var dismiss
 
+    @StateObject private var orgViewModel = OrganizationsViewModel()
     @State private var text = ""
     @State private var selectedOrganization: String?
     @State private var isCreating = false
@@ -220,9 +231,22 @@ struct CreatePostView: View {
                 }
 
                 Section("發布為（選填）") {
-                    // TODO: 添加選擇組織的功能
-                    Text("個人動態")
-                        .foregroundColor(.secondary)
+                    Picker("發布身份", selection: $selectedOrganization) {
+                        Text("個人動態").tag(nil as String?)
+
+                        ForEach(orgViewModel.myMemberships) { membershipWithOrg in
+                            if let org = membershipWithOrg.organization, let orgId = org.id {
+                                HStack {
+                                    Text(org.name)
+                                    if org.isVerified {
+                                        Image(systemName: "checkmark.seal.fill")
+                                            .foregroundColor(.blue)
+                                    }
+                                }
+                                .tag(orgId as String?)
+                            }
+                        }
+                    }
                 }
             }
             .navigationTitle("發布動態")
