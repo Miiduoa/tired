@@ -1,8 +1,21 @@
-# 建立 Xcode iOS App 專案指南
+# 建立 Xcode iOS App 專案指南（已完成）
 
-## 🎯 目標
+> 現在專案已經整理為「單一 Xcode 專案」，你不需要再從 Swift Package 重新建立一次。  
+> 平常只要打開 `tired/tired.xcodeproj`，選擇 `tired` scheme 執行即可。
 
-將現有的 Swift Package 程式碼轉換為可以在 iOS 模擬器運行的 Xcode App 專案。
+---
+
+## 🎯 目前狀態
+
+- ✅ `tired/tired.xcodeproj` 已建立並可編譯
+- ✅ App 入口為 `tired/tired/tired/tiredApp.swift`
+- ✅ Firebase / Google 登入 已整合到這個 Xcode 專案
+
+如果未來你真的想「從零重建一個新的 Xcode 專案」，可以把下面原本的步驟當作參考。但對現在這個 repo 來說，正常開發完全不需要再跑一次。
+
+---
+
+## 原始步驟（僅供參考）
 
 ## 📋 步驟 1：在 Xcode 中建立新專案
 
@@ -164,4 +177,3 @@
 ## 🎉 完成！
 
 如果所有步驟都完成，你應該可以在 iOS 模擬器中看到並使用 Tired App 了！
-

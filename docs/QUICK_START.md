@@ -78,47 +78,15 @@ cd tired
 3. 选择位置（与 Firestore 相同）
 4. 启用即可
 
-## 🔨 步骤 3：在 Xcode 中创建项目
+## 🔨 步骤 3：在 Xcode 中打开现有项目
 
-由于本项目在 Linux 环境创建，需要在 macOS 上创建 Xcode 项目：
-
-### 方式 A：创建新 Xcode 项目（推荐）
+本仓库已经包含完整的 Xcode iOS App 專案，你不需要再自己创建新的 `.xcodeproj`。
 
 1. 打开 Xcode
-2. File → New → Project
-3. 选择模板：
-   - 平台：iOS
-   - 模板：**App**
-4. 填写信息：
-   - Product Name: `TiredApp`
-   - Team: 选择你的开发团队
-   - Organization Identifier: `com.yourteam`（与 Firebase 中的 Bundle ID 对应）
-   - Interface: **SwiftUI**
-   - Language: **Swift**
-   - ⚠️ 取消勾选 "Use Core Data"、"Include Tests"
-5. 选择保存位置（临时位置即可）
-
-6. **替换项目文件**：
-   ```bash
-   # 删除自动生成的文件（保留 .xcodeproj）
-   rm -rf <新项目路径>/TiredApp/*
-
-   # 复制本项目的源文件
-   cp -r ./TiredApp/* <新项目路径>/TiredApp/
-
-   # 复制 GoogleService-Info.plist
-   cp ./TiredApp/GoogleService-Info.plist <新项目路径>/TiredApp/
-   ```
-
-7. 在 Xcode 中刷新项目（右键项目 → Add Files to "TiredApp"）
-
-### 方式 B：手动添加所有文件
-
-1. 创建空白 iOS App 项目（同上）
-2. 在 Xcode 左侧项目导航器中：
-3. 右键 `TiredApp` 文件夹 → Add Files to "TiredApp"
-4. 选择本项目中的所有 Swift 文件和子文件夹
-5. 确保勾选 "Copy items if needed"
+2. File → Open... → 选择 `tired/tired.xcodeproj`
+3. 左上角：
+   - Scheme：选择 `tired`
+   - Device：选择任一 iOS 模拟器（例如 iPhone 15 Pro）
 
 ## 📦 步骤 4：添加 Firebase SDK
 

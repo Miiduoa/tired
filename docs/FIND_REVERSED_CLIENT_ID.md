@@ -31,24 +31,20 @@ com.googleusercontent.apps.566724358335-04e0heqf7hato4hv2kb62pkfk9fgd366
 ```
 
 這個值位於：
-- 文件：`TiredApp/GoogleService-Info.plist`
-- 鍵：`REVERSED_CLIENT_ID`（第 7 行）
-- 值：`com.googleusercontent.apps.566724358335-04e0heqf7hato4hv2kb62pkfk9fgd366`（第 8 行）
+- 文件：`tired/tired/tired/GoogleService-Info.plist`
+- 鍵：`REVERSED_CLIENT_ID`
+- 值：`com.googleusercontent.apps.566724358335-04e0heqf7hato4hv2kb62pkfk9fgd366`
 
 ## 方法 3：使用終端查看
 
-在終端中運行以下命令：
+在終端中運行以下命令（從專案根目錄）：
 
 ```bash
 cd /Users/handemo/Desktop/tired
-grep -A 1 "REVERSED_CLIENT_ID" TiredApp/GoogleService-Info.plist
+grep -A 1 "REVERSED_CLIENT_ID" tired/tired/tired/GoogleService-Info.plist
 ```
 
-或者查看完整文件：
-
-```bash
-cat TiredApp/GoogleService-Info.plist
-```
+或者直接查看完整文件 `tired/tired/tired/GoogleService-Info.plist`。
 
 ## 在 Xcode 中配置 URL Scheme
 
@@ -108,6 +104,5 @@ cat TiredApp/GoogleService-Info.plist
    - 找到 iOS 應用程式
    - 點擊 `GoogleService-Info.plist` 下載按鈕
    - 替換現有文件
-
 
 

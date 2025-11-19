@@ -38,39 +38,20 @@
 
 ## 📦 项目结构
 
+> 目前只保留一套 Xcode App 專案，所有程式碼都在 `tired/tired/tired/` 底下。
+
 ```
-TiredApp/
-├── Models/              # 数据模型
-│   ├── DomainTypes.swift    # 枚举类型定义
-│   ├── User.swift           # 用户模型
-│   ├── Organization.swift   # 组织和身份模型
-│   ├── Task.swift          # 任务模型（核心）
-│   ├── Event.swift         # 活动模型
-│   ├── Post.swift          # 贴文模型
-│   └── OrgApp.swift        # 组织小应用模型
-│
-├── Services/           # 业务逻辑层
-│   ├── FirebaseManager.swift      # Firebase初始化
-│   ├── AuthService.swift          # 认证服务
-│   ├── TaskService.swift          # 任务CRUD
-│   └── OrganizationService.swift  # 组织管理
-│
-├── ViewModels/         # 视图模型
-│   └── TasksViewModel.swift       # 任务视图逻辑
-│
-├── Views/              # UI视图
-│   ├── Tasks/
-│   │   ├── TasksView.swift        # 任务主界面
-│   │   └── TaskRow.swift          # 任务卡片
-│   ├── MainTabView.swift          # 主标签栏
-│   └── LoginView.swift            # 登录界面
-│
-├── Utils/              # 工具类
-│   ├── AutoPlanService.swift      # 自动排程算法
-│   ├── DateExtensions.swift       # 日期扩展
-│   └── ColorExtensions.swift      # 颜色扩展
-│
-└── TiredApp.swift      # 应用入口
+tired/
+├── tired.xcodeproj              # Xcode iOS App 專案
+└── tired/
+    └── tired/                   # App 原始碼根目錄
+        ├── tiredApp.swift       # App 入口（@main）
+        ├── GoogleService-Info.plist
+        ├── Models/              # 数据模型
+        ├── Services/            # Firebase / 業務邏輯
+        ├── ViewModels/          # 視圖模型
+        ├── Views/               # SwiftUI 介面
+        └── Utils/               # 工具類（日期、顏色、自動排程）
 ```
 
 ## 🚀 快速开始
@@ -96,50 +77,13 @@ cd tired
 3. 添加 iOS 应用
    - Bundle ID: `com.yourteam.tired`（可自定义）
 4. 下载 `GoogleService-Info.plist`
-5. 将文件放到 `TiredApp/` 目录下
+5. 将文件放到 `tired/tired/tired/` 目录下
 
 ### 3. 在 Xcode 中打开项目
 
-由于这是在 Linux 环境创建的项目结构，需要在 macOS 上用 Xcode 创建实际的 `.xcodeproj`：
-
-#### 方式一：使用 Swift Package Manager（推荐）
-
-1. 打开 Xcode
-2. File → New → Project → iOS → App
-3. 产品名称：`TiredApp`
-4. Interface：SwiftUI
-5. Language：Swift
-6. 将本项目的 `TiredApp/` 文件夹内容复制到新创建的项目中
-7. File → Add Package Dependencies
-8. 添加 Firebase iOS SDK：
-   ```
-   https://github.com/firebase/firebase-ios-sdk.git
-   ```
-9. 选择需要的产品：
-   - FirebaseAuth
-   - FirebaseFirestore
-   - FirebaseStorage
-
-#### 方式二：使用 CocoaPods
-
-创建 `Podfile`：
-
-```ruby
-platform :ios, '17.0'
-use_frameworks!
-
-target 'TiredApp' do
-  pod 'Firebase/Auth'
-  pod 'Firebase/Firestore'
-  pod 'Firebase/Storage'
-end
-```
-
-运行：
-```bash
-pod install
-open TiredApp.xcworkspace
-```
+1. 打开 Xcode  
+2. 使用 `File → Open...` 打开 `tired/tired.xcodeproj`  
+3. 左上角 Scheme 选擇 `tired`，装置選一台模擬器（例如 iPhone 15 Pro）
 
 ### 4. Firestore 数据库配置
 

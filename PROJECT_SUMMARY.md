@@ -42,8 +42,9 @@
 - ✅ Backlog View - 未排程任务
 
 ### 6. 项目配置 - ✅ 完成
-- ✅ Package.swift - SPM 依赖配置
-- ✅ Info.plist - iOS 应用配置
+- ✅ tired/tired.xcodeproj - Xcode iOS App 專案
+- ✅ tired/tired/tiredApp.swift - App 入口
+- ✅ Info.plist - 由 Xcode 為 `tired` target 自動生成
 - ✅ .gitignore - Git 忽略规则
 
 ### 7. 文档 - ✅ 完成
@@ -56,48 +57,22 @@
 
 ```
 tired/
-├── Package.swift                      # Swift Package Manager 配置
-├── .gitignore                         # Git 忽略文件
 ├── README.md                          # 项目主文档
 ├── PROJECT_SUMMARY.md                 # 项目摘要
-│
 ├── docs/                              # 文档目录
 │   ├── FIRESTORE_RULES.md            # Firestore 安全规则
 │   └── QUICK_START.md                # 快速开始指南
 │
-└── TiredApp/                          # 主应用目录
-    ├── TiredApp.swift                 # App 入口
-    ├── Info.plist                     # iOS 配置
-    │
-    ├── Models/                        # 数据模型（7个文件）
-    │   ├── DomainTypes.swift         # 枚举定义
-    │   ├── User.swift
-    │   ├── Organization.swift
-    │   ├── Task.swift                # 核心任务模型
-    │   ├── Event.swift
-    │   ├── Post.swift
-    │   └── OrgApp.swift
-    │
-    ├── Services/                      # 服务层（4个文件）
-    │   ├── FirebaseManager.swift
-    │   ├── AuthService.swift
-    │   ├── TaskService.swift
-    │   └── OrganizationService.swift
-    │
-    ├── ViewModels/                    # 视图模型（1个文件）
-    │   └── TasksViewModel.swift
-    │
-    ├── Views/                         # UI 层（5个文件）
-    │   ├── LoginView.swift
-    │   ├── MainTabView.swift
-    │   └── Tasks/
-    │       ├── TasksView.swift
-    │       └── TaskRow.swift
-    │
-    └── Utils/                         # 工具类（3个文件）
-        ├── AutoPlanService.swift      # 自动排程算法
-        ├── DateExtensions.swift
-        └── ColorExtensions.swift
+└── tired/
+    ├── tired.xcodeproj               # Xcode 專案
+    └── tired/                        # App 原始碼根目錄
+        ├── tiredApp.swift            # App 入口
+        ├── GoogleService-Info.plist  # Firebase 配置
+        ├── Models/                   # 数据模型（7个文件）
+        ├── Services/                 # 服务层（4个文件）
+        ├── ViewModels/               # 视图模型（1个文件）
+        ├── Views/                    # UI 层（5个文件）
+        └── Utils/                    # 工具类（3个文件）
 ```
 
 **总计**：
