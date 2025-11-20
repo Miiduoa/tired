@@ -130,7 +130,23 @@ struct EditProfileView: View {
             do {
                 var updates: [String: Any] = ["name": trimmedName]
 
-                // TODO: 如果有選擇新頭像，上傳到 Firebase Storage 並更新 avatarUrl
+                // 如果有選擇新頭像，上傳到 Firebase Storage 並更新 avatarUrl
+                if let imageData = selectedImageData,
+                   let image = UIImage(data: imageData),
+                   let userId = FirebaseAuth.Auth.auth().currentUser?.uid {
+                    let storageService = StorageService()
+
+                    // 調整大小和壓縮
+                    let resizedImage = storageService.resizeImage(image, maxDimension: 400)
+                    guard let compressedData = storageService.compressImage(resizedImage, maxSizeKB: 200) else {
+                        throw NSError(domain: "EditProfileView", code: -1,
+                                    userInfo: [NSLocalizedDescriptionKey: "圖片處理失敗"])
+                    }
+
+                    // 上傳
+                    let avatarUrl = try await storageService.uploadAvatar(userId: userId, imageData: compressedData)
+                    updates["avatarUrl"] = avatarUrl
+                }
 
                 try await authService.updateUserProfile(updates)
 
