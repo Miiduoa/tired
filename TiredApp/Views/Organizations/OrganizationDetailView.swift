@@ -99,12 +99,30 @@ struct OrganizationDetailView: View {
                 // Action buttons
                 HStack(spacing: 12) {
                     if viewModel.isMember {
+                        // 成員管理按鈕（僅管理員及以上）
+                        if viewModel.canManageMembers {
+                            Button {
+                                viewModel.showingMemberManagement = true
+                            } label: {
+                                HStack {
+                                    Image(systemName: "person.2.fill")
+                                    Text("成員管理")
+                                }
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(Color.blue)
+                                .cornerRadius(8)
+                            }
+                        }
+
                         Button {
-                            viewModel.leaveOrganization()
+                            viewModel.showLeaveConfirmation = true
                         } label: {
                             Text("退出組織")
                                 .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.primary)
+                                .foregroundColor(.red)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 10)
                                 .background(Color.appSecondaryBackground)
@@ -153,6 +171,30 @@ struct OrganizationDetailView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $viewModel.showingMemberManagement) {
+            if let membership = viewModel.currentMembership {
+                MemberManagementView(organization: organization, currentMembership: membership)
+            }
+        }
+        .alert("退出組織", isPresented: $viewModel.showLeaveConfirmation) {
+            Button("取消", role: .cancel) {}
+            Button("退出", role: .destructive) {
+                viewModel.leaveOrganization()
+            }
+        } message: {
+            if viewModel.currentMembership?.role == .owner {
+                Text("你是此組織的擁有者。退出後，所有權將自動轉移給下一位最高層級的成員。")
+            } else {
+                Text("確定要退出此組織嗎？")
+            }
+        }
+        .alert(item: $viewModel.alertConfig) { config in
+            Alert(
+                title: Text(config.title),
+                message: Text(config.message),
+                dismissButton: .default(Text("確定"))
+            )
+        }
     }
 
     private var avatarPlaceholder: some View {
@@ -281,6 +323,16 @@ struct AppsTab: View {
 struct PostCardView: View {
     let post: Post
 
+    @State private var showingComments = false
+    @State private var reactionCount = 0
+    @State private var commentCount = 0
+    @State private var hasUserReacted = false
+
+    private let postService = PostService()
+    private var userId: String? {
+        FirebaseAuth.Auth.auth().currentUser?.uid
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             // Time
@@ -295,13 +347,21 @@ struct PostCardView: View {
 
             // Actions
             HStack(spacing: 20) {
-                Label("0", systemImage: "heart")
-                    .font(.system(size: 13))
-                    .foregroundColor(.secondary)
+                Button {
+                    toggleLike()
+                } label: {
+                    Label("\(reactionCount)", systemImage: hasUserReacted ? "heart.fill" : "heart")
+                        .font(.system(size: 13))
+                        .foregroundColor(hasUserReacted ? .red : .secondary)
+                }
 
-                Label("0", systemImage: "bubble.right")
-                    .font(.system(size: 13))
-                    .foregroundColor(.secondary)
+                Button {
+                    showingComments = true
+                } label: {
+                    Label("\(commentCount)", systemImage: "bubble.right")
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                }
             }
         }
         .padding()
@@ -311,6 +371,66 @@ struct PostCardView: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.appCardBorder, lineWidth: 1)
         )
+        .sheet(isPresented: $showingComments) {
+            CommentsView(post: post)
+        }
+        .task {
+            await loadCounts()
+        }
+    }
+
+    private func loadCounts() async {
+        guard let postId = post.id else { return }
+
+        // Load reaction count and check user reaction
+        do {
+            let reactionCount = try await postService.getReactionCount(postId: postId)
+            var userReacted = false
+
+            if let userId = userId {
+                userReacted = try await postService.hasUserReacted(postId: postId, userId: userId)
+            }
+
+            await MainActor.run {
+                self.reactionCount = reactionCount
+                self.hasUserReacted = userReacted
+            }
+        } catch {
+            print("❌ Error loading reactions: \(error)")
+        }
+
+        // Load comment count
+        do {
+            let commentCount = try await postService.getCommentCount(postId: postId)
+
+            await MainActor.run {
+                self.commentCount = commentCount
+            }
+        } catch {
+            print("❌ Error loading comments: \(error)")
+        }
+    }
+
+    private func toggleLike() {
+        guard let postId = post.id, let userId = userId else { return }
+
+        Task {
+            do {
+                try await postService.toggleReaction(postId: postId, userId: userId)
+
+                // 更新本地狀態
+                await MainActor.run {
+                    if hasUserReacted {
+                        reactionCount = max(0, reactionCount - 1)
+                    } else {
+                        reactionCount += 1
+                    }
+                    hasUserReacted.toggle()
+                }
+            } catch {
+                print("❌ Error toggling reaction: \(error)")
+            }
+        }
     }
 }
 
@@ -393,6 +513,9 @@ class OrganizationDetailViewModel: ObservableObject {
     @Published var apps: [OrgAppInstance] = []
     @Published var currentMembership: Membership?
     @Published var isMember = false
+    @Published var showingMemberManagement = false
+    @Published var showLeaveConfirmation = false
+    @Published var alertConfig: AlertConfig?
 
     let organization: Organization
     private let postService = PostService()
@@ -401,6 +524,10 @@ class OrganizationDetailViewModel: ObservableObject {
 
     private var userId: String? {
         FirebaseAuth.Auth.auth().currentUser?.uid
+    }
+
+    var canManageMembers: Bool {
+        currentMembership?.hasPermission(.manageMembers) ?? false
     }
 
     init(organization: Organization) {
@@ -500,18 +627,31 @@ class OrganizationDetailViewModel: ObservableObject {
     }
 
     func leaveOrganization() {
-        guard let membershipId = currentMembership?.id else { return }
+        guard let membership = currentMembership else { return }
 
         Task {
             do {
-                try await organizationService.deleteMembership(id: membershipId)
+                // 使用新的繼任機制處理離開
+                try await organizationService.handleMemberLeave(membership: membership)
 
                 await MainActor.run {
                     self.isMember = false
                     self.currentMembership = nil
+                    self.alertConfig = AlertConfig(
+                        title: "成功",
+                        message: membership.role == .owner ? "已退出組織並轉移所有權" : "已退出組織",
+                        type: .success
+                    )
                 }
             } catch {
                 print("❌ Error leaving organization: \(error)")
+                await MainActor.run {
+                    self.alertConfig = AlertConfig(
+                        title: "錯誤",
+                        message: "退出組織失敗：\(error.localizedDescription)",
+                        type: .error
+                    )
+                }
             }
         }
     }

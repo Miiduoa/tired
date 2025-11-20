@@ -5,6 +5,7 @@ struct TasksView: View {
     @StateObject private var viewModel = TasksViewModel()
     @State private var selectedTab: TaskTab = .today
     @State private var showingAddTask = false
+    @State private var showingSortOptions = false
 
     enum TaskTab: String, CaseIterable {
         case today = "今天"
@@ -76,10 +77,66 @@ struct TasksView: View {
 #if os(iOS)
             .navigationBarTitleDisplayMode(.large)
 #endif
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showingSortOptions = true
+                    } label: {
+                        Image(systemName: "arrow.up.arrow.down")
+                    }
+                }
+            }
             .sheet(isPresented: $showingAddTask) {
                 AddTaskView(viewModel: viewModel)
             }
+            .sheet(isPresented: $showingSortOptions) {
+                SortOptionsView(sortOption: $viewModel.sortOption)
+            }
         }
+    }
+}
+
+// MARK: - Sort Options View
+
+@available(iOS 17.0, *)
+struct SortOptionsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var sortOption: TaskSortOption
+
+    var body: some View {
+        NavigationView {
+            List {
+                Section("排序方式") {
+                    ForEach(TaskSortOption.allCases, id: \.self) { option in
+                        Button {
+                            sortOption = option
+                            dismiss()
+                        } label: {
+                            HStack {
+                                Image(systemName: option.icon)
+                                    .foregroundColor(.blue)
+                                    .frame(width: 24)
+                                Text(option.rawValue)
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                if sortOption == option {
+                                    Image(systemName: "checkmark")
+                                        .foregroundColor(.blue)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("排序選項")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 @available(iOS 17.0, *)
 struct FeedView: View {
@@ -96,6 +97,8 @@ struct FeedPostCard: View {
     let onLike: () -> Void
     let onDelete: () -> Void
 
+    @State private var showingComments = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
@@ -183,12 +186,16 @@ struct FeedPostCard: View {
                     }
                 }
 
-                HStack(spacing: 4) {
-                    Image(systemName: "bubble.right")
-                        .foregroundColor(.secondary)
-                    Text("\(postWithAuthor.commentCount)")
-                        .font(.system(size: 13))
-                        .foregroundColor(.secondary)
+                Button {
+                    showingComments = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bubble.right")
+                            .foregroundColor(.secondary)
+                        Text("\(postWithAuthor.commentCount)")
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                    }
                 }
 
                 Spacer()
@@ -202,6 +209,9 @@ struct FeedPostCard: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.appCardBorder, lineWidth: 1)
         )
+        .sheet(isPresented: $showingComments) {
+            CommentsView(post: postWithAuthor.post)
+        }
     }
 }
 
@@ -216,6 +226,11 @@ struct CreatePostView: View {
     @State private var text = ""
     @State private var selectedOrganization: String?
     @State private var isCreating = false
+    @State private var selectedItems: [PhotosPickerItem] = []
+    @State private var selectedImages: [UIImage] = []
+    @State private var isUploadingImages = false
+
+    private let storageService = StorageService()
 
     var body: some View {
         NavigationView {
@@ -248,6 +263,46 @@ struct CreatePostView: View {
                         }
                     }
                 }
+
+                Section {
+                    PhotosPicker(selection: $selectedItems, maxSelectionCount: 4, matching: .images) {
+                        Label("選擇圖片", systemImage: "photo.on.rectangle.angled")
+                    }
+
+                    if !selectedImages.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 12) {
+                                ForEach(Array(selectedImages.enumerated()), id: \.offset) { index, image in
+                                    ZStack(alignment: .topTrailing) {
+                                        Image(uiImage: image)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 100, height: 100)
+                                            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                                        Button {
+                                            selectedImages.remove(at: index)
+                                            selectedItems.remove(at: index)
+                                        } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .foregroundColor(.white)
+                                                .background(Circle().fill(Color.black.opacity(0.6)))
+                                        }
+                                        .padding(4)
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 8)
+                        }
+                    }
+                } header: {
+                    Text("圖片（選填，最多4張）")
+                }
+                .onChange(of: selectedItems) { newItems in
+                    Task {
+                        await loadImages(from: newItems)
+                    }
+                }
             }
             .navigationTitle("發布動態")
             .navigationBarTitleDisplayMode(.inline)
@@ -270,7 +325,16 @@ struct CreatePostView: View {
 
         Task {
             do {
-                try await viewModel.createPost(text: text, organizationId: selectedOrganization)
+                // 上傳圖片（如果有）
+                var imageUrls: [String] = []
+                if !selectedImages.isEmpty {
+                    isUploadingImages = true
+                    imageUrls = try await uploadImages()
+                    isUploadingImages = false
+                }
+
+                // 創建貼文
+                try await viewModel.createPost(text: text, organizationId: selectedOrganization, imageUrls: imageUrls)
                 await MainActor.run {
                     dismiss()
                 }
@@ -278,8 +342,46 @@ struct CreatePostView: View {
                 print("❌ Error creating post: \(error)")
                 await MainActor.run {
                     isCreating = false
+                    isUploadingImages = false
                 }
             }
         }
+    }
+
+    private func loadImages(from items: [PhotosPickerItem]) async {
+        var images: [UIImage] = []
+
+        for item in items {
+            if let data = try? await item.loadTransferable(type: Data.self),
+               let image = UIImage(data: data) {
+                images.append(image)
+            }
+        }
+
+        await MainActor.run {
+            self.selectedImages = images
+        }
+    }
+
+    private func uploadImages() async throws -> [String] {
+        guard let userId = FirebaseAuth.Auth.auth().currentUser?.uid else {
+            throw NSError(domain: "CreatePostView", code: -1, userInfo: [NSLocalizedDescriptionKey: "用戶未登入"])
+        }
+
+        var urls: [String] = []
+
+        for image in selectedImages {
+            // 調整大小和壓縮
+            let resizedImage = storageService.resizeImage(image, maxDimension: 1200)
+            guard let imageData = storageService.compressImage(resizedImage, maxSizeKB: 800) else {
+                continue
+            }
+
+            // 上傳到 Firebase Storage
+            let url = try await storageService.uploadPostImage(userId: userId, imageData: imageData)
+            urls.append(url)
+        }
+
+        return urls
     }
 }

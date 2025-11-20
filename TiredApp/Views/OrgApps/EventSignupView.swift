@@ -388,7 +388,7 @@ class EventSignupViewModel: ObservableObject {
                     self.registrationCounts[eventId] = (self.registrationCounts[eventId] ?? 0) + 1
                 }
 
-                // TODO: 可選：自動創建任務到個人任務中樞
+                // Note: 任務已由 EventService.registerForEvent() 自動創建
             } catch {
                 print("❌ Error registering for event: \(error)")
             }

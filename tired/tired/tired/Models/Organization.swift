@@ -112,3 +112,47 @@ struct MembershipWithOrg: Identifiable {
 
     var id: String? { membership.id }
 }
+
+// MARK: - Membership Extensions
+
+extension Membership {
+    /// 檢查是否有指定權限
+    func hasPermission(_ permission: OrgPermission) -> Bool {
+        return role.hasPermission(permission)
+    }
+
+    /// 檢查是否可以管理指定成員
+    func canManageMember(_ targetMembership: Membership) -> Bool {
+        // 不能管理自己
+        guard userId != targetMembership.userId else { return false }
+        // 只能管理比自己低的角色
+        return role.canManage(targetMembership.role)
+    }
+
+    /// 檢查是否可以變更到指定角色
+    func canChangeRoleTo(_ targetRole: MembershipRole) -> Bool {
+        // 只有owner可以設定owner
+        if targetRole == .owner {
+            return role == .owner
+        }
+        // 只能設定比自己低的角色
+        return role.canManage(targetRole)
+    }
+}
+
+// MARK: - Member with Profile (for UI)
+
+struct MemberWithProfile: Identifiable {
+    let membership: Membership
+    let userProfile: UserProfile?
+
+    var id: String? { membership.id }
+
+    var displayName: String {
+        userProfile?.displayName ?? "未知用戶"
+    }
+
+    var avatarUrl: String? {
+        userProfile?.avatarUrl
+    }
+}

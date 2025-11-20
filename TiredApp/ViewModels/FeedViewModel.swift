@@ -87,7 +87,7 @@ class FeedViewModel: ObservableObject {
     // MARK: - Actions
 
     /// 創建新貼文
-    func createPost(text: String, organizationId: String?) async throws {
+    func createPost(text: String, organizationId: String?, imageUrls: [String] = []) async throws {
         guard let userId = userId else {
             throw NSError(domain: "FeedViewModel", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])
         }
@@ -96,6 +96,7 @@ class FeedViewModel: ObservableObject {
             authorUserId: userId,
             organizationId: organizationId,
             contentText: text,
+            imageUrls: imageUrls.isEmpty ? nil : imageUrls,
             visibility: organizationId != nil ? .orgMembers : .public
         )
 
