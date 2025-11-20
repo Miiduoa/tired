@@ -22,6 +22,34 @@ enum OrgType: String, Codable, CaseIterable {
     }
 }
 
+// MARK: - Organization Permission
+
+/// 組織權限類型
+enum OrgPermission {
+    // Owner 專屬權限
+    case deleteOrganization     // 刪除組織
+    case transferOwnership      // 轉移所有權
+
+    // Admin 及以上權限
+    case manageMembers         // 管理成員
+    case changeRoles           // 變更角色
+    case removeMembers         // 移除成員
+    case manageApps           // 管理小應用
+    case editOrgInfo          // 編輯組織資訊
+
+    // Staff 及以上權限
+    case createPosts          // 發布貼文
+    case createEvents         // 創建活動
+    case createTasks          // 創建任務
+    case editOwnPosts         // 編輯自己的貼文
+
+    // 所有成員權限
+    case viewContent          // 查看內容
+    case comment              // 評論
+    case joinEvents           // 參加活動
+    case react                // 按讚互動
+}
+
 enum MembershipRole: String, Codable, CaseIterable {
     case owner
     case admin
@@ -36,6 +64,54 @@ enum MembershipRole: String, Codable, CaseIterable {
         case .staff: return "员工"
         case .student: return "学生"
         case .member: return "成员"
+        }
+    }
+
+    /// 角色層級（數字越大權限越高）
+    var hierarchyLevel: Int {
+        switch self {
+        case .owner: return 5    // 最高管理者/董事長
+        case .admin: return 4    // 管理員/經理
+        case .staff: return 3    // 員工
+        case .student: return 2  // 學生（適用於學校類組織）
+        case .member: return 1   // 一般成員
+        }
+    }
+
+    /// 角色描述
+    var description: String {
+        switch self {
+        case .owner: return "最高管理者，擁有所有權限"
+        case .admin: return "管理員，可管理成員和組織內容"
+        case .staff: return "員工，可創建內容和參與活動"
+        case .student: return "學生，可參與學校活動"
+        case .member: return "一般成員，可查看和參與"
+        }
+    }
+
+    /// 檢查是否可以管理指定角色的成員
+    func canManage(_ targetRole: MembershipRole) -> Bool {
+        return self.hierarchyLevel > targetRole.hierarchyLevel
+    }
+
+    /// 檢查是否有指定權限
+    func hasPermission(_ permission: OrgPermission) -> Bool {
+        switch permission {
+        // Owner 專屬權限
+        case .deleteOrganization, .transferOwnership:
+            return self == .owner
+
+        // Admin 及以上權限
+        case .manageMembers, .changeRoles, .removeMembers, .manageApps, .editOrgInfo:
+            return self.hierarchyLevel >= MembershipRole.admin.hierarchyLevel
+
+        // Staff 及以上權限
+        case .createPosts, .createEvents, .createTasks, .editOwnPosts:
+            return self.hierarchyLevel >= MembershipRole.staff.hierarchyLevel
+
+        // 所有成員都有的權限
+        case .viewContent, .comment, .joinEvents, .react:
+            return true
         }
     }
 }

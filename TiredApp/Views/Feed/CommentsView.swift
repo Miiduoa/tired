@@ -110,7 +110,7 @@ struct CommentRow: View {
                 Spacer()
             }
 
-            Text(comment.text)
+            Text(comment.contentText)
                 .font(.system(size: 15))
                 .padding(.leading, 44)
         }
@@ -167,16 +167,9 @@ class CommentsViewModel: ObservableObject {
     func addComment(text: String) {
         guard let userId = userId, !postId.isEmpty else { return }
 
-        let comment = Comment(
-            postId: postId,
-            authorUserId: userId,
-            text: text,
-            createdAt: Date()
-        )
-
         Task {
             do {
-                try FirebaseManager.shared.db.collection("comments").addDocument(from: comment)
+                try await postService.addComment(postId: postId, userId: userId, text: text)
                 loadComments()
             } catch {
                 print("❌ Error adding comment: \(error)")

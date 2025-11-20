@@ -91,6 +91,126 @@ class OrganizationService: ObservableObject {
         try await db.collection("memberships").document(id).delete()
     }
 
+    /// 獲取組織的所有成員
+    func fetchOrganizationMembers(organizationId: String) async throws -> [Membership] {
+        let snapshot = try await db.collection("memberships")
+            .whereField("organizationId", isEqualTo: organizationId)
+            .getDocuments()
+
+        return snapshot.documents.compactMap { doc -> Membership? in
+            try? doc.data(as: Membership.self)
+        }
+    }
+
+    /// 變更成員角色
+    func changeMemberRole(membershipId: String, newRole: MembershipRole) async throws {
+        var updates: [String: Any] = [
+            "role": newRole.rawValue,
+            "updatedAt": Date()
+        ]
+
+        try await db.collection("memberships")
+            .document(membershipId)
+            .updateData(updates)
+    }
+
+    /// 轉移組織所有權
+    func transferOwnership(organizationId: String, fromUserId: String, toUserId: String) async throws {
+        // 1. 找到原owner的membership
+        let fromSnapshot = try await db.collection("memberships")
+            .whereField("organizationId", isEqualTo: organizationId)
+            .whereField("userId", isEqualTo: fromUserId)
+            .whereField("role", isEqualTo: MembershipRole.owner.rawValue)
+            .getDocuments()
+
+        guard let fromDoc = fromSnapshot.documents.first else {
+            throw NSError(domain: "OrganizationService", code: -1,
+                         userInfo: [NSLocalizedDescriptionKey: "找不到原所有者"])
+        }
+
+        // 2. 找到目標用戶的membership
+        let toSnapshot = try await db.collection("memberships")
+            .whereField("organizationId", isEqualTo: organizationId)
+            .whereField("userId", isEqualTo: toUserId)
+            .getDocuments()
+
+        guard let toDoc = toSnapshot.documents.first else {
+            throw NSError(domain: "OrganizationService", code: -1,
+                         userInfo: [NSLocalizedDescriptionKey: "目標用戶不是組織成員"])
+        }
+
+        // 3. 使用批次操作同時更新
+        let batch = db.batch()
+
+        // 將原owner降級為admin
+        batch.updateData([
+            "role": MembershipRole.admin.rawValue,
+            "updatedAt": Date()
+        ], forDocument: fromDoc.reference)
+
+        // 將目標用戶升級為owner
+        batch.updateData([
+            "role": MembershipRole.owner.rawValue,
+            "updatedAt": Date()
+        ], forDocument: toDoc.reference)
+
+        try await batch.commit()
+    }
+
+    /// 當成員離開組織時的繼任處理
+    func handleMemberLeave(membership: Membership) async throws {
+        // 如果不是owner離開，直接刪除即可
+        guard membership.role == .owner else {
+            try await deleteMembership(id: membership.id!)
+            return
+        }
+
+        // Owner離開需要處理繼任
+        let members = try await fetchOrganizationMembers(organizationId: membership.organizationId)
+
+        // 找到除了自己之外的所有成員
+        let otherMembers = members.filter { $0.userId != membership.userId }
+
+        if otherMembers.isEmpty {
+            // 如果是最後一個成員，允許離開（組織會變成無主）
+            try await deleteMembership(id: membership.id!)
+            return
+        }
+
+        // 找到最高層級的成員作為繼任者
+        let successor = otherMembers.max { $0.role.hierarchyLevel < $1.role.hierarchyLevel }
+
+        guard let newOwner = successor else {
+            throw NSError(domain: "OrganizationService", code: -1,
+                         userInfo: [NSLocalizedDescriptionKey: "找不到繼任者"])
+        }
+
+        // 轉移所有權
+        try await transferOwnership(
+            organizationId: membership.organizationId,
+            fromUserId: membership.userId,
+            toUserId: newOwner.userId
+        )
+
+        // 刪除原owner的membership
+        try await deleteMembership(id: membership.id!)
+    }
+
+    /// 檢查用戶在組織中的權限
+    func checkPermission(userId: String, organizationId: String, permission: OrgPermission) async throws -> Bool {
+        let snapshot = try await db.collection("memberships")
+            .whereField("userId", isEqualTo: userId)
+            .whereField("organizationId", isEqualTo: organizationId)
+            .getDocuments()
+
+        guard let doc = snapshot.documents.first,
+              let membership = try? doc.data(as: Membership.self) else {
+            return false
+        }
+
+        return membership.hasPermission(permission)
+    }
+
     /// 按类别获取身份（例如：所有学校身份）
     func fetchMembershipsByOrgType(userId: String, orgType: OrgType) async throws -> [MembershipWithOrg] {
         // 先获取所有membership

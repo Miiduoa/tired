@@ -96,6 +96,8 @@ struct FeedPostCard: View {
     let onLike: () -> Void
     let onDelete: () -> Void
 
+    @State private var showingComments = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
@@ -183,12 +185,16 @@ struct FeedPostCard: View {
                     }
                 }
 
-                HStack(spacing: 4) {
-                    Image(systemName: "bubble.right")
-                        .foregroundColor(.secondary)
-                    Text("\(postWithAuthor.commentCount)")
-                        .font(.system(size: 13))
-                        .foregroundColor(.secondary)
+                Button {
+                    showingComments = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bubble.right")
+                            .foregroundColor(.secondary)
+                        Text("\(postWithAuthor.commentCount)")
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                    }
                 }
 
                 Spacer()
@@ -202,6 +208,9 @@ struct FeedPostCard: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.appCardBorder, lineWidth: 1)
         )
+        .sheet(isPresented: $showingComments) {
+            CommentsView(post: postWithAuthor.post)
+        }
     }
 }
 
