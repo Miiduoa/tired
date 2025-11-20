@@ -326,6 +326,12 @@ struct PostCardView: View {
     @State private var showingComments = false
     @State private var reactionCount = 0
     @State private var commentCount = 0
+    @State private var hasUserReacted = false
+
+    private let postService = PostService()
+    private var userId: String? {
+        FirebaseAuth.Auth.auth().currentUser?.uid
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -342,11 +348,11 @@ struct PostCardView: View {
             // Actions
             HStack(spacing: 20) {
                 Button {
-                    // TODO: Implement like functionality
+                    toggleLike()
                 } label: {
-                    Label("\(reactionCount)", systemImage: "heart")
+                    Label("\(reactionCount)", systemImage: hasUserReacted ? "heart.fill" : "heart")
                         .font(.system(size: 13))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(hasUserReacted ? .red : .secondary)
                 }
 
                 Button {
@@ -376,15 +382,18 @@ struct PostCardView: View {
     private func loadCounts() async {
         guard let postId = post.id else { return }
 
-        // Load reaction count
+        // Load reaction count and check user reaction
         do {
-            let reactionSnapshot = try await FirebaseManager.shared.db
-                .collection("postReactions")
-                .whereField("postId", isEqualTo: postId)
-                .getDocuments()
+            let reactionCount = try await postService.getReactionCount(postId: postId)
+            var userReacted = false
+
+            if let userId = userId {
+                userReacted = try await postService.hasUserReacted(postId: postId, userId: userId)
+            }
 
             await MainActor.run {
-                self.reactionCount = reactionSnapshot.documents.count
+                self.reactionCount = reactionCount
+                self.hasUserReacted = userReacted
             }
         } catch {
             print("❌ Error loading reactions: \(error)")
@@ -392,16 +401,35 @@ struct PostCardView: View {
 
         // Load comment count
         do {
-            let commentSnapshot = try await FirebaseManager.shared.db
-                .collection("comments")
-                .whereField("postId", isEqualTo: postId)
-                .getDocuments()
+            let commentCount = try await postService.getCommentCount(postId: postId)
 
             await MainActor.run {
-                self.commentCount = commentSnapshot.documents.count
+                self.commentCount = commentCount
             }
         } catch {
             print("❌ Error loading comments: \(error)")
+        }
+    }
+
+    private func toggleLike() {
+        guard let postId = post.id, let userId = userId else { return }
+
+        Task {
+            do {
+                try await postService.toggleReaction(postId: postId, userId: userId)
+
+                // 更新本地狀態
+                await MainActor.run {
+                    if hasUserReacted {
+                        reactionCount = max(0, reactionCount - 1)
+                    } else {
+                        reactionCount += 1
+                    }
+                    hasUserReacted.toggle()
+                }
+            } catch {
+                print("❌ Error toggling reaction: \(error)")
+            }
         }
     }
 }
