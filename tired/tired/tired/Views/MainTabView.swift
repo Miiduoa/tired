@@ -14,21 +14,21 @@ struct MainTabView: View {
                 .tag(0)
 
             // 動態墻 - 使用 TiredApp/Views/Feed/FeedView.swift
-            TiredApp.FeedView()
+            FeedView()
                 .tabItem {
                     Label("動態", systemImage: "newspaper")
                 }
                 .tag(1)
 
             // 組織管理 - 使用 TiredApp/Views/Organizations/OrganizationsView.swift
-            TiredApp.OrganizationsView()
+            OrganizationsView()
                 .tabItem {
                     Label("身份", systemImage: "building.2")
                 }
                 .tag(2)
 
             // 個人資料 - 使用 TiredApp/Views/Profile/ProfileView.swift
-            TiredApp.ProfileView()
+            ProfileView()
                 .tabItem {
                     Label("我的", systemImage: "person.circle")
                 }

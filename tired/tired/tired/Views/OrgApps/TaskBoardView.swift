@@ -212,7 +212,7 @@ struct CreateOrgTaskView: View {
     private func createTask() {
         isCreating = true
 
-        Task {
+        _Concurrency.Task {
             do {
                 try await viewModel.createOrgTask(
                     title: title,
@@ -284,7 +284,7 @@ class TaskBoardViewModel: ObservableObject {
     private func checkPermissions() {
         guard let userId = userId else { return }
 
-        Task {
+        _Concurrency.Task {
             do {
                 let snapshot = try await FirebaseManager.shared.db
                     .collection("memberships")
@@ -328,7 +328,7 @@ class TaskBoardViewModel: ObservableObject {
     func syncToPersonalTasks(task: Task) {
         guard let userId = userId else { return }
 
-        Task {
+        _Concurrency.Task {
             do {
                 // 創建個人任務副本
                 var personalTask = task

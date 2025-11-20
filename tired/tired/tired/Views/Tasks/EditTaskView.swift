@@ -38,7 +38,7 @@ struct EditTaskView: View {
                         ForEach(TaskCategory.allCases, id: \.self) { category in
                             HStack {
                                 Circle()
-                                    .fill(category.color)
+                                    .fill(Color.forCategory(category))
                                     .frame(width: 12, height: 12)
                                 Text(category.displayName)
                             }
