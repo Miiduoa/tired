@@ -2,13 +2,14 @@ import Foundation
 import Combine
 import FirebaseAuth
 
-/// 任务视图的ViewModel
+/// 任務視圖的ViewModel
 class TasksViewModel: ObservableObject {
     @Published var todayTasks: [Task] = []
     @Published var weekTasks: [Task] = []
     @Published var backlogTasks: [Task] = []
     @Published var isLoading = false
     @Published var selectedCategory: TaskCategory?
+    @Published var sortOption: TaskSortOption = .deadline
 
     private let taskService = TaskService()
     private let autoPlanService = AutoPlanService()
@@ -161,11 +162,49 @@ class TasksViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Filter
+    // MARK: - Filter & Sort
 
     func filteredTasks(_ tasks: [Task]) -> [Task] {
-        guard let category = selectedCategory else { return tasks }
-        return tasks.filter { $0.category == category }
+        var filtered = tasks
+
+        // 篩選分類
+        if let category = selectedCategory {
+            filtered = filtered.filter { $0.category == category }
+        }
+
+        // 排序
+        return sortTasks(filtered)
+    }
+
+    private func sortTasks(_ tasks: [Task]) -> [Task] {
+        switch sortOption {
+        case .deadline:
+            return tasks.sorted { t1, t2 in
+                // 有截止時間的優先，然後按時間排序
+                if let d1 = t1.deadlineAt, let d2 = t2.deadlineAt {
+                    return d1 < d2
+                }
+                if t1.deadlineAt != nil { return true }
+                if t2.deadlineAt != nil { return false }
+                return t1.createdAt < t2.createdAt
+            }
+        case .priority:
+            return tasks.sorted { t1, t2 in
+                if t1.priority != t2.priority {
+                    return t1.priority.rawValue > t2.priority.rawValue
+                }
+                return t1.createdAt < t2.createdAt
+            }
+        case .category:
+            return tasks.sorted { t1, t2 in
+                if t1.category != t2.category {
+                    return t1.category.rawValue < t2.category.rawValue
+                }
+                return t1.createdAt < t2.createdAt
+            }
+        case .created:
+            return tasks.sorted { $0.createdAt > $1.createdAt }
+        }
     }
 
     // MARK: - Week Statistics
@@ -177,6 +216,24 @@ class TasksViewModel: ObservableObject {
         return days.map { day in
             let duration = autoPlanService.calculateDailyDuration(tasks: weekTasks, for: day)
             return (day, duration)
+        }
+    }
+}
+
+// MARK: - Task Sort Option
+
+enum TaskSortOption: String, CaseIterable {
+    case deadline = "截止時間"
+    case priority = "優先級"
+    case category = "分類"
+    case created = "創建時間"
+
+    var icon: String {
+        switch self {
+        case .deadline: return "calendar"
+        case .priority: return "flag.fill"
+        case .category: return "tag.fill"
+        case .created: return "clock.fill"
         }
     }
 }
