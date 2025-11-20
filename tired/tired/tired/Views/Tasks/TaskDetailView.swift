@@ -46,7 +46,7 @@ struct TaskDetailView: View {
                     // 詳細信息
                     VStack(spacing: 0) {
                         // 分類
-                        InfoRow(icon: "tag.fill", iconColor: task.category.color, title: "分類", value: task.category.displayName)
+                        InfoRow(icon: "tag.fill", iconColor: Color(hex: task.category.color), title: "分類", value: task.category.displayName)
 
                         // 優先級
                         InfoRow(icon: "flag.fill", iconColor: priorityColor, title: "優先級", value: task.priority.displayName)
@@ -57,7 +57,7 @@ struct TaskDetailView: View {
                                 icon: "calendar",
                                 iconColor: task.isOverdue ? .red : .blue,
                                 title: "截止時間",
-                                value: deadline.formatLong()
+                                value: deadline.formatDateTime()
                             )
 
                             if task.isOverdue && !task.isDone {
@@ -90,7 +90,7 @@ struct TaskDetailView: View {
                                 icon: "calendar.badge.clock",
                                 iconColor: .orange,
                                 title: "排程日期",
-                                value: planned.formatLong()
+                                value: planned.formatDateTime()
                             )
 
                             if task.isDateLocked {
@@ -135,7 +135,7 @@ struct TaskDetailView: View {
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                 Spacer()
-                                Text(task.createdAt.formatLong())
+                                Text(task.createdAt.formatDateTime())
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -145,7 +145,7 @@ struct TaskDetailView: View {
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                 Spacer()
-                                Text(task.updatedAt.formatLong())
+                                Text(task.updatedAt.formatDateTime())
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -191,8 +191,7 @@ struct TaskDetailView: View {
         switch task.priority {
         case .low: return .blue
         case .medium: return .yellow
-        case .high: return .orange
-        case .urgent: return .red
+        case .high: return .red
         }
     }
 }
@@ -230,7 +229,7 @@ struct InfoRow: View {
 // MARK: - Date Extension
 
 extension Date {
-    func formatLong() -> String {
+    func formatDateTime() -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_TW")
         formatter.dateFormat = "yyyy年M月d日 HH:mm"

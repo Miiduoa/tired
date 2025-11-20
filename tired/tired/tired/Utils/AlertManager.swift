@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 
 /// Alert 管理器
 class AlertManager: ObservableObject {

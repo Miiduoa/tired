@@ -149,7 +149,7 @@ struct MemberWithProfile: Identifiable {
     var id: String? { membership.id }
 
     var displayName: String {
-        userProfile?.displayName ?? "未知用戶"
+        userProfile?.name ?? "未知用戶"
     }
 
     var avatarUrl: String? {

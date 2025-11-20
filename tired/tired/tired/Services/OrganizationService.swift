@@ -104,7 +104,7 @@ class OrganizationService: ObservableObject {
 
     /// 變更成員角色
     func changeMemberRole(membershipId: String, newRole: MembershipRole) async throws {
-        var updates: [String: Any] = [
+        let updates: [String: Any] = [
             "role": newRole.rawValue,
             "updatedAt": Date()
         ]
