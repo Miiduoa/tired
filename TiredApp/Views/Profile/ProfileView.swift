@@ -286,10 +286,143 @@ struct MyTasksStatsView: View {
 
 @available(iOS 17.0, *)
 struct MyOrganizationsListView: View {
+    @StateObject private var viewModel = OrganizationsViewModel()
+
     var body: some View {
-        Text("我的組織列表")
-            .navigationTitle("我的組織")
-            .navigationBarTitleDisplayMode(.inline)
+        Group {
+            if viewModel.isLoading {
+                VStack {
+                    Spacer()
+                    ProgressView("加載中...")
+                    Spacer()
+                }
+            } else if viewModel.myMemberships.isEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: "building.2.crop.circle")
+                        .font(.system(size: 60))
+                        .foregroundColor(.secondary)
+                    Text("尚未加入任何組織")
+                        .font(.system(size: 18, weight: .semibold))
+                    Text("前往組織頁面搜索並加入組織")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding()
+            } else {
+                List {
+                    ForEach(viewModel.myMemberships) { membershipWithOrg in
+                        if let org = membershipWithOrg.organization {
+                            NavigationLink(destination: OrganizationDetailView(organization: org)) {
+                                MyOrgListRow(
+                                    organization: org,
+                                    membership: membershipWithOrg.membership
+                                )
+                            }
+                        }
+                    }
+                }
+                .refreshable {
+                    viewModel.loadUserOrganizations()
+                }
+            }
+        }
+        .navigationTitle("我的組織")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+@available(iOS 17.0, *)
+struct MyOrgListRow: View {
+    let organization: Organization
+    let membership: Membership
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Avatar
+            if let avatarUrl = organization.avatarUrl {
+                AsyncImage(url: URL(string: avatarUrl)) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    organizationInitials
+                }
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                organizationInitials
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(organization.name)
+                        .font(.system(size: 15, weight: .medium))
+
+                    if organization.isVerified {
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundColor(.blue)
+                            .font(.system(size: 12))
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    // 角色標籤
+                    Text(membership.role.displayName)
+                        .font(.system(size: 11))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(roleColor.opacity(0.15))
+                        .foregroundColor(roleColor)
+                        .cornerRadius(4)
+
+                    Text(organization.type.displayName)
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+
+                    if let title = membership.title {
+                        Text("·")
+                            .foregroundColor(.secondary)
+                        Text(title)
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var organizationInitials: some View {
+        RoundedRectangle(cornerRadius: 8)
+            .fill(colorForOrgType(organization.type))
+            .frame(width: 44, height: 44)
+            .overlay(
+                Text(String(organization.name.prefix(2)).uppercased())
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white)
+            )
+    }
+
+    private var roleColor: Color {
+        switch membership.role {
+        case .owner: return .purple
+        case .admin: return .orange
+        case .staff: return .blue
+        case .student: return .green
+        case .member: return .gray
+        }
+    }
+
+    private func colorForOrgType(_ type: OrgType) -> Color {
+        switch type {
+        case .school: return .blue
+        case .department: return .cyan
+        case .club: return .purple
+        case .company: return .orange
+        case .project: return .green
+        case .other: return .gray
+        }
     }
 }
 
