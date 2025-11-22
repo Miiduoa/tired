@@ -485,7 +485,7 @@ struct AppInstanceCard: View {
         case .eventSignup:
             EventSignupView(appInstance: app, organizationId: organizationId)
         case .resourceList:
-            Text("資源列表（開發中）")
+            ResourceListView(appInstance: app, organizationId: organizationId)
         }
     }
 
