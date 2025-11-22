@@ -10,9 +10,19 @@ struct UserProfile: Codable, Identifiable {
     var email: String
     var avatarUrl: String?
 
-    // Settings
+    // Time Management Settings
     var timezone: String?
     var weeklyCapacityMinutes: Int?
+    var dailyCapacityMinutes: Int?
+
+    // Notification Settings
+    var notificationsEnabled: Bool?
+    var taskReminders: Bool?
+    var eventReminders: Bool?
+    var organizationUpdates: Bool?
+
+    // Appearance Settings
+    var theme: String?  // "auto", "light", "dark"
 
     var createdAt: Date
     var updatedAt: Date
@@ -24,6 +34,12 @@ struct UserProfile: Codable, Identifiable {
         case avatarUrl
         case timezone
         case weeklyCapacityMinutes
+        case dailyCapacityMinutes
+        case notificationsEnabled
+        case taskReminders
+        case eventReminders
+        case organizationUpdates
+        case theme
         case createdAt
         case updatedAt
     }
@@ -35,6 +51,12 @@ struct UserProfile: Codable, Identifiable {
         avatarUrl: String? = nil,
         timezone: String? = nil,
         weeklyCapacityMinutes: Int? = nil,
+        dailyCapacityMinutes: Int? = nil,
+        notificationsEnabled: Bool? = true,
+        taskReminders: Bool? = true,
+        eventReminders: Bool? = true,
+        organizationUpdates: Bool? = true,
+        theme: String? = "auto",
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -44,6 +66,12 @@ struct UserProfile: Codable, Identifiable {
         self.avatarUrl = avatarUrl
         self.timezone = timezone
         self.weeklyCapacityMinutes = weeklyCapacityMinutes
+        self.dailyCapacityMinutes = dailyCapacityMinutes
+        self.notificationsEnabled = notificationsEnabled
+        self.taskReminders = taskReminders
+        self.eventReminders = eventReminders
+        self.organizationUpdates = organizationUpdates
+        self.theme = theme
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

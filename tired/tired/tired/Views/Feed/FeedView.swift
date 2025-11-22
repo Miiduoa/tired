@@ -1,9 +1,11 @@
 import SwiftUI
+import Combine
 
 @available(iOS 17.0, *)
 struct FeedView: View {
     @StateObject private var viewModel = FeedViewModel()
     @State private var showingCreatePost = false
+    @State private var selectedPostForComments: PostWithAuthor?
 
     var body: some View {
         NavigationView {
@@ -19,6 +21,9 @@ struct FeedView: View {
                                     _Concurrency.Task {
                                         await viewModel.toggleReaction(post: postWithAuthor)
                                     }
+                                },
+                                onComment: {
+                                    selectedPostForComments = postWithAuthor
                                 },
                                 onDelete: {
                                     _Concurrency.Task {
@@ -51,6 +56,9 @@ struct FeedView: View {
             }
             .sheet(isPresented: $showingCreatePost) {
                 CreatePostView(viewModel: viewModel)
+            }
+            .sheet(item: $selectedPostForComments) { postWithAuthor in
+                CommentsView(postWithAuthor: postWithAuthor, feedViewModel: viewModel)
             }
             .refreshable {
                 viewModel.refresh()
@@ -94,6 +102,7 @@ struct FeedView: View {
 struct FeedPostCard: View {
     let postWithAuthor: PostWithAuthor
     let onLike: () -> Void
+    let onComment: () -> Void
     let onDelete: () -> Void
 
     var body: some View {
@@ -183,12 +192,14 @@ struct FeedPostCard: View {
                     }
                 }
 
-                HStack(spacing: 4) {
-                    Image(systemName: "bubble.right")
-                        .foregroundColor(.secondary)
-                    Text("\(postWithAuthor.commentCount)")
-                        .font(.system(size: 13))
-                        .foregroundColor(.secondary)
+                Button(action: onComment) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bubble.right")
+                            .foregroundColor(.secondary)
+                        Text("\(postWithAuthor.commentCount)")
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                    }
                 }
 
                 Spacer()
@@ -280,6 +291,299 @@ struct CreatePostView: View {
                     isCreating = false
                 }
             }
+        }
+    }
+}
+
+// MARK: - Comments View
+
+@available(iOS 17.0, *)
+struct CommentsView: View {
+    let postWithAuthor: PostWithAuthor
+    @ObservedObject var feedViewModel: FeedViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    @StateObject private var viewModel: CommentsViewModel
+    @State private var newCommentText = ""
+    @FocusState private var isInputFocused: Bool
+
+    init(postWithAuthor: PostWithAuthor, feedViewModel: FeedViewModel) {
+        self.postWithAuthor = postWithAuthor
+        self.feedViewModel = feedViewModel
+        self._viewModel = StateObject(wrappedValue: CommentsViewModel(postId: postWithAuthor.post.id ?? ""))
+    }
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Comments list
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        // Original post preview
+                        postPreview
+                            .padding(.horizontal)
+                            .padding(.top)
+
+                        Divider()
+                            .padding(.vertical, 8)
+
+                        // Comments
+                        if viewModel.comments.isEmpty {
+                            emptyState
+                        } else {
+                            ForEach(viewModel.comments) { commentWithAuthor in
+                                CommentRow(
+                                    comment: commentWithAuthor,
+                                    onDelete: {
+                                        _Concurrency.Task {
+                                            await viewModel.deleteComment(commentWithAuthor.comment)
+                                        }
+                                    }
+                                )
+                                .padding(.horizontal)
+                            }
+                        }
+                    }
+                    .padding(.bottom, 80)
+                }
+
+                // Input bar
+                inputBar
+            }
+            .navigationTitle("評論")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("關閉") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private var postPreview: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(Color.blue.opacity(0.2))
+                    .frame(width: 32, height: 32)
+                    .overlay(
+                        Image(systemName: "person.fill")
+                            .foregroundColor(.blue)
+                            .font(.system(size: 14))
+                    )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    if let org = postWithAuthor.organization {
+                        Text(org.name)
+                            .font(.system(size: 13, weight: .semibold))
+                    } else if let author = postWithAuthor.author {
+                        Text(author.name)
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    Text(postWithAuthor.post.createdAt.formatShort())
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+            }
+
+            Text(postWithAuthor.post.contentText)
+                .font(.system(size: 14))
+                .foregroundColor(.secondary)
+                .lineLimit(3)
+        }
+        .padding()
+        .background(Color.appSecondaryBackground)
+        .cornerRadius(12)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 40))
+                .foregroundColor(.secondary)
+
+            Text("還沒有評論")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.secondary)
+
+            Text("成為第一個評論的人吧！")
+                .font(.system(size: 14))
+                .foregroundColor(.secondary)
+        }
+        .padding(.vertical, 40)
+    }
+
+    private var inputBar: some View {
+        VStack(spacing: 0) {
+            Divider()
+            HStack(spacing: 12) {
+                TextField("寫下你的評論...", text: $newCommentText, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...4)
+                    .focused($isInputFocused)
+
+                Button {
+                    sendComment()
+                } label: {
+                    Image(systemName: "paperplane.fill")
+                        .foregroundColor(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary : .blue)
+                }
+                .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isSending)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color.appBackground)
+        }
+    }
+
+    private func sendComment() {
+        let text = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+
+        _Concurrency.Task {
+            await viewModel.addComment(text: text)
+            await MainActor.run {
+                newCommentText = ""
+                isInputFocused = false
+                // Update comment count in feed
+                feedViewModel.refresh()
+            }
+        }
+    }
+}
+
+// MARK: - Comment Row
+
+@available(iOS 17.0, *)
+struct CommentRow: View {
+    let comment: CommentWithAuthor
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            // Avatar
+            Circle()
+                .fill(Color.purple.opacity(0.2))
+                .frame(width: 36, height: 36)
+                .overlay(
+                    Text(String(comment.author?.name.prefix(1) ?? "?").uppercased())
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.purple)
+                )
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(comment.author?.name ?? "用戶")
+                        .font(.system(size: 13, weight: .semibold))
+
+                    Spacer()
+
+                    Text(comment.comment.createdAt.formatShort())
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+
+                Text(comment.comment.contentText)
+                    .font(.system(size: 14))
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding()
+        .background(Color.appBackground)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.appCardBorder, lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Comment With Author
+
+struct CommentWithAuthor: Identifiable {
+    let comment: Comment
+    let author: UserProfile?
+
+    var id: String? { comment.id }
+}
+
+// MARK: - Comments ViewModel
+
+import FirebaseAuth
+
+class CommentsViewModel: ObservableObject {
+    @Published var comments: [CommentWithAuthor] = []
+    @Published var isSending = false
+
+    private let postId: String
+    private let postService = PostService()
+    private let userService = UserService()
+    private var cancellables = Set<AnyCancellable>()
+
+    private var userId: String? {
+        Auth.auth().currentUser?.uid
+    }
+
+    init(postId: String) {
+        self.postId = postId
+        setupSubscriptions()
+    }
+
+    private func setupSubscriptions() {
+        postService.fetchComments(postId: postId)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { _ in },
+                receiveValue: { [weak self] comments in
+                    _Concurrency.Task {
+                        await self?.enrichComments(comments)
+                    }
+                }
+            )
+            .store(in: &cancellables)
+    }
+
+    private func enrichComments(_ comments: [Comment]) async {
+        var enriched: [CommentWithAuthor] = []
+
+        for comment in comments {
+            let author = try? await userService.fetchUserProfile(userId: comment.authorUserId)
+            enriched.append(CommentWithAuthor(comment: comment, author: author))
+        }
+
+        await MainActor.run {
+            self.comments = enriched
+        }
+    }
+
+    func addComment(text: String) async {
+        guard let userId = userId else { return }
+
+        await MainActor.run {
+            isSending = true
+        }
+
+        do {
+            try await postService.addComment(postId: postId, userId: userId, text: text)
+        } catch {
+            print("❌ Error adding comment: \(error)")
+        }
+
+        await MainActor.run {
+            isSending = false
+        }
+    }
+
+    func deleteComment(_ comment: Comment) async {
+        guard let commentId = comment.id else { return }
+
+        do {
+            try await postService.deleteComment(id: commentId)
+        } catch {
+            print("❌ Error deleting comment: \(error)")
         }
     }
 }
