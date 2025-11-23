@@ -10,6 +10,8 @@ struct OrganizationDetailView: View {
 
     @StateObject private var viewModel: OrganizationDetailViewModel
     @State private var selectedTab: DetailTab = .overview
+    @State private var showingManageApps = false
+    @State private var showingMembershipRequests = false
 
     enum DetailTab: String, CaseIterable {
         case overview = "簡介"
@@ -100,7 +102,7 @@ struct OrganizationDetailView: View {
                 }
 
                 // Action buttons
-                HStack(spacing: 12) {
+                VStack(spacing: 4) {
                     if viewModel.isMember {
                         Button {
                             viewModel.leaveOrganization()
@@ -115,16 +117,24 @@ struct OrganizationDetailView: View {
                         }
                     } else {
                         Button {
-                            viewModel.joinOrganization()
+                            viewModel.requestToJoinOrganization()
                         } label: {
-                            Text("加入組織")
+                            Text(viewModel.isRequestPending ? "申請已送出" : "申請加入")
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 10)
-                                .background(Color.blue)
+                                .background(viewModel.isRequestPending ? Color.gray : Color.blue)
                                 .cornerRadius(8)
                         }
+                        .disabled(viewModel.isRequestPending)
+                    }
+
+                    if let statusMessage = viewModel.requestStatusMessage {
+                        Text(statusMessage)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.top, 4)
                     }
                 }
                 .padding()
@@ -156,6 +166,33 @@ struct OrganizationDetailView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                HStack {
+                    if viewModel.currentMembership?.hasPermission(.manageMembers) == true {
+                        Button {
+                            showingMembershipRequests = true
+                        } label: {
+                            Image(systemName: "person.badge.plus")
+                        }
+                    }
+
+                    if viewModel.currentMembership?.hasPermission(.manageApps) == true {
+                        Button {
+                            showingManageApps = true
+                        } label: {
+                            Image(systemName: "slider.horizontal.3")
+                        }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingManageApps) {
+            ManageAppsView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showingMembershipRequests) {
+            MembershipRequestsView(organizationId: organization.id ?? "")
+        }
     }
 
     private var avatarPlaceholder: some View {
@@ -385,137 +422,6 @@ struct AppInstanceCard: View {
         case .taskBoard: return "查看和管理組織任務"
         case .eventSignup: return "查看活動並報名"
         case .resourceList: return "瀏覽共享資源"
-        }
-    }
-}
-
-// MARK: - Organization Detail ViewModel
-
-class OrganizationDetailViewModel: ObservableObject {
-    @Published var posts: [Post] = []
-    @Published var apps: [OrgAppInstance] = []
-    @Published var currentMembership: Membership?
-    @Published var isMember = false
-
-    let organization: Organization
-    private let postService = PostService()
-    private let organizationService = OrganizationService()
-    private var cancellables = Set<AnyCancellable>()
-
-    private var userId: String? {
-        FirebaseAuth.Auth.auth().currentUser?.uid
-    }
-
-    init(organization: Organization) {
-        self.organization = organization
-        setupSubscriptions()
-        checkMembership()
-    }
-
-    private func setupSubscriptions() {
-        guard let orgId = organization.id else { return }
-
-        // 訂閱組織貼文
-        postService.fetchOrganizationPosts(organizationId: orgId)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { _ in },
-                receiveValue: { [weak self] posts in
-                    self?.posts = posts
-                }
-            )
-            .store(in: &cancellables)
-
-        // 獲取小應用
-        _Concurrency.Task {
-            await fetchApps()
-        }
-    }
-
-    private func fetchApps() async {
-        guard let orgId = organization.id else { return }
-
-        do {
-            let snapshot = try await FirebaseManager.shared.db
-                .collection("orgAppInstances")
-                .whereField("organizationId", isEqualTo: orgId)
-                .whereField("isEnabled", isEqualTo: true)
-                .getDocuments()
-
-            let apps = snapshot.documents.compactMap { doc -> OrgAppInstance? in
-                try? doc.data(as: OrgAppInstance.self)
-            }
-
-            await MainActor.run {
-                self.apps = apps
-            }
-        } catch {
-            print("❌ Error fetching apps: \(error)")
-        }
-    }
-
-    private func checkMembership() {
-        guard let userId = userId, let orgId = organization.id else { return }
-
-        _Concurrency.Task {
-            do {
-                let snapshot = try await FirebaseManager.shared.db
-                    .collection("memberships")
-                    .whereField("userId", isEqualTo: userId)
-                    .whereField("organizationId", isEqualTo: orgId)
-                    .getDocuments()
-
-                if let doc = snapshot.documents.first,
-                   let membership = try? doc.data(as: Membership.self) {
-                    await MainActor.run {
-                        self.currentMembership = membership
-                        self.isMember = true
-                    }
-                }
-            } catch {
-                print("❌ Error checking membership: \(error)")
-            }
-        }
-    }
-
-    func joinOrganization() {
-        guard let userId = userId, let orgId = organization.id else { return }
-
-        _Concurrency.Task {
-            do {
-                let membership = Membership(
-                    userId: userId,
-                    organizationId: orgId,
-                    role: .member
-                )
-
-                try await organizationService.createMembership(membership)
-
-                await MainActor.run {
-                    self.isMember = true
-                }
-
-                checkMembership()
-            } catch {
-                print("❌ Error joining organization: \(error)")
-            }
-        }
-    }
-
-    func leaveOrganization() {
-        guard let membershipId = currentMembership?.id else { return }
-
-        _Concurrency.Task {
-            do {
-                try await organizationService.deleteMembership(id: membershipId)
-
-                await MainActor.run {
-                    self.isMember = false
-                    self.currentMembership = nil
-                }
-            } catch {
-                print("❌ Error leaving organization: \(error)")
-            }
         }
     }
 }

@@ -9,6 +9,7 @@ struct UserProfile: Codable, Identifiable {
     var name: String
     var email: String
     var avatarUrl: String?
+    var fcmToken: String? // For push notifications
 
     // Time Management Settings
     var timezone: String?
@@ -32,6 +33,7 @@ struct UserProfile: Codable, Identifiable {
         case name
         case email
         case avatarUrl
+        case fcmToken
         case timezone
         case weeklyCapacityMinutes
         case dailyCapacityMinutes
@@ -49,6 +51,7 @@ struct UserProfile: Codable, Identifiable {
         name: String,
         email: String,
         avatarUrl: String? = nil,
+        fcmToken: String? = nil,
         timezone: String? = nil,
         weeklyCapacityMinutes: Int? = nil,
         dailyCapacityMinutes: Int? = nil,
@@ -64,6 +67,7 @@ struct UserProfile: Codable, Identifiable {
         self.name = name
         self.email = email
         self.avatarUrl = avatarUrl
+        self.fcmToken = fcmToken
         self.timezone = timezone
         self.weeklyCapacityMinutes = weeklyCapacityMinutes
         self.dailyCapacityMinutes = dailyCapacityMinutes

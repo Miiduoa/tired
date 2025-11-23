@@ -4,6 +4,9 @@ import GoogleSignIn
 
 @main
 struct TiredApp: App {
+    // connect app delegate
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    
     @StateObject private var authService = AuthService()
 
     init() {

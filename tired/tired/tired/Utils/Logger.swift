@@ -1,5 +1,6 @@
 import Foundation
 import os.log
+import Combine
 
 /// 統一日誌管理器
 /// 使用 Apple 的 os.log 框架進行日誌記錄

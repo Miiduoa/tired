@@ -12,6 +12,7 @@ class FeedViewModel: ObservableObject {
 
     private let postService = PostService()
     private let userService = UserService()
+    private let organizationService = OrganizationService()
     private var cancellables = Set<AnyCancellable>()
 
     private var userId: String? {
@@ -44,42 +45,64 @@ class FeedViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
-    /// 豐富貼文信息（作者、組織、反應數等）
+    /// 豐富貼文信息（作者、組織、反應數等）- 優化版
     private func enrichPosts(_ posts: [Post]) async {
-        var enrichedPosts: [PostWithAuthor] = []
+        guard !posts.isEmpty else {
+            await MainActor.run { self.posts = [] }
+            return
+        }
+        
+        // 1. 收集所有需要的 IDs
+        let authorIds = posts.map { $0.authorUserId }
+        let orgIds = posts.compactMap { $0.organizationId }
 
-        for post in posts {
-            // 獲取作者信息
-            let author = try? await userService.fetchUserProfile(userId: post.authorUserId)
-
-            // 獲取組織信息
-            var organization: Organization? = nil
-            if let orgId = post.organizationId {
-                let doc = try? await FirebaseManager.shared.db
-                    .collection("organizations")
-                    .document(orgId)
-                    .getDocument()
-                organization = try? doc?.data(as: Organization.self)
+        // 2. 一次性批量獲取用戶和組織資料
+        async let usersTask = userService.fetchUserProfiles(userIds: Array(Set(authorIds)))
+        async let orgsTask = organizationService.fetchOrganizations(ids: Array(Set(orgIds)))
+        
+        let (users, orgs) = await (try? usersTask, try? orgsTask)
+        
+        // 3. 異步處理每個貼文的附加信息
+        var enrichedPosts: [PostWithAuthor] = await withTaskGroup(of: PostWithAuthor.self, returning: [PostWithAuthor].self) { group in
+            for post in posts {
+                group.addTask {
+                    let author = users?[post.authorUserId]
+                    let organization = post.organizationId.flatMap { orgs?[$0] }
+                    
+                    // 這些仍然是 N+1，但至少在單個貼文的上下文中並行執行
+                    async let reactionCount = (try? await self.postService.getReactionCount(postId: post.id ?? "")) ?? 0
+                    async let commentCount = (try? await self.postService.getCommentCount(postId: post.id ?? "")) ?? 0
+                    async let hasUserReacted = (try? await self.postService.hasUserReacted(postId: post.id ?? "", userId: self.userId ?? "")) ?? false
+                    
+                    let (reactions, comments, reacted) = await (reactionCount, commentCount, hasUserReacted)
+                    
+                    return PostWithAuthor(
+                        post: post,
+                        author: author,
+                        organization: organization,
+                        reactionCount: reactions,
+                        commentCount: comments,
+                        hasUserReacted: reacted
+                    )
+                }
             }
-
-            // 獲取反應數和評論數
-            let reactionCount = (try? await postService.getReactionCount(postId: post.id ?? "")) ?? 0
-            let commentCount = (try? await postService.getCommentCount(postId: post.id ?? "")) ?? 0
-
-            // 檢查當前用戶是否已點讚
-            var hasUserReacted = false
-            if let postId = post.id, let userId = userId {
-                hasUserReacted = (try? await postService.hasUserReacted(postId: postId, userId: userId)) ?? false
+            
+            var results: [PostWithAuthor] = []
+            for await enrichedPost in group {
+                results.append(enrichedPost)
             }
-
-            enrichedPosts.append(PostWithAuthor(
-                post: post,
-                author: author,
-                organization: organization,
-                reactionCount: reactionCount,
-                commentCount: commentCount,
-                hasUserReacted: hasUserReacted
-            ))
+            return results
+        }
+        
+        // 4. 按原始順序排序
+        let originalOrder = posts.compactMap { $0.id }
+        enrichedPosts.sort {
+            guard let firstId = $0.post.id, let secondId = $1.post.id,
+                  let firstIndex = originalOrder.firstIndex(of: firstId),
+                  let secondIndex = originalOrder.firstIndex(of: secondId) else {
+                return false
+            }
+            return firstIndex < secondIndex
         }
 
         await MainActor.run {

@@ -144,4 +144,16 @@ class UserService: ObservableObject {
         try await db.collection("users").document(userId).updateData(updates)
         clearCache(for: userId)
     }
+
+    /// 更新 FCM Token
+    func updateFCMToken(userId: String, token: String) async throws {
+        let updates: [String: Any] = [
+            "fcmToken": token,
+            "updatedAt": FieldValue.serverTimestamp()
+        ]
+
+        try await db.collection("users").document(userId).updateData(updates)
+        
+        // 不需要清除緩存，因為 token 通常在背景更新，不影響當前顯示的 UserProfile
+    }
 }

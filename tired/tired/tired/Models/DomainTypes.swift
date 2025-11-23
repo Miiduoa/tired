@@ -161,7 +161,7 @@ enum TaskSourceType: String, Codable {
     case eventSignup = "event_signup"
 }
 
-enum OrgAppTemplateKey: String, Codable {
+enum OrgAppTemplateKey: String, Codable, CaseIterable {
     case taskBoard = "task_board"
     case eventSignup = "event_signup"
     case resourceList = "resource_list"

@@ -6,8 +6,53 @@ import Combine
 /// 组织和身份管理服务
 class OrganizationService: ObservableObject {
     private let db = FirebaseManager.shared.db
+    
+    // 緩存組織資料
+    private var organizationCache: [String: Organization] = [:]
 
     // MARK: - Organizations
+    
+    /// 批次獲取組織資料
+    func fetchOrganizations(ids: [String]) async throws -> [String: Organization] {
+        var orgs: [String: Organization] = [:]
+        let uniqueIds = Array(Set(ids.filter { !$0.isEmpty }))
+        
+        // 過濾掉已緩存的
+        let uncachedIds = uniqueIds.filter { organizationCache[$0] == nil }
+        
+        // 返回緩存的數據
+        for orgId in uniqueIds {
+            if let cached = organizationCache[orgId] {
+                orgs[orgId] = cached
+            }
+        }
+        
+        // 如果沒有需要獲取的，直接返回
+        if uncachedIds.isEmpty {
+            return orgs
+        }
+        
+        // Firestore 限制 in 查詢最多 30 個元素，需要分批
+        let batchSize = 30
+        for i in stride(from: 0, to: uncachedIds.count, by: batchSize) {
+            let end = min(i + batchSize, uncachedIds.count)
+            let batch = Array(uncachedIds[i..<end])
+            
+            let snapshot = try await db.collection("organizations")
+                .whereField(FieldPath.documentID(), in: batch)
+                .getDocuments()
+            
+            for doc in snapshot.documents {
+                if var org = try? doc.data(as: Organization.self) {
+                    org.id = doc.documentID
+                    orgs[doc.documentID] = org
+                    organizationCache[doc.documentID] = org
+                }
+            }
+        }
+        
+        return orgs
+    }
 
     /// 获取用户的所有组织（通过Membership）
     func fetchUserOrganizations(userId: String) -> AnyPublisher<[MembershipWithOrg], Error> {
@@ -155,6 +200,73 @@ class OrganizationService: ObservableObject {
         ], forDocument: toDoc.reference)
 
         try await batch.commit()
+    }
+
+    // MARK: - Membership Requests
+
+    /// 創建成員資格申請/邀請
+    func createMembershipRequest(organizationId: String, userId: String, userName: String, type: MembershipRequest.RequestType) async throws {
+        // 先檢查是否已經有正在等待的申請
+        let existingRequest = try await db.collection("membershipRequests")
+            .whereField("organizationId", isEqualTo: organizationId)
+            .whereField("userId", isEqualTo: userId)
+            .whereField("status", isEqualTo: MembershipRequest.RequestStatus.pending.rawValue)
+            .getDocuments()
+
+        guard existingRequest.documents.isEmpty else {
+            // 如果已有正在等待的申請，則不重複建立
+            print("ℹ️ User already has a pending request for this organization.")
+            return
+        }
+        
+        let request = MembershipRequest(
+            organizationId: organizationId,
+            userId: userId,
+            userName: userName,
+            status: .pending,
+            type: type,
+            createdAt: Timestamp()
+        )
+        
+        _ = try db.collection("membershipRequests").addDocument(from: request)
+    }
+
+    /// 批准成員資格申請
+    func approveMembershipRequest(request: MembershipRequest) async throws {
+        guard let requestId = request.id else {
+            throw NSError(domain: "OrganizationService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Request ID is missing"])
+        }
+
+        let batch = db.batch()
+
+        // 1. 更新申請單狀態
+        let requestRef = db.collection("membershipRequests").document(requestId)
+        batch.updateData(["status": MembershipRequest.RequestStatus.approved.rawValue], forDocument: requestRef)
+
+        // 2. 創建新的成員資格
+        let newMembership = Membership(
+            userId: request.userId,
+            organizationId: request.organizationId,
+            role: .member, // 預設為成員，管理員後續可以再調整
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        let membershipRef = db.collection("memberships").document()
+        try batch.setData(from: newMembership, forDocument: membershipRef)
+        
+        // 3. 提交批次操作
+        try await batch.commit()
+    }
+
+    /// 拒絕成員資格申請
+    func rejectMembershipRequest(request: MembershipRequest) async throws {
+        guard let requestId = request.id else {
+            throw NSError(domain: "OrganizationService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Request ID is missing"])
+        }
+        
+        try await db.collection("membershipRequests").document(requestId).updateData([
+            "status": MembershipRequest.RequestStatus.rejected.rawValue
+        ])
     }
 
     /// 當成員離開組織時的繼任處理

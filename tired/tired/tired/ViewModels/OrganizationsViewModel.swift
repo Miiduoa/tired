@@ -12,6 +12,7 @@ class OrganizationsViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     private let organizationService = OrganizationService()
+    private let algoliaService: AlgoliaService? = AlgoliaService()
     private var cancellables = Set<AnyCancellable>()
 
     private var userId: String? {
@@ -83,7 +84,7 @@ class OrganizationsViewModel: ObservableObject {
     }
 
     /// 加入組織
-    func joinOrganization(organizationId: String, role: MembershipRole = .member) async throws {
+    private func joinOrganization(organizationId: String, role: MembershipRole = .member) async throws {
         guard let userId = userId else {
             throw NSError(domain: "OrganizationsViewModel", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])
         }
@@ -102,50 +103,49 @@ class OrganizationsViewModel: ObservableObject {
         try await organizationService.deleteMembership(id: membershipId)
     }
 
-    /// 搜索組織
+    /// 搜索組織 (使用 Algolia)
     func searchOrganizations(query: String) async {
         guard !query.isEmpty else {
-            await MainActor.run {
-                allOrganizations = []
-            }
+            await MainActor.run { allOrganizations = [] }
+            return
+        }
+
+        guard let algoliaService = algoliaService else {
+            await MainActor.run { errorMessage = "搜尋服務未設定" }
             return
         }
 
         await MainActor.run {
             isLoading = true
+            errorMessage = nil
         }
 
         defer {
-            DispatchQueue.main.async { [weak self] in
-                self?.isLoading = false
-            }
+            DispatchQueue.main.async { [weak self] in self?.isLoading = false }
         }
 
         do {
-            // Firestore 不支持全文搜索，我們使用前綴匹配
-            // 搜索名稱以查詢開頭的組織（區分大小寫）
-            let queryLower = query.lowercased()
+            // 1. 使用 Algolia 取得組織 ID
+            let orgIDs = try await algoliaService.search(query: query)
 
-            // 獲取所有組織然後在客戶端過濾
-            // 注意：在生產環境中應該使用 Algolia 或 Elasticsearch 等全文搜索服務
-            let snapshot = try await FirebaseManager.shared.db
-                .collection("organizations")
-                .limit(to: 50)
-                .getDocuments()
-
-            let organizations = snapshot.documents.compactMap { doc -> Organization? in
-                try? doc.data(as: Organization.self)
-            }.filter { org in
-                org.name.lowercased().contains(queryLower)
+            if orgIDs.isEmpty {
+                await MainActor.run { self.allOrganizations = [] }
+                return
             }
 
+            // 2. 使用 OrganizationService 的快取機制批次獲取組織完整資料
+            let orgsDict = try await organizationService.fetchOrganizations(ids: orgIDs)
+            
+            // 維持 Algolia 回傳的排序
+            let sortedOrgs = orgIDs.compactMap { orgsDict[$0] }
+
             await MainActor.run {
-                self.allOrganizations = organizations
+                self.allOrganizations = sortedOrgs
             }
         } catch {
-            print("❌ Error searching organizations: \(error)")
+            print("❌ Error searching organizations with Algolia: \(error)")
             await MainActor.run {
-                self.errorMessage = "搜索失敗：\(error.localizedDescription)"
+                self.errorMessage = "搜尋失敗：\(error.localizedDescription)"
             }
         }
     }
