@@ -147,4 +147,37 @@ class PostService: ObservableObject {
             .getDocuments()
         return snapshot.documents.count
     }
+
+    /// 獲取貼文的所有評論
+    func fetchComments(postId: String) -> AnyPublisher<[Comment], Error> {
+        let subject = PassthroughSubject<[Comment], Error>()
+
+        db.collection("comments")
+            .whereField("postId", isEqualTo: postId)
+            .order(by: "createdAt", descending: false)
+            .addSnapshotListener { snapshot, error in
+                if let error = error {
+                    subject.send(completion: .failure(error))
+                    return
+                }
+
+                guard let documents = snapshot?.documents else {
+                    subject.send([])
+                    return
+                }
+
+                let comments = documents.compactMap { doc -> Comment? in
+                    try? doc.data(as: Comment.self)
+                }
+
+                subject.send(comments)
+            }
+
+        return subject.eraseToAnyPublisher()
+    }
+
+    /// 刪除評論
+    func deleteComment(id: String) async throws {
+        try await db.collection("comments").document(id).delete()
+    }
 }

@@ -84,4 +84,64 @@ class UserService: ObservableObject {
     func clearCache(for userId: String) {
         userProfileCache.removeValue(forKey: userId)
     }
+
+    // MARK: - Update Settings
+
+    /// 更新時間管理設定
+    func updateTimeManagementSettings(userId: String, weeklyCapacityMinutes: Int, dailyCapacityMinutes: Int) async throws {
+        let updates: [String: Any] = [
+            "weeklyCapacityMinutes": weeklyCapacityMinutes,
+            "dailyCapacityMinutes": dailyCapacityMinutes,
+            "updatedAt": FieldValue.serverTimestamp()
+        ]
+
+        try await db.collection("users").document(userId).updateData(updates)
+        clearCache(for: userId)
+    }
+
+    /// 更新通知設定
+    func updateNotificationSettings(
+        userId: String,
+        notificationsEnabled: Bool,
+        taskReminders: Bool,
+        eventReminders: Bool,
+        organizationUpdates: Bool
+    ) async throws {
+        let updates: [String: Any] = [
+            "notificationsEnabled": notificationsEnabled,
+            "taskReminders": taskReminders,
+            "eventReminders": eventReminders,
+            "organizationUpdates": organizationUpdates,
+            "updatedAt": FieldValue.serverTimestamp()
+        ]
+
+        try await db.collection("users").document(userId).updateData(updates)
+        clearCache(for: userId)
+    }
+
+    /// 更新外觀設定
+    func updateAppearanceSettings(userId: String, theme: String) async throws {
+        let updates: [String: Any] = [
+            "theme": theme,
+            "updatedAt": FieldValue.serverTimestamp()
+        ]
+
+        try await db.collection("users").document(userId).updateData(updates)
+        clearCache(for: userId)
+    }
+
+    /// 更新用戶資料
+    func updateUserProfile(userId: String, name: String, avatarUrl: String?) async throws {
+        var updates: [String: Any] = [
+            "name": name,
+            "updatedAt": FieldValue.serverTimestamp()
+        ]
+
+        if let avatarUrl = avatarUrl {
+            updates["avatarUrl"] = avatarUrl
+        }
+
+        try await db.collection("users").document(userId).updateData(updates)
+        clearCache(for: userId)
+    }
 }
