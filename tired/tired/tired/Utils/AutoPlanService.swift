@@ -70,23 +70,24 @@ class AutoPlanService {
                 task.plannedDate == nil
             }
             .sorted { t1, t2 in
-                // 多維度排序：優先級 > 截止日期 > 創建時間
-                let weight1 = options.priorityWeights[t1.priority] ?? 1.0
-                let weight2 = options.priorityWeights[t2.priority] ?? 1.0
+                // ✅ 改进排序逻辑：优先级 > Deadline > 创建时间
 
-                // 高優先級優先
-                if weight1 != weight2 {
-                    return weight1 > weight2
+                // 第一步：按优先级排序 (high > medium > low)
+                let priorityOrder: [TaskPriority] = [.high, .medium, .low]
+                if let p1 = priorityOrder.firstIndex(of: t1.priority),
+                   let p2 = priorityOrder.firstIndex(of: t2.priority),
+                   p1 != p2 {
+                    return p1 < p2  // 优先级高的排前面
                 }
 
-                // 有截止日期的優先，且截止日期早的優先
+                // 第二步：优先级相同，按 deadline 排序
                 if let d1 = t1.deadlineAt, let d2 = t2.deadlineAt {
                     return d1 < d2
                 }
                 if t1.deadlineAt != nil { return true }
                 if t2.deadlineAt != nil { return false }
 
-                // 創建時間早的優先
+                // 第三步：都没有 deadline，按创建时间
                 return t1.createdAt < t2.createdAt
             }
 
@@ -95,7 +96,8 @@ class AutoPlanService {
         let weekEnd = calendar.date(byAdding: .day, value: 7, to: options.weekStart) ?? options.weekStart
 
         for task in tasks {
-            guard let planned = task.plannedDate else { continue }
+            guard let planned = task.plannedDate,
+                  !task.isDone else { continue }  // ✅ 只计算未完成任务
             let plannedDay = calendar.startOfDay(for: planned)
 
             // 只計算本週範圍內的任務

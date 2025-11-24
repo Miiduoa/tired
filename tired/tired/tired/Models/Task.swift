@@ -40,6 +40,8 @@ struct Task: Codable, Identifiable {
     // 子任務
     var subtasks: [Subtask]?
     var parentTaskId: String?  // 如果這是子任務，記錄父任務ID
+    var subtaskIds: [String] = []    // 子任務 ID 列表
+    var isMilestone: Bool = false    // 是否是里程碑
 
     // 重複任務
     var recurrence: TaskRecurrence?
@@ -57,6 +59,12 @@ struct Task: Codable, Identifiable {
     var comments: [TaskComment]?
     var fileAttachments: [FileAttachment]?
 
+    // ✅ 新增：標籤系統
+    var tagIds: [String] = []        // 標籤 ID 列表
+
+    // ✅ 新增：依賴關係
+    var dependsOnTaskIds: [String] = []  // 前置任務 ID 列表
+
     var createdAt: Date
     var updatedAt: Date
 
@@ -68,11 +76,12 @@ struct Task: Codable, Identifiable {
         case deadlineAt, estimatedMinutes, actualMinutes
         case plannedDate, plannedStartTime, isDateLocked
         case isDone, doneAt, completionPercentage
-        case subtasks, parentTaskId
+        case subtasks, parentTaskId, subtaskIds, isMilestone
         case recurrence, recurrenceParentId
         case focusSessions, totalFocusMinutes
         case reminderAt, reminderEnabled
         case comments, fileAttachments
+        case tagIds, dependsOnTaskIds
         case createdAt, updatedAt
     }
 
@@ -98,6 +107,8 @@ struct Task: Codable, Identifiable {
         completionPercentage: Int? = nil,
         subtasks: [Subtask]? = nil,
         parentTaskId: String? = nil,
+        subtaskIds: [String] = [],
+        isMilestone: Bool = false,
         recurrence: TaskRecurrence? = nil,
         recurrenceParentId: String? = nil,
         focusSessions: [FocusSession]? = nil,
@@ -106,6 +117,8 @@ struct Task: Codable, Identifiable {
         reminderEnabled: Bool? = nil,
         comments: [TaskComment]? = nil,
         fileAttachments: [FileAttachment]? = nil,
+        tagIds: [String] = [],
+        dependsOnTaskIds: [String] = [],
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -130,6 +143,8 @@ struct Task: Codable, Identifiable {
         self.completionPercentage = completionPercentage
         self.subtasks = subtasks
         self.parentTaskId = parentTaskId
+        self.subtaskIds = subtaskIds
+        self.isMilestone = isMilestone
         self.recurrence = recurrence
         self.recurrenceParentId = recurrenceParentId
         self.focusSessions = focusSessions
@@ -138,6 +153,8 @@ struct Task: Codable, Identifiable {
         self.reminderEnabled = reminderEnabled
         self.comments = comments
         self.fileAttachments = fileAttachments
+        self.tagIds = tagIds
+        self.dependsOnTaskIds = dependsOnTaskIds
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -182,8 +199,22 @@ extension Task {
 
     /// 是否在本周
     func isThisWeek() -> Bool {
-        guard let planned = plannedDate else { return false }
-        return Calendar.current.isDate(planned, equalTo: Date(), toGranularity: .weekOfYear)
+        let calendar = Calendar.current
+        guard let weekInterval = calendar.dateInterval(of: .weekOfYear, for: Date()) else {
+            return false
+        }
+
+        // 检查是否有排期在本周
+        if let planned = plannedDate, weekInterval.contains(planned) {
+            return true
+        }
+
+        // 检查 deadline 是否在本周 ✅ 关键修复：遗漏的任务会被包含
+        if let deadline = deadlineAt, weekInterval.contains(deadline) {
+            return true
+        }
+
+        return false
     }
 
     /// 是否未排程（Backlog）
@@ -250,6 +281,12 @@ extension Task {
         if isDueSoon { return "#F59E0B" }  // 橙色
         if priority == .high { return "#DC2626" }  // 深紅
         return "#6B7280"  // 灰色
+    }
+
+    /// 是否逾期或紧急 ✅ 新增：用于标记需要立即关注的任务
+    var isOverdueOrUrgent: Bool {
+        guard let deadline = deadlineAt, !isDone else { return false }
+        return deadline <= Date()
     }
 }
 
