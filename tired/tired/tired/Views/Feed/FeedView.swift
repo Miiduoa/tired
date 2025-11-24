@@ -144,6 +144,10 @@ struct CreatePostView: View {
     @State private var text = ""
     @State private var selectedOrganization: String?
     @State private var isCreating = false
+    @State private var selectedImages: [UIImage] = []
+    @State private var showingImagePicker = false
+    @State private var imageUrls: [String] = []
+    @State private var isUploadingImages = false
 
     var body: some View {
         NavigationView {
@@ -168,6 +172,51 @@ struct CreatePostView: View {
                             .foregroundColor(.secondary)
                     }
 
+                    Section("圖片（選填）") {
+                        if !selectedImages.isEmpty {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 12) {
+                                    ForEach(Array(selectedImages.enumerated()), id: \.offset) { index, image in
+                                        ZStack(alignment: .topTrailing) {
+                                            Image(uiImage: image)
+                                                .resizable()
+                                                .scaledToFill()
+                                                .frame(width: 100, height: 100)
+                                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                            
+                                            Button {
+                                                selectedImages.remove(at: index)
+                                                if index < imageUrls.count {
+                                                    imageUrls.remove(at: index)
+                                                }
+                                            } label: {
+                                                Image(systemName: "xmark.circle.fill")
+                                                    .foregroundColor(.white)
+                                                    .background(Color.black.opacity(0.6))
+                                                    .clipShape(Circle())
+                                            }
+                                            .offset(x: 5, y: -5)
+                                        }
+                                    }
+                                }
+                                .padding(.vertical, 8)
+                            }
+                            .listRowBackground(Color.clear)
+                        }
+                        
+                        Button {
+                            showingImagePicker = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "photo.on.rectangle")
+                                Text("添加圖片")
+                            }
+                            .font(AppDesignSystem.bodyFont)
+                            .foregroundColor(AppDesignSystem.accentColor)
+                        }
+                        .listRowBackground(Color.clear)
+                    }
+                    
                     Section("發布為（選填）") {
                         Picker("發布身份", selection: $selectedOrganization) {
                             Text("個人動態").tag(nil as String?)
@@ -204,8 +253,11 @@ struct CreatePostView: View {
                         createPost()
                     }
                     .buttonStyle(GlassmorphicButtonStyle(cornerRadius: AppDesignSystem.cornerRadiusSmall, textColor: .white))
-                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isCreating)
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isCreating || isUploadingImages)
                 }
+            }
+            .sheet(isPresented: $showingImagePicker) {
+                ImagePicker(images: $selectedImages, maxSelection: 9)
             }
         }
     }
@@ -214,9 +266,89 @@ struct CreatePostView: View {
         isCreating = true
 
         _Concurrency.Task {
-            await viewModel.createPost(text: text, organizationId: selectedOrganization)
+            // 先上傳圖片
+            if !selectedImages.isEmpty {
+                isUploadingImages = true
+                imageUrls = await uploadImages(selectedImages)
+                isUploadingImages = false
+            }
+            
+            // 創建貼文
+            await viewModel.createPost(text: text, organizationId: selectedOrganization, imageUrls: imageUrls.isEmpty ? nil : imageUrls)
             await MainActor.run {
                 dismiss()
+            }
+        }
+    }
+    
+    private func uploadImages(_ images: [UIImage]) async -> [String] {
+        guard let userId = Auth.auth().currentUser?.uid else { return [] }
+        
+        let storageService = StorageService()
+        var urls: [String] = []
+        
+        for image in images {
+            // 壓縮和調整圖片大小
+            let resizedImage = storageService.resizeImage(image, maxDimension: 1200)
+            guard let imageData = storageService.compressImage(resizedImage, maxSizeKB: 500) else { continue }
+            
+            do {
+                let url = try await storageService.uploadPostImage(userId: userId, imageData: imageData)
+                urls.append(url)
+            } catch {
+                print("❌ Error uploading image: \(error)")
+            }
+        }
+        
+        return urls
+    }
+}
+
+// MARK: - Image Picker
+
+import PhotosUI
+
+@available(iOS 17.0, *)
+struct ImagePicker: UIViewControllerRepresentable {
+    @Binding var images: [UIImage]
+    let maxSelection: Int
+    @Environment(\.dismiss) private var dismiss
+    
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.filter = .images
+        config.selectionLimit = maxSelection
+        config.preferredAssetRepresentationMode = .current
+        
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        let parent: ImagePicker
+        
+        init(_ parent: ImagePicker) {
+            self.parent = parent
+        }
+        
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            parent.dismiss()
+            
+            for result in results {
+                result.itemProvider.loadObject(ofClass: UIImage.self) { object, error in
+                    if let image = object as? UIImage {
+                        DispatchQueue.main.async {
+                            self.parent.images.append(image)
+                        }
+                    }
+                }
             }
         }
     }

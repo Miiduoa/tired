@@ -148,7 +148,7 @@ class FeedViewModel: ObservableObject {
     // MARK: - Actions
 
     /// 創建新貼文
-    func createPost(text: String, organizationId: String?) async {
+    func createPost(text: String, organizationId: String?, imageUrls: [String]? = nil) async {
         guard let userId = userId else {
             ToastManager.shared.showToast(message: "用戶未登入", type: .error)
             return
@@ -172,6 +172,7 @@ class FeedViewModel: ObservableObject {
             authorUserId: userId,
             organizationId: organizationId,
             contentText: text,
+            imageUrls: imageUrls,
             visibility: organizationId != nil ? .orgMembers : .public
         )
 

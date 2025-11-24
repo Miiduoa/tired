@@ -192,6 +192,33 @@ class EventDetailViewModel: ObservableObject {
             }
         }
     }
+    
+    func updateEvent(
+        title: String,
+        description: String?,
+        startAt: Date,
+        endAt: Date,
+        location: String?,
+        capacity: Int?
+    ) async throws {
+        guard var eventToUpdate = event else {
+            throw NSError(domain: "EventDetailViewModel", code: -1, userInfo: [NSLocalizedDescriptionKey: "Event not found"])
+        }
+        
+        eventToUpdate.title = title
+        eventToUpdate.description = description
+        eventToUpdate.startAt = startAt
+        eventToUpdate.endAt = endAt
+        eventToUpdate.location = location
+        eventToUpdate.capacity = capacity
+        eventToUpdate.updatedAt = Date()
+        
+        try await eventService.updateEvent(eventToUpdate)
+        
+        await MainActor.run {
+            self.event = eventToUpdate
+        }
+    }
 }
 
 // Helper view for info rows
@@ -218,22 +245,100 @@ struct InfoRow: View {
     }
 }
 
-// Placeholder for EditEventView (to be implemented)
+// MARK: - Edit Event View
+
+@available(iOS 17.0, *)
 struct EditEventView: View {
     let event: Event
-    let viewModel: EventDetailViewModel
+    @ObservedObject var viewModel: EventDetailViewModel
     @Environment(\.dismiss) private var dismiss
+    
+    @State private var title: String
+    @State private var description: String
+    @State private var startAt: Date
+    @State private var endAt: Date
+    @State private var location: String
+    @State private var hasCapacity: Bool
+    @State private var capacity: Int
+    @State private var isUpdating = false
+    
+    init(event: Event, viewModel: EventDetailViewModel) {
+        self.event = event
+        self.viewModel = viewModel
+        _title = State(initialValue: event.title)
+        _description = State(initialValue: event.description ?? "")
+        _startAt = State(initialValue: event.startAt)
+        _endAt = State(initialValue: event.endAt ?? event.startAt.addingTimeInterval(3600))
+        _location = State(initialValue: event.location ?? "")
+        _hasCapacity = State(initialValue: event.capacity != nil)
+        _capacity = State(initialValue: event.capacity ?? 50)
+    }
     
     var body: some View {
         NavigationView {
-            Text("編輯活動功能待實現")
-                .navigationTitle("編輯活動")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("取消") { dismiss() }
+            Form {
+                Section("基本信息") {
+                    TextField("活動名稱", text: $title)
+                    TextField("活動描述", text: $description, axis: .vertical)
+                        .lineLimit(3...6)
+                }
+                
+                Section("時間") {
+                    DatePicker("開始時間", selection: $startAt, displayedComponents: [.date, .hourAndMinute])
+                    DatePicker("結束時間", selection: $endAt, displayedComponents: [.date, .hourAndMinute])
+                }
+                
+                Section("地點") {
+                    TextField("活動地點", text: $location)
+                }
+                
+                Section("人數限制") {
+                    Toggle("限制人數", isOn: $hasCapacity)
+                    if hasCapacity {
+                        Stepper("最多 \(capacity) 人", value: $capacity, in: 1...1000)
                     }
                 }
+            }
+            .navigationTitle("編輯活動")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("儲存") {
+                        updateEvent()
+                    }
+                    .disabled(title.isEmpty || isUpdating)
+                }
+            }
+        }
+    }
+    
+    private func updateEvent() {
+        isUpdating = true
+        
+        Task {
+            do {
+                try await viewModel.updateEvent(
+                    title: title,
+                    description: description.isEmpty ? nil : description,
+                    startAt: startAt,
+                    endAt: endAt,
+                    location: location.isEmpty ? nil : location,
+                    capacity: hasCapacity ? capacity : nil
+                )
+                await MainActor.run {
+                    ToastManager.shared.showToast(message: "活動更新成功！", type: .success)
+                    dismiss()
+                }
+            } catch {
+                print("❌ Error updating event: \(error)")
+                await MainActor.run {
+                    ToastManager.shared.showToast(message: "更新失敗: \(error.localizedDescription)", type: .error)
+                    isUpdating = false
+                }
+            }
         }
     }
 }

@@ -210,7 +210,10 @@ class TaskReminderService: ObservableObject {
             guard let deadline = task.deadlineAt else { return false }
 
             let calendar = Calendar.current
-            let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date())!
+            guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date()) else {
+                print("❌ Error: Could not calculate tomorrow's date.")
+                return false
+            }
             let isTomorrowDeadline = calendar.isDate(deadline, inSameDayAs: tomorrow)
 
             // 检查是否已在今天发送过

@@ -10,7 +10,11 @@ enum ConflictSeverity: String, Codable, Comparable {
 
     static func < (lhs: ConflictSeverity, rhs: ConflictSeverity) -> Bool {
         let order: [ConflictSeverity] = [.warning, .severe, .critical]
-        return order.firstIndex(of: lhs)! < order.firstIndex(of: rhs)!
+        guard let lhsIndex = order.firstIndex(of: lhs),
+              let rhsIndex = order.firstIndex(of: rhs) else {
+            return false // Should not happen if all cases are in the array
+        }
+        return lhsIndex < rhsIndex
     }
 
     var displayName: String {
@@ -100,7 +104,7 @@ class TaskConflictDetector {
             .filter { task in
                 !task.isDone &&
                 task.estimatedMinutes != nil &&
-                task.estimatedMinutes! > 0
+                (task.estimatedMinutes ?? 0) > 0
             }
             .compactMap { task -> TaskTimeRange? in
                 // 使用 plannedDate 或 deadlineAt
@@ -137,8 +141,10 @@ class TaskConflictDetector {
                 let severity = calculateSeverity(for: conflictingTasks, ranges: conflictingRanges)
 
                 // 找到这个冲突组的时间范围
-                let overlapStart = conflictingRanges.map { $0.startTime }.max()!
-                let overlapEnd = conflictingRanges.map { $0.endTime }.min()!
+                guard let overlapStart = conflictingRanges.map({ $0.startTime }).max(),
+                      let overlapEnd = conflictingRanges.map({ $0.endTime }).min() else {
+                    continue // Should not happen if conflictingRanges.count > 1
+                }
 
                 let conflict = TaskConflict(
                     conflictingTasks: conflictingTasks,

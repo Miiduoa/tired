@@ -325,8 +325,20 @@ struct TasksView: View {
             }
             .buttonStyle(GlassmorphicButtonStyle(textColor: .primary, cornerRadius: AppDesignSystem.cornerRadiusMedium))
 
-            // Auto plan button (only for week/backlog)
+            // Auto plan & Calendar section
             if selectedTab == .week || selectedTab == .backlog {
+                if !viewModel.isCalendarAuthorized {
+                    Button {
+                        Task {
+                            await viewModel.requestCalendarAccess()
+                        }
+                    } label: {
+                        Label("連接行事曆", systemImage: "calendar.badge.plus")
+                            .font(AppDesignSystem.bodyFont.weight(.semibold))
+                    }
+                    .buttonStyle(GlassmorphicButtonStyle(textColor: .primary, cornerRadius: AppDesignSystem.cornerRadiusMedium))
+                }
+                
                 Button {
                     viewModel.runAutoplan()
                 } label: {
