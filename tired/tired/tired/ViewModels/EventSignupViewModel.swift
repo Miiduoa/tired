@@ -141,8 +141,6 @@ class EventSignupViewModel: ObservableObject {
                     self.registrationCounts[eventId] = (self.registrationCounts[eventId] ?? 0) + 1
                     ToastManager.shared.showToast(message: "報名成功！", type: .success)
                 }
-
-                // TODO: 可選：自動創建任務到個人任務中樞
             } catch {
                 print("❌ Error registering for event: \(error)")
                 await MainActor.run {

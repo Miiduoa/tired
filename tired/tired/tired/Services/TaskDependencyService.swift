@@ -134,7 +134,7 @@ class TaskDependencyService {
         let unlockedTasks = getUnlockedTasks(completedTaskId, allTasks: allTasks)
 
         return unlockedTasks.map { task in
-            "✅ 任务"\(task.title)"现在已解锁，可以开始了"
+            "✅ 任务\"\(task.title)\"现在已解锁，可以开始了"
         }
     }
 

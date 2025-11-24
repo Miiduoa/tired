@@ -403,7 +403,7 @@ struct FocusSession: Codable, Identifiable, Hashable {
 // MARK: - Task Comment Model
 
 /// 任務評論結構
-struct TaskComment: Codable, Identifiable, Hashable {
+struct TaskComment: Codable, Identifiable {
     var id: String = UUID().uuidString
     let authorUserId: String
     var content: String
@@ -424,6 +424,28 @@ struct TaskComment: Codable, Identifiable, Hashable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.author = author
+    }
+}
+
+// MARK: - TaskComment Equatable & Hashable
+
+extension TaskComment: Equatable {
+    static func == (lhs: TaskComment, rhs: TaskComment) -> Bool {
+        return lhs.id == rhs.id &&
+               lhs.authorUserId == rhs.authorUserId &&
+               lhs.content == rhs.content &&
+               lhs.createdAt == rhs.createdAt &&
+               lhs.updatedAt == rhs.updatedAt
+    }
+}
+
+extension TaskComment: Hashable {
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(authorUserId)
+        hasher.combine(content)
+        hasher.combine(createdAt)
+        hasher.combine(updatedAt)
     }
 }
 

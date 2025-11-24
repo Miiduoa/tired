@@ -191,9 +191,18 @@ class OrganizationService: ObservableObject {
             throw NSError(domain: "OrganizationService", code: -2, userInfo: [NSLocalizedDescriptionKey: "Cannot delete a default role"])
         }
 
-        // TODO: 考慮當角色被刪除時，如何處理擁有該角色的成員。
-        // 目前的簡單做法是直接刪除角色，成員的 roleIds 中會包含一個無效的 ID。
-        // 一個更完整的做法是，在刪除前，遍歷所有成員並從他們的 roleIds 陣列中移除這個 roleId。
+        // 檢查是否有成員仍在使用此角色
+        let membersInRoleSnapshot = try await db.collection("memberships")
+            .whereField("organizationId", isEqualTo: orgId)
+            .whereField("roleIds", arrayContains: roleId)
+            .limit(to: 1)
+            .getDocuments()
+
+        if !membersInRoleSnapshot.isEmpty {
+            throw NSError(domain: "OrganizationService", code: -3, userInfo: [NSLocalizedDescriptionKey: "無法刪除：該角色仍有成員正在使用。"])
+        }
+
+        // 如果沒有成員使用，則可以安全刪除
         try await db.collection("organizations").document(orgId).collection("roles").document(roleId).delete()
         organizationCache.removeValue(forKey: orgId)
     }
@@ -252,14 +261,54 @@ class OrganizationService: ObservableObject {
             .updateData(updates)
     }
 
-    /*
-    // TODO: Re-implement ownership transfer and succession with new dynamic role logic.
-    // The old hierarchy-based logic is no longer valid. A new business rule for who can
-    // be a successor needs to be defined (e.g., an admin, a user with the most permissions, etc.).
-
     /// 轉移組織所有權
     func transferOwnership(organizationId: String, fromUserId: String, toUserId: String) async throws {
-        // ... Omitted for now ...
+        // 1. 權限檢查：只有當前擁有者可以轉移所有權
+        let canTransfer = try await checkPermission(userId: fromUserId, organizationId: organizationId, permission: .deleteOrganization)
+        guard canTransfer else {
+            throw NSError(domain: "OrganizationService", code: -10, userInfo: [NSLocalizedDescriptionKey: "權限不足：只有組織擁有者才能轉移所有權。"])
+        }
+
+        guard fromUserId != toUserId else {
+            throw NSError(domain: "OrganizationService", code: -11, userInfo: [NSLocalizedDescriptionKey: "無效操作：無法將所有權轉移給自己。"])
+        }
+
+        // 2. 獲取角色ID
+        let roles = try await db.collection("organizations").document(organizationId).collection("roles").getDocuments()
+        guard let ownerRole = roles.documents.first(where: { ($0["name"] as? String) == "擁有者" }),
+              let adminRole = roles.documents.first(where: { ($0["name"] as? String) == "管理員" }) else {
+            throw NSError(domain: "OrganizationService", code: -12, userInfo: [NSLocalizedDescriptionKey: "找不到必要的角色（擁有者/管理員）。"])
+        }
+        let ownerRoleId = ownerRole.documentID
+        let adminRoleId = adminRole.documentID
+
+        // 3. 獲取雙方成員資格
+        async let fromMembershipDoc = db.collection("memberships")
+            .whereField("organizationId", isEqualTo: organizationId)
+            .whereField("userId", isEqualTo: fromUserId).getDocuments()
+        async let toMembershipDoc = db.collection("memberships")
+            .whereField("organizationId", isEqualTo: organizationId)
+            .whereField("userId", isEqualTo: toUserId).getDocuments()
+
+        guard let fromMembershipSnapshot = try await fromMembershipDoc.documents.first,
+              let toMembershipSnapshot = try await toMembershipDoc.documents.first else {
+            throw NSError(domain: "OrganizationService", code: -13, userInfo: [NSLocalizedDescriptionKey: "找不到轉移雙方的成員資格。"])
+        }
+        
+        let fromMembershipRef = fromMembershipSnapshot.reference
+        let toMembershipRef = toMembershipSnapshot.reference
+
+        // 4. 使用事務執行原子性操作
+        try await db.runTransaction { (transaction, errorPointer) -> Any? in
+            // 降級原擁有者：移除Owner角色，賦予Admin角色
+            transaction.updateData(["roleIds": [adminRoleId], "updatedAt": FieldValue.serverTimestamp()], forDocument: fromMembershipRef)
+            // 升級新擁有者：賦予Owner角色
+            transaction.updateData(["roleIds": [ownerRoleId], "updatedAt": FieldValue.serverTimestamp()], forDocument: toMembershipRef)
+            return nil
+        }
+        
+        // 清除組織快取以反映角色變化
+        organizationCache.removeValue(forKey: organizationId)
     }
 
     /// 當成員離開組織時的繼任處理
@@ -347,42 +396,69 @@ class OrganizationService: ObservableObject {
 
     /// 當成員離開組織時的繼任處理
     func handleMemberLeave(membership: Membership) async throws {
-        // 如果不是owner離開，直接刪除即可
-        guard membership.role == .owner else {
-            try await deleteMembership(id: membership.id!)
+        guard let membershipId = membership.id else {
+            throw NSError(domain: "OrganizationService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Membership ID is missing"])
+        }
+
+        // 1. 獲取組織以進行權限檢查
+        let organization = try await fetchOrganization(id: membership.organizationId)
+
+        // 2. 檢查離開者是否為 Owner
+        let isOwnerLeaving = membership.isOwner(in: organization)
+
+        if !isOwnerLeaving {
+            // 如果不是 Owner，直接刪除其成員資格
+            try await deleteMembership(id: membershipId)
             return
         }
 
-        // Owner離開需要處理繼任
-        let members = try await fetchOrganizationMembers(organizationId: membership.organizationId)
+        // --- 以下為 Owner 離開時的繼任邏輯 ---
 
-        // 找到除了自己之外的所有成員
-        let otherMembers = members.filter { $0.userId != membership.userId }
+        // 3. 獲取組織內所有其他成員
+        var otherMembers = try await fetchOrganizationMembers(organizationId: membership.organizationId)
+        otherMembers.removeAll { $0.userId == membership.userId }
 
-        if otherMembers.isEmpty {
-            // 如果是最後一個成員，允許離開（組織會變成無主）
-            try await deleteMembership(id: membership.id!)
+        // 如果沒有其他成員，組織將變為無主，直接刪除原 Owner
+        guard let successorMembership = findSuccessor(from: otherMembers, in: organization) else {
+            print("ℹ️ Owner is the last member. Organization \(organization.id ?? "") will become ownerless.")
+            try await deleteMembership(id: membershipId)
             return
         }
 
-        // 找到最高層級的成員作為繼任者
-        let successor = otherMembers.max { $0.role.hierarchyLevel < $1.role.hierarchyLevel }
-
-        guard let newOwner = successor else {
-            throw NSError(domain: "OrganizationService", code: -1,
-                         userInfo: [NSLocalizedDescriptionKey: "找不到繼任者"])
-        }
-
-        // 轉移所有權
+        // 5. 執行所有權轉移
+        print("ℹ️ Transferring ownership from \(membership.userId) to \(successorMembership.userId)")
         try await transferOwnership(
             organizationId: membership.organizationId,
             fromUserId: membership.userId,
-            toUserId: newOwner.userId
+            toUserId: successorMembership.userId
         )
 
-        // 刪除原owner的membership
-        try await deleteMembership(id: membership.id!)
+        // 6. 刪除原 Owner 的成員資格
+        try await deleteMembership(id: membershipId)
+        print("✅ Ownership transfer complete and original owner's membership removed.")
     }
+
+    /// 從候選人中尋找繼任者
+    private func findSuccessor(from candidates: [Membership], in organization: Organization) -> Membership? {
+        if candidates.isEmpty {
+            return nil
+        }
+        
+        // 優先選擇管理員
+        var admins = candidates.filter { $0.isAdmin(in: organization) }
+        
+        // 如果有管理員，選擇最早加入的
+        if !admins.isEmpty {
+            admins.sort { $0.createdAt < $1.createdAt }
+            return admins.first
+        }
+        
+        // 如果沒有管理員，選擇最早加入的成員
+        var sortedCandidates = candidates
+        sortedCandidates.sort { $0.createdAt < $1.createdAt }
+        return sortedCandidates.first
+    }
+
 
     /// 檢查用戶在組織中的權限
     func checkPermission(userId: String, organizationId: String, permission: OrgPermission) async throws -> Bool {

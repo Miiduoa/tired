@@ -85,6 +85,15 @@ class PostService: ObservableObject {
 
     // MARK: - CRUD Operations
 
+    /// 獲取單個貼文
+    func fetchPost(id: String) async throws -> Post {
+        let doc = try await db.collection("posts").document(id).getDocument()
+        guard let post = try? doc.data(as: Post.self) else {
+            throw NSError(domain: "PostService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Post not found"])
+        }
+        return post
+    }
+
     /// 創建貼文
     func createPost(_ post: Post) async throws {
         var newPost = post

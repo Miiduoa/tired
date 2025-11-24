@@ -222,13 +222,13 @@ class TimeBlockService: ObservableObject {
         // 检查是否有充分的深度工作时间块
         let focusBlocks = timeBlocks.filter { $0.title.lowercased().contains("work") || $0.title.lowercased().contains("focus") }
         if focusBlocks.isEmpty {
-            suggestions.append("💡 建议创建"深度工作"时间块来保护专注时间")
+            suggestions.append("💡 建议创建\"深度工作\"时间块来保护专注时间")
         }
 
         // 检查是否有足够的休息时间
         let breakBlocks = timeBlocks.filter { $0.title.lowercased().contains("break") || $0.title.lowercased().contains("lunch") }
         if breakBlocks.isEmpty {
-            suggestions.append("💡 建议创建"午餐"或"休息"时间块来保证充分休息")
+            suggestions.append("💡 建议创建\"午餐\"或\"休息\"时间块来保证充分休息")
         }
 
         return suggestions

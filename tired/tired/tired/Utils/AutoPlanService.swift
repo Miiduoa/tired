@@ -56,7 +56,7 @@ class AutoPlanService {
     ///   - tasks: 所有任務（包括已排程和未排程）
     ///   - options: 排程選項
     /// - Returns: 更新後的任務列表和實際排程的任務數量
-    func autoplanWeek(tasks: [Task], options: AutoPlanOptions) -> ([Task], Int) {
+    func autoplanWeek(tasks: [Task], busyBlocks: [BusyTimeBlock] = [], options: AutoPlanOptions) -> ([Task], Int) {
         let calendar = Calendar.current
         var updatedTasks = tasks
         var scheduledTaskCount = 0
@@ -94,6 +94,35 @@ class AutoPlanService {
         // 2. 計算每天已排程的時間（只計算今天及之後的日期）
         var dayMinutes: [Date: Int] = [:]
         let weekEnd = calendar.date(byAdding: .day, value: 7, to: options.weekStart) ?? options.weekStart
+        
+        // 先加上外部日曆的忙碌時間
+        for block in busyBlocks {
+            let startDay = calendar.startOfDay(for: block.start)
+            let endDay = calendar.startOfDay(for: block.end)
+            
+            if startDay == endDay {
+                // 單日事件
+                let duration = Int(block.end.timeIntervalSince(block.start) / 60)
+                dayMinutes[startDay, default: 0] += duration
+            } else {
+                // 跨日事件
+                var currentDay = startDay
+                while currentDay <= endDay {
+                    let dayStart = currentDay
+                    let dayEnd = calendar.date(byAdding: .day, value: 1, to: currentDay) ?? currentDay
+                    
+                    let intersectionStart = max(block.start, dayStart)
+                    let intersectionEnd = min(block.end, dayEnd)
+                    
+                    if intersectionEnd > intersectionStart {
+                        let duration = Int(intersectionEnd.timeIntervalSince(intersectionStart) / 60)
+                        dayMinutes[currentDay, default: 0] += duration
+                    }
+                    
+                    currentDay = calendar.date(byAdding: .day, value: 1, to: currentDay) ?? (currentDay + 86400)
+                }
+            }
+        }
 
         for task in tasks {
             guard let planned = task.plannedDate,

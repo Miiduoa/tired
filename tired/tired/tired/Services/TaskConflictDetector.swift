@@ -257,7 +257,7 @@ class TaskConflictDetector {
 
         // 找到最低优先级的任务
         if let lowestPriorityTask = sortedTasks.last {
-            suggestions.append("💡 建议将"\(lowestPriorityTask.title)"移到其他时间")
+            suggestions.append("💡 建议将\"\(lowestPriorityTask.title)\"移到其他时间")
         }
 
         // 检查是否有任务是来自同一个组织的
@@ -271,7 +271,7 @@ class TaskConflictDetector {
             (t1.estimatedMinutes ?? 0) < (t2.estimatedMinutes ?? 0)
         }
         if let longestTask = longestTask, longestTask.estimatedMinutes ?? 0 > 60 {
-            suggestions.append("⏱️ 建议重新评估"\(longestTask.title)"的预估时长")
+            suggestions.append("⏱️ 建议重新评估\"\(longestTask.title)\"的预估时长")
         }
 
         return suggestions

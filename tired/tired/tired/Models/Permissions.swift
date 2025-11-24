@@ -30,6 +30,11 @@ struct AppPermissions {
     static let deleteAnyTaskCommentInOrg = "delete_any_task_comment_in_org"
     static let deleteOwnTaskComment = "delete_own_task_comment"
     
+    // 貼文評論相關權限
+    static let createPostCommentInOrg = "create_post_comment_in_org" // 在組織貼文下發表評論
+    static let deleteAnyPostCommentInOrg = "delete_any_post_comment_in_org" // 刪除組織貼文下的任何評論
+    static let deleteOwnPostComment = "delete_own_post_comment" // 刪除自己的貼文評論
+    
     // 組織設定相關權限
     static let editOrgSettings = "edit_org_settings" // 允許編輯組織基本資訊、頭像等
     static let deleteOrganization = "delete_organization" // 允許刪除整個組織

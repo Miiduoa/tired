@@ -82,7 +82,7 @@ class CommentsViewModel: ObservableObject {
         // Permission check for adding comment in an organization post
         if let orgId = post?.organizationId {
             do {
-                let hasPerm = try await permissionService.hasPermissionForCurrentUser(organizationId: orgId, permission: AppPermissions.createPostInOrg) // Reusing post creation permission for comments
+                let hasPerm = try await permissionService.hasPermissionForCurrentUser(organizationId: orgId, permission: AppPermissions.createPostCommentInOrg)
                 guard hasPerm else {
                     ToastManager.shared.showToast(message: "您沒有權限在此組織貼文下發表評論。", type: .error)
                     return

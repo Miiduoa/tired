@@ -139,7 +139,7 @@ extension Membership {
         
         // 2. 檢查這些角色中，是否有任何一個包含指定的權限
         for role in memberRoles {
-            if role.permissions.contains(permission.rawValue) {
+            if role.permissions.contains(permission) {
                 return true
             }
         }
@@ -147,30 +147,18 @@ extension Membership {
         return false
     }
 
-    /*
-    // TODO: Re-implement these functions based on the new dynamic role system.
-    // The old logic based on `hierarchyLevel` is no longer valid.
-    
-    /// 檢查是否可以管理指定成員
-    func canManageMember(_ targetMembership: Membership) -> Bool {
-        // 不能管理自己
-        guard userId != targetMembership.userId else { return false }
-        // 只能管理比自己低的角色
-        // return role.canManage(targetMembership.role)
-        return false // Placeholder
+    /// 檢查成員是否為組織擁有者 (Owner)
+    func isOwner(in organization: Organization) -> Bool {
+        return hasPermission(AppPermissions.deleteOrganization, in: organization)
     }
 
-    /// 檢查是否可以變更到指定角色
-    func canChangeRoleTo(_ targetRole: MembershipRole) -> Bool {
-        // 只有owner可以設定owner
-        if targetRole == .owner {
-            // return role == .owner
-        }
-        // 只能設定比自己低的角色
-        // return role.canManage(targetRole)
-        return false // Placeholder
+    /// 檢查成員是否為組織管理員 (Admin)
+    func isAdmin(in organization: Organization) -> Bool {
+        // 管理員通常能管理成員和角色
+        let hasAdminPermissions = hasPermission(AppPermissions.manageOrgMembers, in: organization) &&
+                                  hasPermission(AppPermissions.manageOrgRoles, in: organization)
+        return hasAdminPermissions
     }
-    */
 }
 
 // MARK: - Member with Profile (for UI)

@@ -48,6 +48,42 @@ enum OrgPermission {
     case comment              // 評論
     case joinEvents           // 參加活動
     case react                // 按讚互動
+    
+    /// 將權限轉換為字符串（用於與 Role.permissions 比較）
+    var permissionString: String {
+        switch self {
+        case .deleteOrganization:
+            return AppPermissions.deleteOrganization
+        case .transferOwnership:
+            return "transfer_ownership" // 特殊權限，通常不存儲在 Role 中
+        case .manageMembers:
+            return AppPermissions.manageOrgMembers
+        case .changeRoles:
+            return AppPermissions.manageOrgRoles
+        case .removeMembers:
+            return AppPermissions.manageOrgMembers // 移除成員是管理成員的一部分
+        case .manageApps:
+            return AppPermissions.manageOrgApps
+        case .editOrgInfo:
+            return AppPermissions.editOrgSettings
+        case .createPosts:
+            return AppPermissions.createPostInOrg
+        case .createEvents:
+            return AppPermissions.createEventInOrg
+        case .createTasks:
+            return AppPermissions.createTaskInOrg
+        case .editOwnPosts:
+            return AppPermissions.deleteOwnPost // 編輯自己的貼文通常等同於刪除自己的貼文權限
+        case .viewContent:
+            return "view_content" // 所有成員默認擁有
+        case .comment:
+            return AppPermissions.createTaskCommentInOrg // 評論權限
+        case .joinEvents:
+            return "join_events" // 所有成員默認擁有
+        case .react:
+            return "react" // 所有成員默認擁有
+        }
+    }
 }
 
 enum MembershipRole: String, Codable, CaseIterable {
