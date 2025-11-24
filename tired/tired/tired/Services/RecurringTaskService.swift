@@ -105,9 +105,9 @@ class RecurringTaskService: ObservableObject {
         for document in snapshot.documents {
             guard var recurringTask = try? document.data(as: RecurringTask.self) else { continue }
 
-            // 检查是否应该生成实例
-            let shouldGenerate = recurringTask.nextGenerationDate <= now &&
-                (recurringTask.endDate == nil || recurringTask.endDate! > now)
+            // 检查是否应该生成实例 (Safely unwrap endDate)
+            let isPastEndDate = recurringTask.endDate.map { $0 <= now } ?? false
+            let shouldGenerate = recurringTask.nextGenerationDate <= now && !isPastEndDate
 
             if shouldGenerate {
                 try await generateInstancesForRecurringTask(&recurringTask)
@@ -121,9 +121,15 @@ class RecurringTaskService: ObservableObject {
         let now = Date()
 
         // 计算生成范围：从 nextGenerationDate 到 30 天后
+        guard let thirtyDaysFromNow = calendar.date(byAdding: .day, value: 30, to: now),
+              let thirtyDaysFromNextGen = calendar.date(byAdding: .day, value: 30, to: recurringTask.nextGenerationDate) else {
+            print("❌ Error: Could not calculate date range for instance generation.")
+            return
+        }
+
         let endDate = min(
-            recurringTask.endDate ?? calendar.date(byAdding: .day, value: 30, to: now)!,
-            calendar.date(byAdding: .day, value: 30, to: recurringTask.nextGenerationDate)!
+            recurringTask.endDate ?? thirtyDaysFromNow,
+            thirtyDaysFromNextGen
         )
 
         // 计算这个时间段内的所有匹配日期
@@ -140,7 +146,7 @@ class RecurringTaskService: ObservableObject {
 
         for occurrence in occurrences {
             let taskRef = db.collection("tasks").document()
-            var newTaskInstance = Task(
+            let newTaskInstance = Task(
                 id: taskRef.documentID,
                 userId: recurringTask.userId,
                 title: recurringTask.title,
@@ -159,9 +165,14 @@ class RecurringTaskService: ObservableObject {
         }
 
         // 更新周期任务的生成记录
+        guard let nextGenDate = calendar.date(byAdding: .day, value: 30, to: endDate) else {
+            print("❌ Error: Could not calculate next generation date.")
+            return
+        }
+        
         recurringTask.generatedInstanceIds.append(contentsOf: newInstanceIds)
         recurringTask.lastGeneratedDate = now
-        recurringTask.nextGenerationDate = calendar.date(byAdding: .day, value: 30, to: endDate)!
+        recurringTask.nextGenerationDate = nextGenDate
         recurringTask.updatedAt = Date()
 
         // 提交批量操作

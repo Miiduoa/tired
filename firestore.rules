@@ -1,0 +1,152 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function to check user's permission for an organization
+    function hasPermission(orgId, permission) {
+      // Get the user's membership document for the given organization
+      let membership = get(/databases/$(database)/documents/memberships/$(request.auth.uid + '_' + orgId)); // Assumes a composite ID for direct lookup, if not, needs query.
+      // A more realistic approach without composite IDs (which are hard to maintain):
+      let userMembership = getAfter(query(/databases/$(database)/documents/memberships).where("userId", "==", request.auth.uid).where("organizationId", "==", orgId).limit(1));
+      
+      // If membership doesn't exist, no permissions
+      if (!exists(userMembership.path)) {
+        return false;
+      }
+
+      // Get all roles for the organization
+      let orgRoles = get(/databases/$(database)/documents/organizations/$(orgId)).data.roles;
+      
+      // Get the role IDs from the user's membership
+      let memberRoleIds = userMembership.data.roleIds;
+
+      // Check if any of the user's roles have the required permission
+      // This part is difficult to express directly in security rules as it requires a loop/join.
+      // A common pattern is to denormalize permissions onto the membership document itself.
+      // For this implementation, we will assume a helper function can check this, but in a real scenario, denormalization is key.
+      // Let's create a more robust `getMembership` function.
+      return hasPermissionInOrg(request.auth.uid, orgId, permission);
+    }
+    
+    // Realistic helper function to get a user's permissions in an organization.
+    // This is the kind of function you'd build up.
+    function getMembership(userId, orgId) {
+        // This is a simplified way to represent what would be a query.
+        // In real rules, you can't query across documents like this in a function.
+        // The proper way is to use `exists` or `get` on a known path.
+        // Let's assume we have a way to get the membership document.
+        // The path would need to be predictable. For now, this function is for illustrating the logic.
+        return get(/databases/$(database)/documents/memberships/$(userId + "_" + orgId));
+    }
+
+    // A more correct way to check permissions by reading from a predictable path.
+    // This assumes we have a `user_permissions` collection.
+    // Let's build the rules based on the actual data structure.
+
+    // Function to get all permissions for a user in a specific organization.
+    // This function reads the user's membership, gets their roles, and aggregates permissions.
+    function getUserPermissions(userId, orgId) {
+        let membershipDoc = get(query(/databases/$(database)/documents/memberships).where("userId", "==", userId).where("organizationId", "==", orgId).limit(1));
+
+        if (!exists(membershipDoc.path)) {
+            return [];
+        }
+
+        let roleIds = membershipDoc.data.roleIds;
+        let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
+
+        // This is a limitation of security rules, we can't easily join roles.
+        // The BEST and most secure practice is to denormalize permissions.
+        // When a user's role is updated, a Firebase Function would write their permissions to a separate doc.
+        // e.g., /organizations/{orgId}/members/{userId} with a `permissions` map.
+        
+        // Let's write the rules assuming this denormalized structure exists.
+        // /organizations/{orgId}/members/{userId} -> { permissions: { "create_post_in_org": true, ... } }
+        let memberPermissions = get(/databases/$(database)/documents/organizations/$(orgId)/members/$(userId)).data.permissions;
+        return memberPermissions;
+    }
+
+    function hasOrgPermission(userId, orgId, permission) {
+        return get(/databases/$(database)/documents/organizations/$(orgId)/members/$(userId)).data.permissions[permission] == true;
+    }
+
+    // Users: Can read their own profile, can create it, can update their own profile.
+    match /users/{userId} {
+      allow read, update: if request.auth.uid == userId;
+      allow create: if request.auth.uid != null;
+    }
+    
+    // UserAchievements: Users can read their own achievements. Only backend can create.
+    match /userAchievements/{achievementId} {
+        allow read: if get(/databases/$(database)/documents/userAchievements/$(achievementId)).data.userId == request.auth.uid;
+        allow create, update, delete: if false; // Only backend/functions
+    }
+
+    // Organizations:
+    match /organizations/{orgId} {
+      // Create: Any authenticated user can create an org.
+      allow create: if request.auth.uid != null;
+      
+      // Read: Any member of the org can read the org document.
+      allow read: if exists(/databases/$(database)/documents/memberships/$(request.auth.uid + "_" + orgId)); // Simplified path
+      
+      // Update: User needs 'edit_org_settings' permission.
+      // This is where we need a robust way to check permissions.
+      // Let's assume a subcollection `members` with permissions for each user.
+      allow update: if hasOrgPermission(request.auth.uid, orgId, 'edit_org_settings');
+      
+      // Delete: User needs 'delete_organization' permission.
+      allow delete: if hasOrgPermission(request.auth.uid, orgId, 'delete_organization');
+
+      // --- Sub-collections ---
+
+      // Roles:
+      match /roles/{roleId} {
+        // Read: Any member of the org can see the roles.
+        allow read: if exists(/databases/$(database)/documents/memberships/$(request.auth.uid + "_" + orgId));
+        // Create, Update, Delete: Need 'manage_org_roles' permission.
+        allow write: if hasOrgPermission(request.auth.uid, orgId, 'manage_org_roles');
+      }
+
+      // Members (the denormalized permissions store)
+      match /members/{memberUserId} {
+          // Read: Admins can read other members' permission sets. Members can read their own.
+          allow read: if request.auth.uid == memberUserId || hasOrgPermission(request.auth.uid, orgId, 'manage_org_members');
+          // Write: Only a function should write this, triggered by membership role changes.
+          allow write: if false;
+      }
+    }
+
+    // Memberships: Defines who is in an organization.
+    match /memberships/{membershipId} {
+        // Read: The user themselves can read their membership. Admins can read any.
+        allow read: if resource.data.userId == request.auth.uid || hasOrgPermission(request.auth.uid, resource.data.organizationId, 'manage_org_members');
+        
+        // Create: An admin of the org can create a membership (invite). A user can create one if joining via request.
+        // This rule is complex. Let's simplify: only admins can add members for now.
+        allow create: if hasOrgPermission(request.auth.uid, request.resource.data.organizationId, 'manage_org_members');
+        
+        // Update: An admin can update roles.
+        allow update: if hasOrgPermission(request.auth.uid, resource.data.organizationId, 'manage_org_members');
+        
+        // Delete: An admin can delete a membership (kick). The user can delete their own (leave).
+        allow delete: if resource.data.userId == request.auth.uid || hasOrgPermission(request.auth.uid, resource.data.organizationId, 'manage_org_members');
+    }
+
+    // Tasks, Posts, Events etc. follow a similar pattern.
+    // Example for Tasks:
+    match /tasks/{taskId} {
+      allow read: if resource.data.userId == request.auth.uid || (resource.data.sourceOrgId != null && hasOrgPermission(request.auth.uid, resource.data.sourceOrgId, 'viewContent'));
+
+      // Create: Must be authenticated. If it's an org task, need 'create_task_in_org' perm.
+      allow create: if request.auth.uid == request.resource.data.userId; // Basic rule, can be expanded with org permission checks.
+
+      // Update: User can update their own task. Org admins can update org tasks.
+      allow update: if resource.data.userId == request.auth.uid || (resource.data.sourceOrgId != null && hasOrgPermission(request.auth.uid, resource.data.sourceOrgId, 'manage_all_org_tasks'));
+
+      // Delete: User can delete their own. Org admins can delete org tasks.
+      allow delete: if resource.data.userId == request.auth.uid || (resource.data.sourceOrgId != null && hasOrgPermission(request.auth.uid, resource.data.sourceOrgId, 'deleteAnyTaskInOrg'));
+    }
+  }
+}

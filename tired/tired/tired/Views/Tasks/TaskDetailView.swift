@@ -442,11 +442,15 @@ struct FileAttachmentRow: View {
             }
             Spacer()
             // Optional: Button to download/view
-            Link(destination: URL(string: attachment.fileUrl)!) {
-                Image(systemName: "arrow.down.circle")
-                    .font(.title2)
-                    .foregroundColor(.blue)
-            }
+                                        // Safely unwrap the URL
+                                        if let url = URL(string: attachment.fileUrl) {
+                                            Link(destination: url) {
+                                                Image(systemName: "safari")
+                                            }
+                                        } else {
+                                            Image(systemName: "safari")
+                                                .foregroundColor(.secondary.opacity(0.5))
+                                        }
         }
         .padding(AppDesignSystem.paddingMedium)
         .glassmorphicCard(cornerRadius: AppDesignSystem.cornerRadiusMedium)
@@ -498,21 +502,3 @@ struct InfoRow: View {
     }
 }
 
-// MARK: - Date Extension (Moved to a common place if needed elsewhere)
-
-extension Date {
-    func formatDateTime() -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_TW")
-        formatter.dateFormat = "yyyy年M月d日 HH:mm"
-        return formatter.string(from: self)
-    }
-    
-    func formatShort() -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_TW")
-        formatter.dateStyle = .short
-        formatter.timeStyle = .short
-        return formatter.string(from: self)
-    }
-}

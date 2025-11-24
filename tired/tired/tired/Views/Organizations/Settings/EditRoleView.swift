@@ -42,12 +42,12 @@ struct EditRoleView: View {
                     Section {
                         ForEach(OrgPermission.allCases, id: \.self) { permission in
                             Toggle(isOn: Binding(
-                                get: { self.permissions.contains(permission.rawValue) },
+                                get: { self.permissions.contains(permission.permissionString) },
                                 set: { isOn in
                                     if isOn {
-                                        self.permissions.insert(permission.rawValue)
+                                        self.permissions.insert(permission.permissionString)
                                     } else {
-                                        self.permissions.remove(permission.rawValue)
+                                        self.permissions.remove(permission.permissionString)
                                     }
                                 }
                             )) {

@@ -25,7 +25,7 @@ enum OrgType: String, Codable, CaseIterable {
 // MARK: - Organization Permission
 
 /// 組織權限類型
-enum OrgPermission {
+enum OrgPermission: CaseIterable {
     // Owner 專屬權限
     case deleteOrganization     // 刪除組織
     case transferOwnership      // 轉移所有權
@@ -82,6 +82,42 @@ enum OrgPermission {
             return "join_events" // 所有成員默認擁有
         case .react:
             return "react" // 所有成員默認擁有
+        }
+    }
+    
+    /// 權限顯示名稱
+    var displayName: String {
+        switch self {
+        case .deleteOrganization:
+            return "刪除組織"
+        case .transferOwnership:
+            return "轉移所有權"
+        case .manageMembers:
+            return "管理成員"
+        case .changeRoles:
+            return "變更角色"
+        case .removeMembers:
+            return "移除成員"
+        case .manageApps:
+            return "管理小應用"
+        case .editOrgInfo:
+            return "編輯組織資訊"
+        case .createPosts:
+            return "發布貼文"
+        case .createEvents:
+            return "創建活動"
+        case .createTasks:
+            return "創建任務"
+        case .editOwnPosts:
+            return "編輯自己的貼文"
+        case .viewContent:
+            return "查看內容"
+        case .comment:
+            return "評論"
+        case .joinEvents:
+            return "參加活動"
+        case .react:
+            return "按讚互動"
         }
     }
 }

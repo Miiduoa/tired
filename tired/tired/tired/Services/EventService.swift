@@ -81,13 +81,18 @@ class EventService: ObservableObject {
     // MARK: - CRUD Operations
 
     /// 創建活動
-    func createEvent(_ event: Event) async throws -> String {
+    func createEvent(_ event: Event) async throws -> Event {
         var newEvent = event
         newEvent.createdAt = Date()
         newEvent.updatedAt = Date()
 
         let ref = try db.collection("events").addDocument(from: newEvent)
-        return ref.documentID
+        newEvent.id = ref.documentID
+        
+        // Schedule notification
+        NotificationService.shared.scheduleNotification(for: newEvent)
+        
+        return newEvent
     }
 
     /// 更新活動
@@ -100,10 +105,16 @@ class EventService: ObservableObject {
         updatedEvent.updatedAt = Date()
 
         try db.collection("events").document(id).setData(from: updatedEvent)
+        
+        // Reschedule notification
+        NotificationService.shared.scheduleNotification(for: updatedEvent)
     }
 
     /// 取消活動
     func cancelEvent(id: String) async throws {
+        // Cancel notification before cancelling the event
+        NotificationService.shared.cancelNotification(withIdentifier: "event-\(id)")
+        
         try await db.collection("events").document(id).updateData([
             "isCancelled": true,
             "updatedAt": Timestamp(date: Date())
@@ -112,6 +123,9 @@ class EventService: ObservableObject {
 
     /// 刪除活動
     func deleteEvent(id: String) async throws {
+        // Cancel notification before deleting
+        NotificationService.shared.cancelNotification(withIdentifier: "event-\(id)")
+        
         try await db.collection("events").document(id).delete()
     }
 

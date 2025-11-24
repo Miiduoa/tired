@@ -139,7 +139,7 @@ extension Membership {
         
         // 2. 檢查這些角色中，是否有任何一個包含指定的權限
         for role in memberRoles {
-            if role.permissions.contains(permission) {
+            if role.permissions.contains(permission.permissionString) {
                 return true
             }
         }
@@ -149,14 +149,14 @@ extension Membership {
 
     /// 檢查成員是否為組織擁有者 (Owner)
     func isOwner(in organization: Organization) -> Bool {
-        return hasPermission(AppPermissions.deleteOrganization, in: organization)
+        return hasPermission(.deleteOrganization, in: organization)
     }
 
     /// 檢查成員是否為組織管理員 (Admin)
     func isAdmin(in organization: Organization) -> Bool {
         // 管理員通常能管理成員和角色
-        let hasAdminPermissions = hasPermission(AppPermissions.manageOrgMembers, in: organization) &&
-                                  hasPermission(AppPermissions.manageOrgRoles, in: organization)
+        let hasAdminPermissions = hasPermission(.manageMembers, in: organization) &&
+                                  hasPermission(.changeRoles, in: organization)
         return hasAdminPermissions
     }
 }

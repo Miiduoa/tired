@@ -12,11 +12,13 @@ class TasksViewModel: ObservableObject {
     @Published var sortOption: TaskSortOption = .deadline
     @Published var errorMessage: String?
     @Published var userProfile: UserProfile?
+    @Published var isCalendarAuthorized = false
 
     private let taskService = TaskService()
     private let autoPlanService = AutoPlanService()
     private let permissionService = PermissionService()
     private let userService = UserService()
+    private let calendarService = CalendarService()
     private var cancellables = Set<AnyCancellable>()
     private var loadingCounter = 0 {
         didSet {
@@ -32,7 +34,10 @@ class TasksViewModel: ObservableObject {
 
     init() {
         setupSubscriptions()
-        _Concurrency.Task { await loadUserProfile() }
+        _Concurrency.Task {
+            await loadUserProfile()
+            await checkCalendarAuthorization()
+        }
     }
 
     func setupSubscriptions() {
@@ -277,6 +282,24 @@ class TasksViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Calendar Integration
+
+    @MainActor
+    func checkCalendarAuthorization() {
+        isCalendarAuthorized = calendarService.isAuthorized
+    }
+
+    @MainActor
+    func requestCalendarAccess() async {
+        let granted = await calendarService.requestAccess()
+        isCalendarAuthorized = granted
+        if granted {
+            ToastManager.shared.showToast(message: "行事曆已連接！", type: .success)
+        } else {
+            ToastManager.shared.showToast(message: "行事曆權限被拒絕。", type: .warning)
+        }
+    }
+    
     // MARK: - Auto Plan
 
     func runAutoplan(weeklyCapacityOverride: Int? = nil, dailyCapacityOverride: Int? = nil) {
@@ -284,6 +307,12 @@ class TasksViewModel: ObservableObject {
             await MainActor.run { loadingCounter += 1 }
             defer {
                 await MainActor.run { loadingCounter -= 1 }
+            }
+
+            // Fetch busy blocks from calendar if authorized
+            var busyBlocks: [BusyTimeBlock] = []
+            if await MainActor.run(body: { self.isCalendarAuthorized }) {
+                busyBlocks = await calendarService.fetchBusyTimeBlocks(forNextDays: 14)
             }
 
             // 获取所有任务
@@ -304,7 +333,11 @@ class TasksViewModel: ObservableObject {
                 dailyCapacityMinutes: dailyCapacity,
                 workdaysInWeek: workdays
             )
-            let (updatedTasks, scheduledTaskCount) = autoPlanService.autoplanWeek(tasks: allTasks, options: options)
+            let (updatedTasks, scheduledTaskCount) = autoPlanService.autoplanWeek(
+                tasks: allTasks,
+                busyBlocks: busyBlocks,
+                options: options
+            )
 
             // 批量更新
             do {

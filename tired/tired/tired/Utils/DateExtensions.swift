@@ -24,6 +24,14 @@ extension Date {
         return formatter.string(from: self)
     }
 
+    /// 格式化为 "yyyy年M月d日 HH:mm"
+    func formatDateTime() -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_TW")
+        formatter.dateFormat = "yyyy年M月d日 HH:mm"
+        return formatter.string(from: self)
+    }
+
     /// 是否是今天
     var isToday: Bool {
         Calendar.current.isDateInToday(self)

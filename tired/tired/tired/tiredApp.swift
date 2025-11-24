@@ -41,5 +41,10 @@ struct RootView: View {
             // 處理 Google Sign-In 的 URL callback
             GIDSignIn.sharedInstance.handle(url)
         }
+        .onAppear {
+            _Concurrency.Task {
+                await NotificationService.shared.requestAuthorization()
+            }
+        }
     }
 }

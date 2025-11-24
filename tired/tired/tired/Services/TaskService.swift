@@ -307,12 +307,18 @@ class TaskService: ObservableObject {
     // MARK: - CRUD Operations
 
     /// 创建新任务
-    func createTask(_ task: Task) async throws {
+    func createTask(_ task: Task) async throws -> Task {
         var newTask = task
         newTask.createdAt = Date()
         newTask.updatedAt = Date()
 
-        _ = try db.collection("tasks").addDocument(from: newTask)
+        let ref = try db.collection("tasks").addDocument(from: newTask)
+        newTask.id = ref.documentID
+        
+        // Schedule notification
+        NotificationService.shared.scheduleNotification(for: newTask)
+        
+        return newTask
     }
 
     /// 更新任务
@@ -325,15 +331,25 @@ class TaskService: ObservableObject {
         updatedTask.updatedAt = Date()
 
         try db.collection("tasks").document(id).setData(from: updatedTask)
+        
+        // Reschedule notification
+        NotificationService.shared.scheduleNotification(for: updatedTask)
     }
 
     /// 删除任务
     func deleteTask(id: String) async throws {
+        // Cancel notification before deleting
+        NotificationService.shared.cancelNotification(withIdentifier: "task-\(id)")
         try await db.collection("tasks").document(id).delete()
     }
 
     /// 标记任务完成/未完成
     func toggleTaskDone(id: String, isDone: Bool) async throws {
+        if isDone {
+            // Cancel notification if task is being marked as done
+            NotificationService.shared.cancelNotification(withIdentifier: "task-\(id)")
+        }
+        
         let updates: [String: Any] = [
             "isDone": isDone,
             "doneAt": isDone ? Timestamp(date: Date()) : NSNull(),

@@ -128,3 +128,113 @@ struct EventDetailView: View {
 
 // Dedicated ViewModel for EventDetailView
 class EventDetailViewModel: ObservableObject {
+    @Published var event: Event?
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    @Published var organizationName = ""
+    
+    private let eventId: String
+    private let eventService = EventService()
+    private let organizationService = OrganizationService()
+    
+    init(eventId: String) {
+        self.eventId = eventId
+    }
+    
+    func fetchEvent() {
+        isLoading = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                let fetchedEvent = try await eventService.fetchEvent(id: eventId)
+                await MainActor.run {
+                    self.event = fetchedEvent
+                    self.isLoading = false
+                    if let orgId = fetchedEvent.organizationId {
+                        Task {
+                            await self.fetchOrganizationName(orgId: orgId)
+                        }
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.errorMessage = error.localizedDescription
+                    self.isLoading = false
+                }
+            }
+        }
+    }
+    
+    private func fetchOrganizationName(orgId: String) async {
+        do {
+            let org = try await organizationService.fetchOrganization(id: orgId)
+            await MainActor.run {
+                self.organizationName = org.name
+            }
+        } catch {
+            await MainActor.run {
+                self.organizationName = "未知組織"
+            }
+        }
+    }
+    
+    func deleteEvent() {
+        guard let event = event else { return }
+        
+        Task {
+            do {
+                try await eventService.deleteEvent(id: eventId)
+            } catch {
+                await MainActor.run {
+                    self.errorMessage = "刪除失敗: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+}
+
+// Helper view for info rows
+struct InfoRow: View {
+    let icon: String
+    let iconColor: Color
+    let title: String
+    let value: String
+    
+    var body: some View {
+        HStack {
+            Image(systemName: icon)
+                .foregroundColor(iconColor)
+                .frame(width: 24)
+            Text(title)
+                .font(.headline)
+                .foregroundColor(.secondary)
+            Spacer()
+            Text(value)
+                .font(.body)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+    }
+}
+
+// Placeholder for EditEventView (to be implemented)
+struct EditEventView: View {
+    let event: Event
+    let viewModel: EventDetailViewModel
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            Text("編輯活動功能待實現")
+                .navigationTitle("編輯活動")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("取消") { dismiss() }
+                    }
+                }
+        }
+    }
+}
+

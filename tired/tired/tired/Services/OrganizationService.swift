@@ -126,7 +126,7 @@ class OrganizationService: ObservableObject {
 
         // Owner Role
         let ownerRoleRef = rolesCollection.document()
-        let ownerPermissions = OrgPermission.allCases.map { $0.rawValue }
+        let ownerPermissions = OrgPermission.allCases.map { $0.permissionString }
         let ownerRole = Role(id: ownerRoleRef.documentID, name: "擁有者", permissions: ownerPermissions, isDefault: true)
         try batch.setData(from: ownerRole, forDocument: ownerRoleRef)
 
@@ -137,14 +137,14 @@ class OrganizationService: ObservableObject {
             case .deleteOrganization, .transferOwnership: return false
             default: return true
             }
-        }.map { $0.rawValue }
+        }.map { $0.permissionString }
         let adminRole = Role(id: adminRoleRef.documentID, name: "管理員", permissions: adminPermissions, isDefault: true)
         try batch.setData(from: adminRole, forDocument: adminRoleRef)
 
         // Member Role
         let memberRoleRef = rolesCollection.document()
         let memberPermissions: [OrgPermission] = [.viewContent, .comment, .joinEvents, .react]
-        let memberRole = Role(id: memberRoleRef.documentID, name: "成員", permissions: memberPermissions.map { $0.rawValue }, isDefault: true)
+        let memberRole = Role(id: memberRoleRef.documentID, name: "成員", permissions: memberPermissions.map { $0.permissionString }, isDefault: true)
         try batch.setData(from: memberRole, forDocument: memberRoleRef)
         
         // 3. 提交批次操作以創建角色
@@ -315,7 +315,6 @@ class OrganizationService: ObservableObject {
     func handleMemberLeave(membership: Membership) async throws {
         // ... Omitted for now ...
     }
-    */
 
     // MARK: - Membership Requests
 
