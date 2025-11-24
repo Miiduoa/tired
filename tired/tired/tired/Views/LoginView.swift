@@ -1,5 +1,6 @@
 import SwiftUI
-import UIKit
+import UIKit // For UIWindowScene and UIViewController
+import FirebaseAuth // For Auth.auth().currentUser?.uid
 
 @available(iOS 17.0, *)
 struct LoginView: View {
@@ -22,56 +23,62 @@ struct LoginView: View {
     }
 
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 24) {
+        ZStack {
+            // Background with modern glass effect feel
+            Color.appPrimaryBackground.edgesIgnoringSafeArea(.all)
+            
+            ParticleView() // Optional: For dynamic background visual interest
+
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: AppDesignSystem.paddingLarge * 2) {
                     Spacer()
-                        .frame(height: 60)
+                        .frame(minHeight: 40) // Give some top spacing
 
                     // Logo / Title
-                    VStack(spacing: 8) {
-                        Image(systemName: "bed.double.fill")
+                    VStack(spacing: AppDesignSystem.paddingSmall) {
+                        Image(systemName: "bed.double.fill") // Example logo icon
                             .font(.system(size: 60))
-                            .foregroundColor(.blue)
+                            .foregroundColor(AppDesignSystem.accentColor)
 
-                        Text("Tired")
-                            .font(.system(size: 36, weight: .bold))
+                        Text("Tired App")
+                            .font(AppDesignSystem.titleFont)
+                            .foregroundColor(.primary)
 
-                        Text("多身份任务管理系统")
-                            .font(.system(size: 14))
+                        Text("多身份任務管理系統")
+                            .font(AppDesignSystem.bodyFont)
                             .foregroundColor(.secondary)
                     }
-                    .padding(.bottom, 40)
 
-                    // Form
-                    VStack(spacing: 16) {
+                    // Login/Signup Form Card
+                    VStack(spacing: AppDesignSystem.paddingMedium) {
                         if isSignUp {
                             TextField("姓名", text: $name)
-                                .textFieldStyle(.roundedBorder)
+                                .textFieldStyle(FrostedTextFieldStyle())
                                 .textContentType(.name)
                         }
 
-                        TextField("邮箱", text: $email)
-                            .textFieldStyle(.roundedBorder)
+                        TextField("信箱", text: $email)
+                            .textFieldStyle(FrostedTextFieldStyle())
                             .textContentType(.emailAddress)
 #if os(iOS)
                             .textInputAutocapitalization(.never)
                             .keyboardType(.emailAddress)
 #endif
 
-                        SecureField("密码", text: $password)
-                            .textFieldStyle(.roundedBorder)
+                        SecureField("密碼", text: $password)
+                            .textFieldStyle(FrostedTextFieldStyle())
                             .textContentType(isSignUp ? .newPassword : .password)
 
+                        // Error Message
                         if let error = errorMessage {
-                            VStack(spacing: 8) {
+                            VStack(spacing: AppDesignSystem.paddingSmall) {
                                 Text(error)
-                                    .font(.system(size: 13))
+                                    .font(AppDesignSystem.captionFont)
                                     .foregroundColor(.red)
                                     .multilineTextAlignment(.center)
 
-                                // 如果是「已被使用」錯誤，顯示切換提示
-                                if error.contains("已被使用") {
+                                // If "email in use" error, suggest switching to sign-in
+                                if error.contains("已被使用") || error.contains("already in use") {
                                     Button {
                                         withAnimation {
                                             isSignUp = false
@@ -79,89 +86,77 @@ struct LoginView: View {
                                         }
                                     } label: {
                                         Text("切換到登入模式")
-                                            .font(.system(size: 12))
-                                            .foregroundColor(.blue)
+                                            .font(AppDesignSystem.captionFont.weight(.medium))
+                                            .foregroundColor(AppDesignSystem.accentColor)
                                             .underline()
                                     }
                                 }
                             }
-                            .padding(.horizontal)
+                            .padding(.horizontal, AppDesignSystem.paddingMedium)
                         }
 
-                        // Login/SignUp Button
+                        // Main Auth Button
                         Button(action: handleAuth) {
                             HStack {
                                 if isLoading {
                                     ProgressView()
                                         .progressViewStyle(.circular)
-                                        .tint(.white)
+                                        .tint(.white) // Ensure visibility on accent background
                                 } else {
-                                    Text(isSignUp ? "注册" : "登入")
-                                        .font(.system(size: 16, weight: .semibold))
+                                    Text(isSignUp ? "註冊" : "登入")
                                 }
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
                         }
+                        .buttonStyle(GlassmorphicButtonStyle(textColor: .white)) // Custom text color for primary action
                         .disabled(isLoading || !isFormValid)
-
-                        // Divider
+                        
+                        // Separator
                         HStack {
                             Rectangle()
-                                .fill(Color.gray.opacity(0.3))
+                                .fill(Color.secondary.opacity(0.3))
                                 .frame(height: 1)
                             Text("或")
-                                .font(.system(size: 12))
+                                .font(AppDesignSystem.captionFont)
                                 .foregroundColor(.secondary)
-                                .padding(.horizontal, 8)
+                                .padding(.horizontal, AppDesignSystem.paddingSmall)
                             Rectangle()
-                                .fill(Color.gray.opacity(0.3))
+                                .fill(Color.secondary.opacity(0.3))
                                 .frame(height: 1)
                         }
-                        .padding(.vertical, 8)
+                        .padding(.vertical, AppDesignSystem.paddingSmall)
 
                         // Google Sign In Button
                         Button(action: handleGoogleSignIn) {
                             HStack {
                                 Image(systemName: "globe")
-                                    .font(.system(size: 16, weight: .medium))
+                                    .font(AppDesignSystem.bodyFont.weight(.medium))
                                 Text("使用 Google 登入")
-                                    .font(.system(size: 16, weight: .semibold))
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.white)
-                            .foregroundColor(.primary)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                            )
                         }
+                        .buttonStyle(GlassmorphicButtonStyle(material: .regularMaterial, textColor: .primary)) // Slightly different material/color
                         .disabled(isLoading)
 
-                        // Toggle Sign Up / Login
+                        // Toggle Sign Up / Login Mode
                         Button {
-                            withAnimation {
+                            withAnimation(.spring()) {
                                 isSignUp.toggle()
                                 errorMessage = nil
                             }
                         } label: {
-                            Text(isSignUp ? "已有账号？登入" : "没有账号？注册")
-                                .font(.system(size: 14))
-                                .foregroundColor(.blue)
+                            Text(isSignUp ? "已有帳號？登入" : "沒有帳號？註冊")
+                                .font(AppDesignSystem.bodyFont)
+                                .foregroundColor(AppDesignSystem.accentColor)
                         }
                     }
-                    .padding(.horizontal, 24)
+                    .padding(AppDesignSystem.paddingLarge)
+                    .glassmorphicCard() // Apply glassmorphic effect to the form container
+                    .padding(.horizontal, AppDesignSystem.paddingLarge)
 
                     Spacer()
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, AppDesignSystem.paddingLarge)
             }
-#if os(iOS)
-            .navigationBarHidden(true)
-#endif
         }
     }
 
@@ -183,22 +178,14 @@ struct LoginView: View {
                 } else {
                     try await authService.signIn(email: email, password: password)
                 }
-                // 成功時，AuthService 的狀態監聽器會自動更新 UI
-                await MainActor.run {
-                    isLoading = false
-                }
+                await MainActor.run { isLoading = false }
             } catch {
                 await MainActor.run {
-                    // 顯示友好的錯誤訊息
                     let nsError = error as NSError
                     if let description = nsError.userInfo[NSLocalizedDescriptionKey] as? String {
                         errorMessage = description
-
-                        // 如果是「電子郵件已被使用」錯誤，自動切換到登入模式
-                        if description.contains("已被使用") || nsError.code == 17007 {
-                            withAnimation {
-                                isSignUp = false
-                            }
+                        if description.contains("已被使用") || nsError.code == 17007 { // Firebase Auth "email-already-in-use" code
+                            withAnimation { isSignUp = false }
                         }
                     } else {
                         errorMessage = error.localizedDescription
@@ -222,10 +209,7 @@ struct LoginView: View {
         _Concurrency.Task {
             do {
                 try await authService.signInWithGoogle(presentingViewController: presentingVC)
-                // 成功時，AuthService 的狀態監聽器會自動更新 UI
-                await MainActor.run {
-                    isLoading = false
-                }
+                await MainActor.run { isLoading = false }
             } catch {
                 await MainActor.run {
                     let nsError = error as NSError
@@ -238,6 +222,17 @@ struct LoginView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Particle View (Placeholder for dynamic background)
+struct ParticleView: View {
+    var body: some View {
+        // This could be a complex view for dynamic particles,
+        // subtle gradients, or animated shapes that enhance the glass effect.
+        // For now, it's just a clear view.
+        LinearGradient(gradient: Gradient(colors: [Color.appPrimaryBackground.opacity(0.8), Color.appPrimaryBackground.opacity(0.9)]), startPoint: .topLeading, endPoint: .bottomTrailing)
+            .edgesIgnoringSafeArea(.all)
     }
 }
 

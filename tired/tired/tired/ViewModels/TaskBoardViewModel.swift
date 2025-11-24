@@ -55,21 +55,24 @@ class TaskBoardViewModel: ObservableObject {
         guard let userId = userId else { return }
 
         _Concurrency.Task {
-            do {
-                let snapshot = try await FirebaseManager.shared.db
-                    .collection("memberships")
-                    .whereField("userId", isEqualTo: userId)
-                    .whereField("organizationId", isEqualTo: organizationId)
-                    .getDocuments()
-
-                if let doc = snapshot.documents.first,
-                   let membership = try? doc.data(as: Membership.self) {
-                    await MainActor.run {
-                        self.canManage = membership.role == .owner || membership.role == .admin
-                    }
-                }
-            } catch {
-                print("❌ Error checking permissions: \(error)")
+            // 使用 OrganizationService 來檢查權限
+            let organizationService = OrganizationService()
+            
+            // 檢查是否有創建任務或管理小應用的權限
+            let canCreateTasks = (try? await organizationService.checkPermission(
+                userId: userId,
+                organizationId: organizationId,
+                permission: .createTasks
+            )) ?? false
+            
+            let canManageApps = (try? await organizationService.checkPermission(
+                userId: userId,
+                organizationId: organizationId,
+                permission: .manageApps
+            )) ?? false
+            
+            await MainActor.run {
+                self.canManage = canCreateTasks || canManageApps
             }
         }
     }
@@ -95,24 +98,20 @@ class TaskBoardViewModel: ObservableObject {
         try await taskService.createTask(task)
     }
 
-    func syncToPersonalTasks(task: Task) {
-        guard let userId = userId else { return }
-
-        _Concurrency.Task {
-            do {
-                // 創建個人任務副本
-                var personalTask = task
-                personalTask.id = nil // 清除ID以創建新任務
-                personalTask.userId = userId
-                personalTask.sourceType = .orgTask
-                personalTask.plannedDate = nil // 讓用戶自己排程
-
-                try await taskService.createTask(personalTask)
-
-                print("✅ Task synced to personal tasks")
-            } catch {
-                print("❌ Error syncing task: \(error)")
-            }
+    func syncToPersonalTasks(task: Task) async throws {
+        guard let userId = userId else {
+            throw NSError(domain: "TaskBoardViewModel", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])
         }
+
+        // 創建個人任務副本
+        var personalTask = task
+        personalTask.id = nil // 清除ID以創建新任務
+        personalTask.userId = userId
+        personalTask.sourceType = .orgTask
+        personalTask.plannedDate = nil // 讓用戶自己排程
+
+        try await taskService.createTask(personalTask)
+
+        print("✅ Task synced to personal tasks")
     }
 }

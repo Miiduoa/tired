@@ -61,26 +61,37 @@ struct CalendarViewRepresentable: View {
     let itemsByDate: [Date: [CalendarItem]]
     @Binding var selectedDate: Date?
     
+    @State private var selectedDateComponents: DateComponents?
+
     var body: some View {
         let calendar = Calendar.current
         let datesWithItems = Set(itemsByDate.keys.map { calendar.startOfDay(for: $0) })
         
-        // 使用 DatePicker 作為日曆視圖
-        DatePicker(
-            "選擇日期",
-            selection: Binding(
-                get: { selectedDate ?? Date() },
-                set: { selectedDate = $0 }
-            ),
-            in: interval.start...interval.end,
-            displayedComponents: [.date]
-        )
-        .datePickerStyle(.graphical)
-        .onChange(of: selectedDate) {
-             // 這裡可以處理日期變更，但因為我們使用了 Binding，selectedDate 會自動更新
+        SwiftUI.CalendarView(interval: interval, selection: $selectedDateComponents) { dateComponents in
+            let date = dateComponents.date ?? Date()
+            let day = dateComponents.day ?? 0
+            let isDateWithItem = datesWithItems.contains(calendar.startOfDay(for: date))
+
+            Text(String(day))
+                .padding(8)
+                .frame(width: 32, height: 32)
+                .background {
+                    if isDateWithItem {
+                        // 如果這天有多個項目，只顯示一個點
+                        Circle().fill(Color.blue.opacity(0.8))
+                    }
+                }
+                .clipShape(Circle())
+                .foregroundColor(isDateWithItem ? .white : .primary)
+        }
+        .onChange(of: selectedDateComponents) {
+            selectedDate = selectedDateComponents?.date
         }
         .onAppear {
-            // Set initial selection if needed
+            // Set initial selection
+            if let date = selectedDate {
+                selectedDateComponents = calendar.dateComponents([.year, .month, .day], from: date)
+            }
         }
     }
 }

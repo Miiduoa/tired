@@ -58,44 +58,36 @@ class OrganizationsViewModel: ObservableObject {
             createdByUserId: userId
         )
 
-        await MainActor.run {
-            isLoading = true
-        }
-
+        await MainActor.run { isLoading = true }
         defer {
-            DispatchQueue.main.async { [weak self] in
-                self?.isLoading = false
-            }
+            DispatchQueue.main.async { [weak self] in self?.isLoading = false }
         }
 
-        // 創建組織
-        let orgId = try await organizationService.createOrganization(org)
-
-        // 自動為創建者添加owner身份
-        let membership = Membership(
-            userId: userId,
-            organizationId: orgId,
-            role: .owner
-        )
-
-        try await organizationService.createMembership(membership)
-
-        return orgId
+        // The service now handles creating default roles and owner membership internally
+        do {
+            let orgId = try await organizationService.createOrganization(org)
+            ToastManager.shared.showToast(message: "組織創建成功！", type: .success)
+            return orgId
+        } catch {
+            ToastManager.shared.showToast(message: "組織創建失敗：\(error.localizedDescription)", type: .error)
+            throw error // Re-throw the error as the function is async throws
+        }
     }
 
-    /// 加入組織
-    private func joinOrganization(organizationId: String, role: MembershipRole = .member) async throws {
+    /// 申請加入組織
+    func requestToJoinOrganization(organizationId: String) async throws {
         guard let userId = userId else {
             throw NSError(domain: "OrganizationsViewModel", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])
         }
+        let userName = Auth.auth().currentUser?.displayName ?? "匿名用戶"
 
-        let membership = Membership(
-            userId: userId,
+        try await organizationService.createMembershipRequest(
             organizationId: organizationId,
-            role: role
+            userId: userId,
+            userName: userName,
+            type: .request
         )
-
-        try await organizationService.createMembership(membership)
+        ToastManager.shared.showToast(message: "加入組織申請已送出！", type: .success)
     }
 
     /// 離開組織
@@ -111,7 +103,10 @@ class OrganizationsViewModel: ObservableObject {
         }
 
         guard let algoliaService = algoliaService else {
-            await MainActor.run { errorMessage = "搜尋服務未設定" }
+            await MainActor.run {
+                self.errorMessage = "搜尋服務未設定"
+                ToastManager.shared.showToast(message: "搜尋服務未設定", type: .error)
+            }
             return
         }
 
@@ -146,6 +141,7 @@ class OrganizationsViewModel: ObservableObject {
             print("❌ Error searching organizations with Algolia: \(error)")
             await MainActor.run {
                 self.errorMessage = "搜尋失敗：\(error.localizedDescription)"
+                ToastManager.shared.showToast(message: "搜尋失敗：\(error.localizedDescription)", type: .error)
             }
         }
     }

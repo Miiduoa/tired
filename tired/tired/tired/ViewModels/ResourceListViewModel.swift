@@ -57,21 +57,24 @@ class ResourceListViewModel: ObservableObject {
         guard let userId = userId else { return }
 
         _Concurrency.Task {
-            do {
-                let snapshot = try await FirebaseManager.shared.db
-                    .collection("memberships")
-                    .whereField("userId", isEqualTo: userId)
-                    .whereField("organizationId", isEqualTo: organizationId)
-                    .getDocuments()
-
-                if let doc = snapshot.documents.first,
-                   let membership = try? doc.data(as: Membership.self) {
-                    await MainActor.run {
-                        self.canManage = membership.role == .owner || membership.role == .admin || membership.role == .staff
-                    }
-                }
-            } catch {
-                print("❌ Error checking permissions: \(error)")
+            // 使用 OrganizationService 來檢查權限
+            let organizationService = OrganizationService()
+            
+            // 檢查是否有創建貼文或管理小應用的權限（這些權限通常只有管理員和擁有者才有）
+            let canCreatePosts = (try? await organizationService.checkPermission(
+                userId: userId,
+                organizationId: organizationId,
+                permission: .createPosts
+            )) ?? false
+            
+            let canManageApps = (try? await organizationService.checkPermission(
+                userId: userId,
+                organizationId: organizationId,
+                permission: .manageApps
+            )) ?? false
+            
+            await MainActor.run {
+                self.canManage = canCreatePosts || canManageApps
             }
         }
     }
@@ -106,3 +109,4 @@ class ResourceListViewModel: ObservableObject {
         }
     }
 }
+

@@ -7,16 +7,24 @@ class AutoPlanService {
     struct AutoPlanOptions {
         let weekStart: Date
         let weeklyCapacityMinutes: Int
-        let dailyCapacityMinutes: Int
+        let dailyCapacityMinutes: Int // Calculated based on weeklyCapacity and workdaysInWeek
+        let workdaysInWeek: Int // New property: Number of days considered workdays for daily capacity calculation
 
         init(
             weekStart: Date? = nil,
-            weeklyCapacityMinutes: Int = 600  // 默认10小时/周
+            weeklyCapacityMinutes: Int = 600,  // 默认10小时/周
+            dailyCapacityMinutes: Int? = nil,
+            workdaysInWeek: Int = 5 // Default to 5 workdays
         ) {
             let calendar = Calendar.current
             self.weekStart = weekStart ?? calendar.dateInterval(of: .weekOfYear, for: Date())?.start ?? Date()
             self.weeklyCapacityMinutes = weeklyCapacityMinutes
-            self.dailyCapacityMinutes = weeklyCapacityMinutes / 5  // 假设5个工作日
+            self.workdaysInWeek = max(1, workdaysInWeek) // Ensure at least 1 workday
+            if let dailyCapacityMinutes {
+                self.dailyCapacityMinutes = dailyCapacityMinutes
+            } else {
+                self.dailyCapacityMinutes = weeklyCapacityMinutes / self.workdaysInWeek
+            }
         }
     }
 
@@ -24,10 +32,11 @@ class AutoPlanService {
     /// - Parameters:
     ///   - tasks: 所有任务（包括已排程和未排程）
     ///   - options: 排程选项
-    /// - Returns: 更新后的任务列表
-    func autoplanWeek(tasks: [Task], options: AutoPlanOptions) -> [Task] {
+    /// - Returns: 更新后的任务列表和实际排程的任务数量
+    func autoplanWeek(tasks: [Task], options: AutoPlanOptions) -> ([Task], Int) {
         let calendar = Calendar.current
         var updatedTasks = tasks
+        var scheduledTaskCount = 0
 
         // 1. 筛选候选任务（未完成、未锁定、未排程）
         let candidates = tasks
@@ -69,32 +78,42 @@ class AutoPlanService {
             let today = Date()
             let todayOffset = calendar.dateComponents([.day], from: calendar.startOfDay(for: options.weekStart), to: calendar.startOfDay(for: today)).day ?? 0
 
+            // Iterate through days, respecting workdays
             for offset in 0..<7 {
                 let dayIndex = (todayOffset + offset) % 7
-                guard dayIndex >= 0 && dayIndex < 7 else { continue }
+                
+                // Only consider workdays for autoplan
+                // This is a simplification; a more advanced version would check if dayIndex corresponds to a workday based on user settings
+                // For now, assume 0-4 (Monday-Friday) are workdays if workdaysInWeek is 5.
+                // This needs more robust configuration if users can customize specific workdays.
+                if options.workdaysInWeek == 5 && (dayIndex == 5 || dayIndex == 6) { // Skip Saturday (5) and Sunday (6) if 5 workdays
+                    continue
+                }
 
                 if dayMinutes[dayIndex] + duration <= options.dailyCapacityMinutes {
                     assignedIndex = dayIndex
                     break
                 }
             }
-
-            // 如果没找到合适的，就分配到最空的那天
+            
+            // If no suitable workday found, try to assign to the least loaded day regardless of workday status
             if assignedIndex == nil {
                 assignedIndex = dayMinutes.enumerated().min(by: { $0.element < $1.element })?.offset ?? 0
             }
 
-            // 更新任务
+
+            // Update task
             if let index = assignedIndex,
                let plannedDate = calendar.date(byAdding: .day, value: index, to: options.weekStart),
                let taskIndex = updatedTasks.firstIndex(where: { $0.id == candidate.id }) {
                 dayMinutes[index] += duration
-                    updatedTasks[taskIndex].plannedDate = plannedDate
-                    updatedTasks[taskIndex].isDateLocked = false
+                updatedTasks[taskIndex].plannedDate = plannedDate
+                updatedTasks[taskIndex].isDateLocked = false // Autoplan should not lock the date
+                scheduledTaskCount += 1
             }
         }
 
-        return updatedTasks
+        return (updatedTasks, scheduledTaskCount)
     }
 
     /// 计算每日任务总时长

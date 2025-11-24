@@ -35,7 +35,7 @@ struct ProfileView: View {
                                     .font(.system(size: 14))
                                     .foregroundColor(.secondary)
                                 if let date = profileViewModel.memberSince {
-                                    Text("用戶始於 \(date.formatted(date: .long, time: .omitted))")
+                                    Text("用戶始於 \(date.formatted(.yearMonthDay))")
                                         .font(.caption)
                                         .foregroundColor(.secondary)
                                 }

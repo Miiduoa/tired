@@ -3,13 +3,77 @@ import FirebaseFirestore
 import FirebaseFirestoreSwift
 import Combine
 
-/// 任务服务 - 核心业务逻辑
+enum PlannedDateFilter {
+    case today
+    case thisWeek
+    case backlog
+    case none // No specific planned date filter
+}
+
+/// 任務服務 - 核心業務邏輯
 class TaskService: ObservableObject {
     private let db = FirebaseManager.shared.db
 
-    // MARK: - Fetch Tasks
+    // MARK: - Fetch Tasks (Paginated)
 
-    /// 获取用户的所有未完成任务
+    /// 獲取任務 - 分頁版本
+    func fetchTasksPaginated(
+        userId: String,
+        isDone: Bool,
+        limit: Int,
+        lastDocumentSnapshot: DocumentSnapshot?,
+        plannedDateFilter: PlannedDateFilter
+    ) async throws -> (tasks: [Task], lastDocumentSnapshot: DocumentSnapshot?) {
+        var query: Query = db.collection("tasks")
+            .whereField("userId", isEqualTo: userId)
+            .whereField("isDone", isEqualTo: isDone)
+
+        switch plannedDateFilter {
+        case .today:
+            // For today's tasks, we need to query for plannedDate today or deadlineAt today if plannedDate is null
+            // This is complex with Firestore's limitations on OR queries.
+            // A more robust solution might involve:
+            // 1. Fetching all active tasks and filtering client-side (less efficient for large datasets)
+            // 2. Using a backend function (Firebase Function) to pre-process/index tasks for "today"
+            // For now, we will fetch active tasks and filter client-side for "today" and "thisWeek" filters.
+            // So, for .today and .thisWeek, we'll fetch all active and filter later in ViewModel.
+            // This paginated method will mainly be used for backlog for now.
+            query = query.whereField("plannedDate", isGreaterThanOrEqualTo: Calendar.current.startOfDay(for: Date()))
+                .whereField("plannedDate", isLessThan: Calendar.current.startOfDay(for: Date().addingTimeInterval(24*60*60)))
+            
+        case .thisWeek:
+            // Similar complexity as .today for pure Firestore query.
+            // Fetch active tasks and filter client-side.
+            guard let startOfWeek = Date().startOfWeek(),
+                  let endOfWeek = Calendar.current.date(byAdding: .day, value: 7, to: startOfWeek) else {
+                return ([], nil)
+            }
+            query = query.whereField("plannedDate", isGreaterThanOrEqualTo: startOfWeek)
+                .whereField("plannedDate", isLessThan: endOfWeek)
+
+        case .backlog:
+            query = query.whereField("plannedDate", isEqualTo: NSNull())
+        case .none:
+            break // No specific planned date filter
+        }
+        
+        query = query.order(by: "createdAt", descending: true) // Default order
+
+        if let lastSnapshot = lastDocumentSnapshot {
+            query = query.start(afterDocument: lastSnapshot)
+        }
+        
+        query = query.limit(to: limit)
+
+        let snapshot = try await query.getDocuments()
+        let tasks = snapshot.documents.compactMap { doc -> Task? in
+            try? doc.data(as: Task.self)
+        }
+
+        return (tasks, snapshot.documents.last)
+    }
+
+    /// 獲取所有活躍任務（非分頁，用於 client-side 過濾 Today/Week）
     func fetchActiveTasks(userId: String) -> AnyPublisher<[Task], Error> {
         let subject = PassthroughSubject<[Task], Error>()
 
@@ -32,87 +96,6 @@ class TaskService: ObservableObject {
                 }
 
                 subject.send(tasks)
-            }
-
-        return subject.eraseToAnyPublisher()
-    }
-
-    /// 获取今天的任务
-    func fetchTodayTasks(userId: String) -> AnyPublisher<[Task], Error> {
-        fetchActiveTasks(userId: userId)
-            .map { tasks in
-                let calendar = Calendar.current
-                let today = Date()
-
-                return tasks.filter { task in
-                    // 有plannedDate且是今天
-                    if let planned = task.plannedDate,
-                       calendar.isDate(planned, equalTo: today, toGranularity: .day) {
-                        return true
-                    }
-
-                    // 没有plannedDate但deadline是今天
-                    if task.plannedDate == nil,
-                       let deadline = task.deadlineAt,
-                       calendar.isDate(deadline, equalTo: today, toGranularity: .day) {
-                        return true
-                    }
-
-                    return false
-                }
-            }
-            .eraseToAnyPublisher()
-    }
-
-    /// 获取本周的任务
-    func fetchWeekTasks(userId: String) -> AnyPublisher<[Task], Error> {
-        fetchActiveTasks(userId: userId)
-            .map { tasks in
-                let calendar = Calendar.current
-                let today = Date()
-
-                return tasks.filter { task in
-                    guard let planned = task.plannedDate else { return false }
-                    return calendar.isDate(planned, equalTo: today, toGranularity: .weekOfYear)
-                }
-            }
-            .eraseToAnyPublisher()
-    }
-
-    /// 获取未排程的任务（Backlog）
-    func fetchBacklogTasks(userId: String) -> AnyPublisher<[Task], Error> {
-        let subject = PassthroughSubject<[Task], Error>()
-
-        db.collection("tasks")
-            .whereField("userId", isEqualTo: userId)
-            .whereField("isDone", isEqualTo: false)
-            .whereField("plannedDate", isEqualTo: NSNull())
-            .addSnapshotListener { snapshot, error in
-                if let error = error {
-                    subject.send(completion: .failure(error))
-                    return
-                }
-
-                guard let documents = snapshot?.documents else {
-                    subject.send([])
-                    return
-                }
-
-                let tasks = documents.compactMap { doc -> Task? in
-                    try? doc.data(as: Task.self)
-                }
-
-                // 按deadline排序
-                let sorted = tasks.sorted { t1, t2 in
-                    if let d1 = t1.deadlineAt, let d2 = t2.deadlineAt {
-                        return d1 < d2
-                    }
-                    if t1.deadlineAt != nil { return true }
-                    if t2.deadlineAt != nil { return false }
-                    return t1.createdAt < t2.createdAt
-                }
-
-                subject.send(sorted)
             }
 
         return subject.eraseToAnyPublisher()

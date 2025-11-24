@@ -17,6 +17,7 @@ struct TiredApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(authService)
+                .withToastMessages()
         }
     }
 }

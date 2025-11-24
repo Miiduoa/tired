@@ -5,8 +5,9 @@ struct EditTaskView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var viewModel: TasksViewModel
 
-    let task: Task
+    @Binding var task: Task
 
+    @StateObject private var orgViewModel = OrganizationsViewModel()
     @State private var title: String
     @State private var category: TaskCategory
     @State private var priority: TaskPriority
@@ -14,18 +15,26 @@ struct EditTaskView: View {
     @State private var hasDeadline: Bool
     @State private var estimatedMinutes: String
     @State private var description: String
+    @State private var hasPlannedDate: Bool
+    @State private var plannedDate: Date
+    @State private var isDateLocked: Bool
+    @State private var sourceOrgId: String?
 
-    init(task: Task, viewModel: TasksViewModel) {
-        self.task = task
+    init(task: Binding<Task>, viewModel: TasksViewModel) {
+        self._task = task
         self.viewModel = viewModel
 
-        _title = State(initialValue: task.title)
-        _category = State(initialValue: task.category)
-        _priority = State(initialValue: task.priority)
-        _deadline = State(initialValue: task.deadlineAt ?? Date())
-        _hasDeadline = State(initialValue: task.deadlineAt != nil)
-        _estimatedMinutes = State(initialValue: task.estimatedMinutes.map { String($0) } ?? "")
-        _description = State(initialValue: task.description ?? "")
+        _title = State(initialValue: task.wrappedValue.title)
+        _category = State(initialValue: task.wrappedValue.category)
+        _priority = State(initialValue: task.wrappedValue.priority)
+        _deadline = State(initialValue: task.wrappedValue.deadlineAt ?? Date())
+        _hasDeadline = State(initialValue: task.wrappedValue.deadlineAt != nil)
+        _estimatedMinutes = State(initialValue: task.wrappedValue.estimatedMinutes.map { String($0) } ?? "")
+        _description = State(initialValue: task.wrappedValue.description ?? "")
+        _hasPlannedDate = State(initialValue: task.wrappedValue.plannedDate != nil)
+        _plannedDate = State(initialValue: task.wrappedValue.plannedDate ?? Date())
+        _isDateLocked = State(initialValue: task.wrappedValue.isDateLocked)
+        _sourceOrgId = State(initialValue: task.wrappedValue.sourceOrgId)
     }
 
     var body: some View {
@@ -64,6 +73,12 @@ struct EditTaskView: View {
                         )
                     }
 
+                    Toggle("設定排程日期", isOn: $hasPlannedDate)
+                    if hasPlannedDate {
+                        DatePicker("排程到", selection: $plannedDate, displayedComponents: [.date])
+                        Toggle("鎖定排程日期", isOn: $isDateLocked)
+                    }
+
                     HStack {
                         Text("預估時長")
                         TextField("分鐘", text: $estimatedMinutes)
@@ -75,6 +90,24 @@ struct EditTaskView: View {
                 Section("描述（選填）") {
                     TextEditor(text: $description)
                         .frame(height: 100)
+                }
+
+                Section("歸屬身份") {
+                    if task.sourceType == .manual {
+                        Picker("任務歸屬", selection: $sourceOrgId) {
+                            Text("個人任務").tag(nil as String?)
+                            ForEach(orgViewModel.myMemberships, id: \.id) { membershipWithOrg in
+                                if let org = membershipWithOrg.organization, let orgId = org.id {
+                                    Text(org.name).tag(orgId as String?)
+                                }
+                            }
+                        }
+                        .pickerStyle(.navigationLink)
+                    } else {
+                        Text(task.sourceOrgId != nil ? "來自組織任務，不可修改歸屬" : "外部來源任務，不可修改歸屬")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
             .navigationTitle("編輯任務")
@@ -106,8 +139,14 @@ struct EditTaskView: View {
         updatedTask.deadlineAt = hasDeadline ? deadline : nil
         updatedTask.estimatedMinutes = estimatedMins
         updatedTask.description = description.isEmpty ? nil : description
+        updatedTask.plannedDate = hasPlannedDate ? plannedDate : nil
+        updatedTask.isDateLocked = hasPlannedDate ? isDateLocked : false
+        if task.sourceType == .manual {
+            updatedTask.sourceOrgId = sourceOrgId
+        }
 
         viewModel.updateTask(updatedTask)
+        task = updatedTask
         dismiss()
     }
 }

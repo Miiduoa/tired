@@ -29,7 +29,8 @@ struct TaskBoardView: View {
                 } else {
                     ForEach(viewModel.tasks) { task in
                         OrgTaskCard(task: task) {
-                            viewModel.syncToPersonalTasks(task: task)
+                            // This closure is now async throws
+                            try await viewModel.syncToPersonalTasks(task: task)
                         }
                     }
                 }
@@ -82,7 +83,7 @@ struct TaskBoardView: View {
 @available(iOS 17.0, *)
 struct OrgTaskCard: View {
     let task: Task
-    let onSync: () -> Void
+    let onSync: () async throws -> Void // Changed signature
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -123,7 +124,22 @@ struct OrgTaskCard: View {
 
                 Spacer()
 
-                Button(action: onSync) {
+                Button {
+                    // Call the onSync closure in a Task to handle async throws
+                    _Concurrency.Task {
+                        do {
+                            try await onSync()
+                            await MainActor.run {
+                                ToastManager.shared.showToast(message: "任務同步成功！", type: .success)
+                            }
+                        } catch {
+                            print("❌ Error syncing task: \(error)")
+                            await MainActor.run {
+                                ToastManager.shared.showToast(message: "同步失敗: \(error.localizedDescription)", type: .error)
+                            }
+                        }
+                    }
+                } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.down.circle")
                         Text("同步")

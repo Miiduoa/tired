@@ -8,7 +8,24 @@ class PostService: ObservableObject {
 
     // MARK: - Fetch Posts
 
-    /// 獲取動態墻貼文（用戶關注的組織 + 公開貼文）
+    /// 獲取動態墻貼文（用戶關注的組織 + 公開貼文）- 分頁版本
+    func fetchFeedPostsPaginated(userId: String, limit: Int, lastDocumentSnapshot: DocumentSnapshot?) async throws -> (posts: [Post], lastDocumentSnapshot: DocumentSnapshot?) {
+        var query: Query = db.collection("posts")
+            .whereField("visibility", isEqualTo: PostVisibility.public.rawValue)
+            .order(by: "createdAt", descending: true)
+            .limit(to: limit)
+
+        if let lastSnapshot = lastDocumentSnapshot {
+            query = query.start(afterDocument: lastSnapshot)
+        }
+
+        let snapshot = try await query.getDocuments()
+        let posts = snapshot.documents.compactMap { doc -> Post? in
+            try? doc.data(as: Post.self)
+        }
+
+        return (posts, snapshot.documents.last)
+    }
     func fetchFeedPosts(userId: String) -> AnyPublisher<[Post], Error> {
         let subject = PassthroughSubject<[Post], Error>()
 

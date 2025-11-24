@@ -76,13 +76,13 @@ class MembershipRequestsViewModel: ObservableObject {
 
     /// 包裝給 View 使用的同步方法
     func handleReject(_ request: MembershipRequest) {
-        Task {
+        _Concurrency.Task {
             await self.rejectRequest(request)
         }
     }
 
     func handleApprove(_ request: MembershipRequest) {
-        Task {
+        _Concurrency.Task {
             await self.approveRequest(request)
         }
     }

@@ -46,22 +46,4 @@ extension Color {
         return Color(NSColor.windowBackgroundColor)
         #endif
     }
-
-    /// Cross‑platform secondary background (grouped) color
-    static var appSecondaryBackground: Color {
-        #if os(iOS)
-        return Color(UIColor.systemGray6)
-        #else
-        return Color(NSColor.controlBackgroundColor)
-        #endif
-    }
-
-    /// Cross‑platform card border / separator color
-    static var appCardBorder: Color {
-        #if os(iOS)
-        return Color(UIColor.systemGray5)
-        #else
-        return Color(NSColor.separatorColor)
-        #endif
-    }
 }

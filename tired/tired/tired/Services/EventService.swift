@@ -8,6 +8,15 @@ class EventService: ObservableObject {
 
     // MARK: - Fetch Events
 
+    /// 獲取單個活動
+    func fetchEvent(id: String) async throws -> Event {
+        let doc = try await db.collection("events").document(id).getDocument()
+        guard let event = try? doc.data(as: Event.self) else {
+            throw NSError(domain: "EventService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Event not found"])
+        }
+        return event
+    }
+
     /// 獲取組織的活動
     func fetchOrganizationEvents(organizationId: String) -> AnyPublisher<[Event], Error> {
         let subject = PassthroughSubject<[Event], Error>()
@@ -99,6 +108,11 @@ class EventService: ObservableObject {
             "isCancelled": true,
             "updatedAt": Timestamp(date: Date())
         ])
+    }
+
+    /// 刪除活動
+    func deleteEvent(id: String) async throws {
+        try await db.collection("events").document(id).delete()
     }
 
     // MARK: - Registration

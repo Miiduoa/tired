@@ -7,55 +7,76 @@ struct MyEventsView: View {
     @StateObject private var viewModel = MyEventsViewModel()
 
     var body: some View {
-        List {
-            if viewModel.isLoading {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                    Spacer()
-                }
-                .listRowBackground(Color.clear)
-            } else if viewModel.events.isEmpty {
-                VStack(spacing: 16) {
-                    Image(systemName: "calendar.badge.exclamationmark")
-                        .font(.system(size: 50))
-                        .foregroundColor(.secondary)
-                    Text("還沒有報名任何活動")
-                        .font(.system(size: 16))
-                        .foregroundColor(.secondary)
-                    Text("前往組織頁面查看並報名活動")
-                        .font(.system(size: 14))
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 40)
-                .listRowBackground(Color.clear)
-            } else {
-                // Upcoming events
-                let upcomingEvents = viewModel.events.filter { $0.event.startAt > Date() }
-                if !upcomingEvents.isEmpty {
-                    Section("即將到來") {
-                        ForEach(upcomingEvents) { eventWithReg in
-                            MyEventRow(eventWithReg: eventWithReg)
-                        }
-                    }
-                }
+        ZStack {
+            Color.appPrimaryBackground.edgesIgnoringSafeArea(.all) // Overall background
 
-                // Past events
-                let pastEvents = viewModel.events.filter { $0.event.startAt <= Date() }
-                if !pastEvents.isEmpty {
-                    Section("已結束") {
-                        ForEach(pastEvents) { eventWithReg in
-                            MyEventRow(eventWithReg: eventWithReg)
+            NavigationView {
+                List {
+                    if viewModel.isLoading {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                            Spacer()
+                        }
+                        .listRowBackground(Color.clear)
+                    } else if viewModel.events.isEmpty {
+                        VStack(spacing: AppDesignSystem.paddingMedium) {
+                            Image(systemName: "calendar.badge.exclamationmark")
+                                .font(.system(size: 60))
+                                .foregroundColor(.secondary)
+                            Text("還沒有報名任何活動")
+                                .font(AppDesignSystem.headlineFont)
+                                .foregroundColor(.primary)
+                            Text("前往身份頁面查看並報名活動")
+                                .font(AppDesignSystem.bodyFont)
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(AppDesignSystem.paddingLarge)
+                        .glassmorphicCard() // Apply glassmorphic to empty state
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: AppDesignSystem.paddingLarge, leading: 0, bottom: AppDesignSystem.paddingLarge, trailing: 0))
+
+                    } else {
+                        // Upcoming events
+                        let upcomingEvents = viewModel.events.filter { $0.event.startAt > Date() }
+                        if !upcomingEvents.isEmpty {
+                            Section {
+                                ForEach(upcomingEvents) { eventWithReg in
+                                    MyEventRow(eventWithReg: eventWithReg)
+                                        .listRowBackground(Color.clear)
+                                }
+                            } header: {
+                                Text("即將到來")
+                                    .font(AppDesignSystem.captionFont)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+
+                        // Past events
+                        let pastEvents = viewModel.events.filter { $0.event.startAt <= Date() }
+                        if !pastEvents.isEmpty {
+                            Section {
+                                ForEach(pastEvents) { eventWithReg in
+                                    MyEventRow(eventWithReg: eventWithReg)
+                                        .listRowBackground(Color.clear)
+                                }
+                            } header: {
+                                Text("已結束")
+                                    .font(AppDesignSystem.captionFont)
+                                    .foregroundColor(.secondary)
+                            }
                         }
                     }
                 }
+                .listStyle(.insetGrouped) // Use inset grouped to make sections glassmorphic
+                .navigationTitle("我的活動")
+                .navigationBarTitleDisplayMode(.inline)
+                .refreshable {
+                    await viewModel.loadEvents()
+                }
+                .background(Color.clear) // Make NavigationView's background clear
             }
-        }
-        .navigationTitle("我的活動")
-        .navigationBarTitleDisplayMode(.inline)
-        .refreshable {
-            await viewModel.loadEvents()
         }
     }
 }
@@ -71,48 +92,49 @@ struct MyEventRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: AppDesignSystem.paddingSmall) {
             HStack {
                 Text(eventWithReg.event.title)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(AppDesignSystem.bodyFont.weight(.medium))
                     .foregroundColor(isUpcoming ? .primary : .secondary)
 
                 Spacer()
 
                 if isUpcoming {
                     Text("即將開始")
-                        .font(.system(size: 11))
-                        .foregroundColor(.orange)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.orange.opacity(0.1))
-                        .cornerRadius(4)
+                        .font(AppDesignSystem.captionFont)
+                        .foregroundColor(AppDesignSystem.accentColor)
+                        .padding(.horizontal, AppDesignSystem.paddingSmall)
+                        .padding(.vertical, AppDesignSystem.paddingSmall / 2)
+                        .background(AppDesignSystem.accentColor.opacity(0.1))
+                        .cornerRadius(AppDesignSystem.cornerRadiusSmall)
                 }
             }
 
-            HStack(spacing: 12) {
+            HStack(spacing: AppDesignSystem.paddingSmall) {
                 Label(eventWithReg.event.startAt.formatLong(), systemImage: "calendar")
-                    .font(.system(size: 12))
+                    .font(AppDesignSystem.captionFont)
                     .foregroundColor(.secondary)
 
                 if let location = eventWithReg.event.location {
                     Label(location, systemImage: "mappin")
-                        .font(.system(size: 12))
+                        .font(AppDesignSystem.captionFont)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
             }
 
             if let orgName = eventWithReg.organization?.name {
-                HStack(spacing: 4) {
+                HStack(spacing: AppDesignSystem.paddingSmall / 2) {
                     Image(systemName: "building.2")
-                        .font(.system(size: 10))
+                        .font(.caption2)
                     Text(orgName)
-                        .font(.system(size: 11))
+                        .font(AppDesignSystem.captionFont)
                 }
-                .foregroundColor(.blue)
+                .foregroundColor(AppDesignSystem.accentColor)
             }
         }
-        .padding(.vertical, 4)
+        .padding(AppDesignSystem.paddingMedium)
+        .glassmorphicCard(cornerRadius: AppDesignSystem.cornerRadiusMedium, material: .regularMaterial)
     }
 }

@@ -15,6 +15,7 @@ class EventSignupViewModel: ObservableObject {
     let appInstanceId: String
     let organizationId: String
     private let eventService = EventService()
+    private let permissionService = PermissionService() // Inject PermissionService
     private var cancellables = Set<AnyCancellable>()
 
     private var userId: String? {
@@ -66,21 +67,20 @@ class EventSignupViewModel: ObservableObject {
         guard let userId = userId else { return }
 
         _Concurrency.Task {
-            do {
-                let snapshot = try await FirebaseManager.shared.db
-                    .collection("memberships")
-                    .whereField("userId", isEqualTo: userId)
-                    .whereField("organizationId", isEqualTo: organizationId)
-                    .getDocuments()
-
-                if let doc = snapshot.documents.first,
-                   let membership = try? doc.data(as: Membership.self) {
-                    await MainActor.run {
-                        self.canManage = membership.role == .owner || membership.role == .admin
-                    }
-                }
-            } catch {
-                print("❌ Error checking permissions: \(error)")
+            // Use PermissionService to check permissions
+            let canCreateEvents = (try? await permissionService.hasPermissionForCurrentUser(
+                organizationId: organizationId,
+                permission: AppPermissions.createEventInOrg
+            )) ?? false
+            
+            // Reusing manageOrgApps permission for general management, adjust if needed
+            let canManageApps = (try? await permissionService.hasPermissionForCurrentUser(
+                organizationId: organizationId,
+                permission: AppPermissions.manageOrgApps
+            )) ?? false
+            
+            await MainActor.run {
+                self.canManage = canCreateEvents || canManageApps
             }
         }
     }
@@ -94,6 +94,23 @@ class EventSignupViewModel: ObservableObject {
     }
 
     func createEvent(title: String, description: String?, startAt: Date, endAt: Date, location: String?, capacity: Int?) async throws {
+        guard let userId = userId else {
+            ToastManager.shared.showToast(message: "用戶未登入", type: .error)
+            throw NSError(domain: "EventSignupViewModel", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])
+        }
+        
+        // RBAC Check
+        do {
+            let hasPermission = try await permissionService.hasPermissionForCurrentUser(organizationId: organizationId, permission: AppPermissions.createEventInOrg)
+            guard hasPermission else {
+                ToastManager.shared.showToast(message: "您沒有權限在此組織中創建活動。", type: .error)
+                throw NSError(domain: "EventSignupViewModel", code: -1, userInfo: [NSLocalizedDescriptionKey: "Permission denied"])
+            }
+        } catch {
+            ToastManager.shared.showToast(message: "檢查權限失敗: \(error.localizedDescription)", type: .error)
+            throw error
+        }
+
         let event = Event(
             orgAppInstanceId: appInstanceId,
             organizationId: organizationId,
@@ -106,10 +123,14 @@ class EventSignupViewModel: ObservableObject {
         )
 
         _ = try await eventService.createEvent(event)
+        ToastManager.shared.showToast(message: "活動創建成功！", type: .success)
     }
 
     func registerForEvent(event: Event) {
-        guard let userId = userId, let eventId = event.id else { return }
+        guard let userId = userId, let eventId = event.id else {
+            ToastManager.shared.showToast(message: "用戶未登入或活動ID無效。", type: .error)
+            return
+        }
 
         _Concurrency.Task {
             do {
@@ -118,17 +139,24 @@ class EventSignupViewModel: ObservableObject {
                 await MainActor.run {
                     self.registrations[eventId] = true
                     self.registrationCounts[eventId] = (self.registrationCounts[eventId] ?? 0) + 1
+                    ToastManager.shared.showToast(message: "報名成功！", type: .success)
                 }
 
                 // TODO: 可選：自動創建任務到個人任務中樞
             } catch {
                 print("❌ Error registering for event: \(error)")
+                await MainActor.run {
+                    ToastManager.shared.showToast(message: "報名失敗：\(error.localizedDescription)", type: .error)
+                }
             }
         }
     }
 
     func cancelRegistration(event: Event) {
-        guard let userId = userId, let eventId = event.id else { return }
+        guard let userId = userId, let eventId = event.id else {
+            ToastManager.shared.showToast(message: "用戶未登入或活動ID無效。", type: .error)
+            return
+        }
 
         _Concurrency.Task {
             do {
@@ -137,9 +165,13 @@ class EventSignupViewModel: ObservableObject {
                 await MainActor.run {
                     self.registrations[eventId] = false
                     self.registrationCounts[eventId] = max(0, (self.registrationCounts[eventId] ?? 1) - 1)
+                    ToastManager.shared.showToast(message: "已取消報名。", type: .success)
                 }
             } catch {
                 print("❌ Error canceling registration: \(error)")
+                await MainActor.run {
+                    ToastManager.shared.showToast(message: "取消報名失敗：\(error.localizedDescription)", type: .error)
+                }
             }
         }
     }

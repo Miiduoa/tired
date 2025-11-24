@@ -53,7 +53,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         print("🔔 Received foreground notification: \(userInfo)")
         
         // 可以在這裡決定前景推播要不要顯示 (e.g., .banner, .list, .sound)
-        completionHandler([[.alert, .sound]])
+        completionHandler([[.banner, .sound]])
     }
 
     // 當使用者點擊推播時
@@ -63,11 +63,45 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         let userInfo = response.notification.request.content.userInfo
         print("👉 User tapped on notification: \(userInfo)")
         
-        // 在這裡處理點擊推播後的跳轉邏輯
+        // --- Deep Linking Logic ---
+        if let type = userInfo["type"] as? String {
+            print("Notification Type: \(type)")
+            
+            switch type {
+            case "task_assigned", "task_deadline", "task_comment":
+                if let taskId = userInfo["taskId"] as? String {
+                    print("Navigating to Task Detail for Task ID: \(taskId)")
+                    // Post a notification for SwiftUI to observe and navigate
+                    NotificationCenter.default.post(name: .navigateToTaskDetail, object: nil, userInfo: ["taskId": taskId])
+                }
+            case "event_reminder":
+                if let eventId = userInfo["eventId"] as? String {
+                    print("Navigating to Event Detail for Event ID: \(eventId)")
+                    // Post a notification for SwiftUI to observe and navigate
+                    NotificationCenter.default.post(name: .navigateToEventDetail, object: nil, userInfo: ["eventId": eventId])
+                }
+            case "membership_accepted":
+                if let organizationId = userInfo["organizationId"] as? String {
+                    print("Navigating to Organization Detail for Organization ID: \(organizationId)")
+                    // Post a notification for SwiftUI to observe and navigate
+                    NotificationCenter.default.post(name: .navigateToOrganizationDetail, object: nil, userInfo: ["organizationId": organizationId])
+                }
+            default:
+                print("Unknown notification type or missing ID. Defaulting to main screen.")
+            }
+        }
         
         completionHandler()
     }
 }
+
+// Custom Notification Names for SwiftUI navigation
+extension Notification.Name {
+    static let navigateToTaskDetail = Notification.Name("navigateToTaskDetail")
+    static let navigateToEventDetail = Notification.Name("navigateToEventDetail")
+    static let navigateToOrganizationDetail = Notification.Name("navigateToOrganizationDetail")
+}
+// [END ios_10_message_handling]
 
 // MARK: - MessagingDelegate
 #if canImport(FirebaseMessaging)
@@ -81,7 +115,7 @@ extension AppDelegate: MessagingDelegate {
         // 將此 token 傳遞給 UserService 來更新到 Firestore
         let userService = UserService()
         if let userId = Auth.auth().currentUser?.uid {
-            Task {
+            _Concurrency.Task {
                 do {
                     try await userService.updateFCMToken(userId: userId, token: token)
                     print("✅ FCM token updated successfully for user \(userId)")
