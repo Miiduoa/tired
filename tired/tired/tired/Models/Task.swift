@@ -37,6 +37,17 @@ struct Task: Codable, Identifiable {
     var comments: [TaskComment]?
     var fileAttachments: [FileAttachment]?
 
+    // ✅ 新增：子任務與里程碑功能
+    var parentTaskId: String?        // 父任務 ID（如果是子任務）
+    var subtaskIds: [String] = []    // 子任務 ID 列表
+    var isMilestone: Bool = false    // 是否是里程碑
+
+    // ✅ 新增：標籤系統
+    var tagIds: [String] = []        // 標籤 ID 列表
+
+    // ✅ 新增：依賴關係
+    var dependsOnTaskIds: [String] = []  // 前置任務 ID 列表
+
     var createdAt: Date
     var updatedAt: Date
 
@@ -58,6 +69,11 @@ struct Task: Codable, Identifiable {
         case doneAt
         case comments
         case fileAttachments
+        case parentTaskId
+        case subtaskIds
+        case isMilestone
+        case tagIds
+        case dependsOnTaskIds
         case createdAt
         case updatedAt
     }
@@ -78,8 +94,13 @@ struct Task: Codable, Identifiable {
         isDateLocked: Bool = false,
         isDone: Bool = false,
         doneAt: Date? = nil,
-        comments: [TaskComment]? = nil, // 新增
-        fileAttachments: [FileAttachment]? = nil, // 新增
+        comments: [TaskComment]? = nil,
+        fileAttachments: [FileAttachment]? = nil,
+        parentTaskId: String? = nil,      // ✅ 新增
+        subtaskIds: [String] = [],        // ✅ 新增
+        isMilestone: Bool = false,        // ✅ 新增
+        tagIds: [String] = [],            // ✅ 新增
+        dependsOnTaskIds: [String] = [],  // ✅ 新增
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -98,8 +119,13 @@ struct Task: Codable, Identifiable {
         self.isDateLocked = isDateLocked
         self.isDone = isDone
         self.doneAt = doneAt
-        self.comments = comments // 新增
-        self.fileAttachments = fileAttachments // 新增
+        self.comments = comments
+        self.fileAttachments = fileAttachments
+        self.parentTaskId = parentTaskId        // ✅ 新增
+        self.subtaskIds = subtaskIds            // ✅ 新增
+        self.isMilestone = isMilestone          // ✅ 新增
+        self.tagIds = tagIds                    // ✅ 新增
+        self.dependsOnTaskIds = dependsOnTaskIds  // ✅ 新增
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -132,13 +158,33 @@ extension Task {
 
     /// 是否在本周
     func isThisWeek() -> Bool {
-        guard let planned = plannedDate else { return false }
-        return Calendar.current.isDate(planned, equalTo: Date(), toGranularity: .weekOfYear)
+        let calendar = Calendar.current
+        guard let weekInterval = calendar.dateInterval(of: .weekOfYear, for: Date()) else {
+            return false
+        }
+
+        // 检查是否有排期在本周
+        if let planned = plannedDate, weekInterval.contains(planned) {
+            return true
+        }
+
+        // 检查 deadline 是否在本周 ✅ 关键修复：遗漏的任务会被包含
+        if let deadline = deadlineAt, weekInterval.contains(deadline) {
+            return true
+        }
+
+        return false
     }
 
     /// 是否未排程（Backlog）
     var isBacklog: Bool {
         return plannedDate == nil && !isDone
+    }
+
+    /// 是否逾期或紧急 ✅ 新增：用于标记需要立即关注的任务
+    var isOverdueOrUrgent: Bool {
+        guard let deadline = deadlineAt, !isDone else { return false }
+        return deadline <= Date()
     }
 }
 

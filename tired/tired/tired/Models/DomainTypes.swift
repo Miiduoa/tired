@@ -153,6 +153,15 @@ enum TaskPriority: String, Codable, CaseIterable {
         case .high: return "高"
         }
     }
+
+    /// 优先级层级（用于排序）✅ 新增
+    var hierarchyValue: Int {
+        switch self {
+        case .high: return 3
+        case .medium: return 2
+        case .low: return 1
+        }
+    }
 }
 
 enum TaskSourceType: String, Codable {

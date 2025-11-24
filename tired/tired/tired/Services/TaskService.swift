@@ -151,6 +151,130 @@ class TaskService: ObservableObject {
         try await db.collection("tasks").document(taskId).updateData(updates)
     }
 
+    // MARK: - Task Completion Processing ✅ 新增：完善的任务完成流程
+
+    /// 完成任务并触发后续处理（激励反馈、统计更新等）
+    /// - Parameters:
+    ///   - taskId: 任务 ID
+    ///   - userId: 用户 ID
+    /// - Returns: 完成后的任务对象和任何的成就解锁
+    func completeTask(taskId: String, userId: String) async throws -> (task: Task, achievement: TaskAchievement?) {
+        // 1. 获取任务
+        let taskDoc = try await db.collection("tasks").document(taskId).getDocument()
+        guard var task = try? taskDoc.data(as: Task.self) else {
+            throw NSError(domain: "TaskService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Task not found"])
+        }
+
+        // 2. 标记完成
+        task.isDone = true
+        task.doneAt = Date()
+        task.updatedAt = Date()
+
+        // 3. 保存更新
+        try await updateTask(task)
+
+        // 4. 更新用户统计
+        try await updateUserCompletionStats(userId: userId, task: task)
+
+        // 5. 检查成就解锁 ✅ 激励系统
+        let achievement = try await checkAndAwardAchievements(userId: userId, completedTask: task)
+
+        return (task, achievement)
+    }
+
+    /// 更新用户的任务完成统计
+    /// - Parameters:
+    ///   - userId: 用户 ID
+    ///   - task: 完成的任务
+    private func updateUserCompletionStats(userId: String, task: Task) async throws {
+        let userRef = db.collection("users").document(userId)
+
+        // 原子性更新：增加完成任务计数、更新最后完成时间
+        try await userRef.updateData([
+            "completedTaskCount": FieldValue.increment(Int64(1)),
+            "lastTaskCompletedAt": Timestamp(date: task.doneAt ?? Date()),
+            "updatedAt": Timestamp(date: Date())
+        ])
+    }
+
+    /// 检查并授予成就
+    /// - Parameters:
+    ///   - userId: 用户 ID
+    ///   - completedTask: 刚完成的任务
+    /// - Returns: 新解锁的成就，如果没有则为 nil
+    private func checkAndAwardAchievements(userId: String, completedTask: Task) async throws -> TaskAchievement? {
+        // 获取用户当前统计
+        let userDoc = try await db.collection("users").document(userId).getDocument()
+        guard let userData = userDoc.data() else { return nil }
+
+        let completedCount = userData["completedTaskCount"] as? Int ?? 1
+
+        // 检查成就里程碑
+        let achievement: TaskAchievement?
+
+        switch completedCount {
+        case 1:
+            achievement = TaskAchievement(
+                id: UUID().uuidString,
+                type: .firstTaskCompleted,
+                title: "初出茅庐",
+                description: "完成第一个任务",
+                icon: "🌱",
+                earnedAt: Date()
+            )
+
+        case 5:
+            achievement = TaskAchievement(
+                id: UUID().uuidString,
+                type: .fiveTasksCompleted,
+                title: "小有成就",
+                description: "完成 5 个任务",
+                icon: "⭐",
+                earnedAt: Date()
+            )
+
+        case 10:
+            achievement = TaskAchievement(
+                id: UUID().uuidString,
+                type: .tenTasksCompleted,
+                title: "任务大师",
+                description: "完成 10 个任务",
+                icon: "🎯",
+                earnedAt: Date()
+            )
+
+        case 50:
+            achievement = TaskAchievement(
+                id: UUID().uuidString,
+                type: .fiftyTasksCompleted,
+                title: "生产力达人",
+                description: "完成 50 个任务",
+                icon: "🚀",
+                earnedAt: Date()
+            )
+
+        case 100:
+            achievement = TaskAchievement(
+                id: UUID().uuidString,
+                type: .hundredTasksCompleted,
+                title: "传奇任务者",
+                description: "完成 100 个任务",
+                icon: "👑",
+                earnedAt: Date()
+            )
+
+        default:
+            achievement = nil
+        }
+
+        // 保存成就
+        if let achievement = achievement {
+            try await db.collection("userAchievements").document(achievement.id).setData(from: achievement)
+        }
+
+        return achievement
+    }
+
     // MARK: - Batch Operations
 
     /// 批量更新任务（用于autoplan）

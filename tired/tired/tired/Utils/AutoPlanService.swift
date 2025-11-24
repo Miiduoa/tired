@@ -46,12 +46,24 @@ class AutoPlanService {
                 task.plannedDate == nil
             }
             .sorted { t1, t2 in
-                // 按deadline排序，没有deadline的排后面
+                // ✅ 改进排序逻辑：优先级 > Deadline > 创建时间
+
+                // 第一步：按优先级排序 (high > medium > low)
+                let priorityOrder: [TaskPriority] = [.high, .medium, .low]
+                if let p1 = priorityOrder.firstIndex(of: t1.priority),
+                   let p2 = priorityOrder.firstIndex(of: t2.priority),
+                   p1 != p2 {
+                    return p1 < p2  // 优先级高的排前面
+                }
+
+                // 第二步：优先级相同，按 deadline 排序
                 if let d1 = t1.deadlineAt, let d2 = t2.deadlineAt {
                     return d1 < d2
                 }
                 if t1.deadlineAt != nil { return true }
                 if t2.deadlineAt != nil { return false }
+
+                // 第三步：都没有 deadline，按创建时间
                 return t1.createdAt < t2.createdAt
             }
 
@@ -59,7 +71,8 @@ class AutoPlanService {
         var dayMinutes: [Int] = Array(repeating: 0, count: 7)
 
         for task in tasks {
-            guard let planned = task.plannedDate else { continue }
+            guard let planned = task.plannedDate,
+                  !task.isDone else { continue }  // ✅ 只计算未完成任务
 
             let dayIndex = calendar.dateComponents([.day], from: calendar.startOfDay(for: options.weekStart), to: calendar.startOfDay(for: planned)).day ?? -1
             if dayIndex >= 0 && dayIndex < 7 {
