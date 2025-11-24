@@ -1,25 +1,48 @@
 import Foundation
 
-/// 自动排程服务
+/// 自動排程服務 - 智能任務分配演算法
 class AutoPlanService {
 
-    /// 自动排程选项
+    /// 自動排程選項
     struct AutoPlanOptions {
         let weekStart: Date
         let weeklyCapacityMinutes: Int
-        let dailyCapacityMinutes: Int // Calculated based on weeklyCapacity and workdaysInWeek
-        let workdaysInWeek: Int // New property: Number of days considered workdays for daily capacity calculation
+        let dailyCapacityMinutes: Int
+        let workdaysInWeek: Int
+        let workdayIndices: Set<Int>  // 0=週日, 1=週一, ..., 6=週六
+        let allowWeekends: Bool
+        let priorityWeights: [TaskPriority: Double]
 
         init(
             weekStart: Date? = nil,
-            weeklyCapacityMinutes: Int = 600,  // 默认10小时/周
+            weeklyCapacityMinutes: Int = 600,  // 預設10小時/週
             dailyCapacityMinutes: Int? = nil,
-            workdaysInWeek: Int = 5 // Default to 5 workdays
+            workdaysInWeek: Int = 5,
+            workdayIndices: Set<Int>? = nil,  // 自定義工作日
+            allowWeekends: Bool = false,
+            priorityWeights: [TaskPriority: Double]? = nil
         ) {
             let calendar = Calendar.current
             self.weekStart = weekStart ?? calendar.dateInterval(of: .weekOfYear, for: Date())?.start ?? Date()
             self.weeklyCapacityMinutes = weeklyCapacityMinutes
-            self.workdaysInWeek = max(1, workdaysInWeek) // Ensure at least 1 workday
+            self.workdaysInWeek = max(1, min(7, workdaysInWeek))
+            self.allowWeekends = allowWeekends
+
+            // 設定工作日索引（預設週一到週五）
+            if let indices = workdayIndices {
+                self.workdayIndices = indices
+            } else {
+                // 預設：週一(2)到週五(6)，使用 Calendar.current.firstWeekday 調整
+                self.workdayIndices = Set([2, 3, 4, 5, 6]) // 1=週日, 2=週一, ...
+            }
+
+            // 設定優先級權重
+            self.priorityWeights = priorityWeights ?? [
+                .high: 3.0,
+                .medium: 2.0,
+                .low: 1.0
+            ]
+
             if let dailyCapacityMinutes {
                 self.dailyCapacityMinutes = dailyCapacityMinutes
             } else {
@@ -28,17 +51,18 @@ class AutoPlanService {
         }
     }
 
-    /// 为本周任务进行自动排程
+    /// 為本週任務進行自動排程
     /// - Parameters:
-    ///   - tasks: 所有任务（包括已排程和未排程）
-    ///   - options: 排程选项
-    /// - Returns: 更新后的任务列表和实际排程的任务数量
+    ///   - tasks: 所有任務（包括已排程和未排程）
+    ///   - options: 排程選項
+    /// - Returns: 更新後的任務列表和實際排程的任務數量
     func autoplanWeek(tasks: [Task], options: AutoPlanOptions) -> ([Task], Int) {
         let calendar = Calendar.current
         var updatedTasks = tasks
         var scheduledTaskCount = 0
+        let today = calendar.startOfDay(for: Date())
 
-        // 1. 筛选候选任务（未完成、未锁定、未排程）
+        // 1. 篩選候選任務（未完成、未鎖定、未排程）
         let candidates = tasks
             .filter { task in
                 !task.isDone &&
@@ -46,69 +70,124 @@ class AutoPlanService {
                 task.plannedDate == nil
             }
             .sorted { t1, t2 in
-                // 按deadline排序，没有deadline的排后面
+                // 多維度排序：優先級 > 截止日期 > 創建時間
+                let weight1 = options.priorityWeights[t1.priority] ?? 1.0
+                let weight2 = options.priorityWeights[t2.priority] ?? 1.0
+
+                // 高優先級優先
+                if weight1 != weight2 {
+                    return weight1 > weight2
+                }
+
+                // 有截止日期的優先，且截止日期早的優先
                 if let d1 = t1.deadlineAt, let d2 = t2.deadlineAt {
                     return d1 < d2
                 }
                 if t1.deadlineAt != nil { return true }
                 if t2.deadlineAt != nil { return false }
+
+                // 創建時間早的優先
                 return t1.createdAt < t2.createdAt
             }
 
-        // 2. 计算每天已排程的时间
-        var dayMinutes: [Int] = Array(repeating: 0, count: 7)
+        // 2. 計算每天已排程的時間（只計算今天及之後的日期）
+        var dayMinutes: [Date: Int] = [:]
+        let weekEnd = calendar.date(byAdding: .day, value: 7, to: options.weekStart) ?? options.weekStart
 
         for task in tasks {
             guard let planned = task.plannedDate else { continue }
+            let plannedDay = calendar.startOfDay(for: planned)
 
-            let dayIndex = calendar.dateComponents([.day], from: calendar.startOfDay(for: options.weekStart), to: calendar.startOfDay(for: planned)).day ?? -1
-            if dayIndex >= 0 && dayIndex < 7 {
-                dayMinutes[dayIndex] += task.estimatedMinutes ?? 0
+            // 只計算本週範圍內的任務
+            if plannedDay >= options.weekStart && plannedDay < weekEnd {
+                dayMinutes[plannedDay, default: 0] += task.estimatedMinutes ?? 0
             }
         }
 
-        // 3. 为候选任务分配日期
+        // 3. 生成可用日期列表（今天及之後的工作日）
+        var availableDays: [Date] = []
+        for offset in 0..<14 {  // 考慮未來兩週
+            guard let date = calendar.date(byAdding: .day, value: offset, to: today) else { continue }
+
+            let weekday = calendar.component(.weekday, from: date)
+            let isWorkday = options.workdayIndices.contains(weekday)
+            let isWeekend = weekday == 1 || weekday == 7  // 週日或週六
+
+            // 跳過非工作日（除非允許週末）
+            if !isWorkday && !(options.allowWeekends && isWeekend) {
+                continue
+            }
+
+            availableDays.append(date)
+        }
+
+        // 4. 為候選任務分配日期
         for candidate in candidates {
-            let duration = candidate.estimatedMinutes ?? 60  // 默认1小时
+            let duration = candidate.estimatedMinutes ?? 60  // 預設1小時
 
-            // 找到最空闲的一天
-            var assignedIndex: Int? = nil
+            // 計算截止日期約束
+            let deadlineDate: Date? = candidate.deadlineAt.map { calendar.startOfDay(for: $0) }
 
-            // 优先从今天开始找
-            let today = Date()
-            let todayOffset = calendar.dateComponents([.day], from: calendar.startOfDay(for: options.weekStart), to: calendar.startOfDay(for: today)).day ?? 0
+            // 找到最適合的日期
+            var bestDay: Date? = nil
+            var bestScore: Double = Double.infinity
 
-            // Iterate through days, respecting workdays
-            for offset in 0..<7 {
-                let dayIndex = (todayOffset + offset) % 7
-                
-                // Only consider workdays for autoplan
-                // This is a simplification; a more advanced version would check if dayIndex corresponds to a workday based on user settings
-                // For now, assume 0-4 (Monday-Friday) are workdays if workdaysInWeek is 5.
-                // This needs more robust configuration if users can customize specific workdays.
-                if options.workdaysInWeek == 5 && (dayIndex == 5 || dayIndex == 6) { // Skip Saturday (5) and Sunday (6) if 5 workdays
+            for day in availableDays {
+                // 跳過已超過截止日期的日子
+                if let deadline = deadlineDate, day > deadline {
                     continue
                 }
 
-                if dayMinutes[dayIndex] + duration <= options.dailyCapacityMinutes {
-                    assignedIndex = dayIndex
-                    break
+                let currentLoad = dayMinutes[day, default: 0]
+                let newLoad = currentLoad + duration
+
+                // 跳過已超載的日子
+                if newLoad > options.dailyCapacityMinutes * 12 / 10 {  // 允許10%彈性
+                    continue
+                }
+
+                // 計算分數（越低越好）
+                var score: Double = Double(currentLoad)  // 負載越低越好
+
+                // 考慮截止日期緊迫性
+                if let deadline = deadlineDate {
+                    let daysUntilDeadline = calendar.dateComponents([.day], from: day, to: deadline).day ?? 0
+                    if daysUntilDeadline <= 1 {
+                        score -= 1000  // 緊急任務優先安排
+                    } else if daysUntilDeadline <= 3 {
+                        score -= 500
+                    }
+                }
+
+                // 優先安排高優先級任務到較早的日期
+                let dayOffset = calendar.dateComponents([.day], from: today, to: day).day ?? 0
+                let priorityWeight = options.priorityWeights[candidate.priority] ?? 1.0
+                if priorityWeight >= 3.0 {
+                    score += Double(dayOffset) * 10  // 高優先級任務盡量安排到早期
+                }
+
+                if score < bestScore {
+                    bestScore = score
+                    bestDay = day
                 }
             }
-            
-            // If no suitable workday found, try to assign to the least loaded day regardless of workday status
-            if assignedIndex == nil {
-                assignedIndex = dayMinutes.enumerated().min(by: { $0.element < $1.element })?.offset ?? 0
+
+            // 如果沒找到合適的日子，選擇負載最低的日子
+            if bestDay == nil {
+                bestDay = availableDays
+                    .filter { day in
+                        if let deadline = deadlineDate { return day <= deadline }
+                        return true
+                    }
+                    .min { dayMinutes[$0, default: 0] < dayMinutes[$1, default: 0] }
             }
 
-
-            // Update task
-            if let index = assignedIndex,
-               let plannedDate = calendar.date(byAdding: .day, value: index, to: options.weekStart),
+            // 更新任務
+            if let assignedDay = bestDay,
                let taskIndex = updatedTasks.firstIndex(where: { $0.id == candidate.id }) {
-                dayMinutes[index] += duration
-                updatedTasks[taskIndex].plannedDate = plannedDate
-                updatedTasks[taskIndex].isDateLocked = false // Autoplan should not lock the date
+                dayMinutes[assignedDay, default: 0] += duration
+                updatedTasks[taskIndex].plannedDate = assignedDay
+                updatedTasks[taskIndex].isDateLocked = false
                 scheduledTaskCount += 1
             }
         }

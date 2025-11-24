@@ -488,6 +488,20 @@ class TasksViewModel: ObservableObject {
             }
         case .created:
             return tasks.sorted { $0.createdAt > $1.createdAt }
+        case .urgency:
+            // 使用緊急程度分數排序（分數越高越緊急）
+            return tasks.sorted { t1, t2 in
+                let score1 = t1.urgencyScore
+                let score2 = t2.urgencyScore
+                if score1 != score2 {
+                    return score1 > score2
+                }
+                // 同分則按截止日期排序
+                if let d1 = t1.deadlineAt, let d2 = t2.deadlineAt {
+                    return d1 < d2
+                }
+                return t1.createdAt < t2.createdAt
+            }
         }
     }
 

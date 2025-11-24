@@ -14,6 +14,209 @@ enum PlannedDateFilter {
 class TaskService: ObservableObject {
     private let db = FirebaseManager.shared.db
 
+    // MARK: - Real-time Listeners for Today/Week/Backlog
+
+    /// 獲取今天的任務（實時監聽）
+    func fetchTodayTasks(userId: String) -> AnyPublisher<[Task], Error> {
+        let subject = PassthroughSubject<[Task], Error>()
+        let calendar = Calendar.current
+        let todayStart = calendar.startOfDay(for: Date())
+        let todayEnd = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? todayStart
+
+        db.collection("tasks")
+            .whereField("userId", isEqualTo: userId)
+            .whereField("isDone", isEqualTo: false)
+            .addSnapshotListener { snapshot, error in
+                if let error = error {
+                    subject.send(completion: .failure(error))
+                    return
+                }
+
+                guard let documents = snapshot?.documents else {
+                    subject.send([])
+                    return
+                }
+
+                let tasks = documents.compactMap { doc -> Task? in
+                    try? doc.data(as: Task.self)
+                }.filter { task in
+                    // 今天的任務：plannedDate 是今天，或者沒有 plannedDate 但 deadline 是今天
+                    if let planned = task.plannedDate {
+                        return planned >= todayStart && planned < todayEnd
+                    }
+                    if let deadline = task.deadlineAt {
+                        return deadline >= todayStart && deadline < todayEnd
+                    }
+                    return false
+                }
+
+                subject.send(tasks)
+            }
+
+        return subject.eraseToAnyPublisher()
+    }
+
+    /// 獲取本週的任務（實時監聽）
+    func fetchWeekTasks(userId: String) -> AnyPublisher<[Task], Error> {
+        let subject = PassthroughSubject<[Task], Error>()
+        let calendar = Calendar.current
+        let weekStart = calendar.dateInterval(of: .weekOfYear, for: Date())?.start ?? Date()
+        let weekEnd = calendar.date(byAdding: .day, value: 7, to: weekStart) ?? weekStart
+
+        db.collection("tasks")
+            .whereField("userId", isEqualTo: userId)
+            .whereField("isDone", isEqualTo: false)
+            .addSnapshotListener { snapshot, error in
+                if let error = error {
+                    subject.send(completion: .failure(error))
+                    return
+                }
+
+                guard let documents = snapshot?.documents else {
+                    subject.send([])
+                    return
+                }
+
+                let tasks = documents.compactMap { doc -> Task? in
+                    try? doc.data(as: Task.self)
+                }.filter { task in
+                    // 本週的任務：plannedDate 在本週範圍內
+                    if let planned = task.plannedDate {
+                        return planned >= weekStart && planned < weekEnd
+                    }
+                    return false
+                }
+
+                subject.send(tasks)
+            }
+
+        return subject.eraseToAnyPublisher()
+    }
+
+    /// 獲取未排程的任務（Backlog，實時監聽）
+    func fetchBacklogTasks(userId: String) -> AnyPublisher<[Task], Error> {
+        let subject = PassthroughSubject<[Task], Error>()
+
+        db.collection("tasks")
+            .whereField("userId", isEqualTo: userId)
+            .whereField("isDone", isEqualTo: false)
+            .addSnapshotListener { snapshot, error in
+                if let error = error {
+                    subject.send(completion: .failure(error))
+                    return
+                }
+
+                guard let documents = snapshot?.documents else {
+                    subject.send([])
+                    return
+                }
+
+                let tasks = documents.compactMap { doc -> Task? in
+                    try? doc.data(as: Task.self)
+                }.filter { task in
+                    // Backlog：沒有 plannedDate 的任務
+                    return task.plannedDate == nil
+                }
+
+                subject.send(tasks)
+            }
+
+        return subject.eraseToAnyPublisher()
+    }
+
+    /// 搜尋任務（根據關鍵字）
+    func searchTasks(userId: String, keyword: String) -> AnyPublisher<[Task], Error> {
+        let subject = PassthroughSubject<[Task], Error>()
+        let lowercasedKeyword = keyword.lowercased()
+
+        db.collection("tasks")
+            .whereField("userId", isEqualTo: userId)
+            .addSnapshotListener { snapshot, error in
+                if let error = error {
+                    subject.send(completion: .failure(error))
+                    return
+                }
+
+                guard let documents = snapshot?.documents else {
+                    subject.send([])
+                    return
+                }
+
+                let tasks = documents.compactMap { doc -> Task? in
+                    try? doc.data(as: Task.self)
+                }.filter { task in
+                    task.title.lowercased().contains(lowercasedKeyword) ||
+                    (task.description?.lowercased().contains(lowercasedKeyword) ?? false)
+                }
+
+                subject.send(tasks)
+            }
+
+        return subject.eraseToAnyPublisher()
+    }
+
+    /// 獲取已過期的任務
+    func fetchOverdueTasks(userId: String) -> AnyPublisher<[Task], Error> {
+        let subject = PassthroughSubject<[Task], Error>()
+        let now = Date()
+
+        db.collection("tasks")
+            .whereField("userId", isEqualTo: userId)
+            .whereField("isDone", isEqualTo: false)
+            .addSnapshotListener { snapshot, error in
+                if let error = error {
+                    subject.send(completion: .failure(error))
+                    return
+                }
+
+                guard let documents = snapshot?.documents else {
+                    subject.send([])
+                    return
+                }
+
+                let tasks = documents.compactMap { doc -> Task? in
+                    try? doc.data(as: Task.self)
+                }.filter { task in
+                    if let deadline = task.deadlineAt {
+                        return deadline < now
+                    }
+                    return false
+                }
+
+                subject.send(tasks)
+            }
+
+        return subject.eraseToAnyPublisher()
+    }
+
+    /// 獲取所有任務（包括已完成）
+    func fetchAllTasks(userId: String) -> AnyPublisher<[Task], Error> {
+        let subject = PassthroughSubject<[Task], Error>()
+
+        db.collection("tasks")
+            .whereField("userId", isEqualTo: userId)
+            .order(by: "createdAt", descending: true)
+            .addSnapshotListener { snapshot, error in
+                if let error = error {
+                    subject.send(completion: .failure(error))
+                    return
+                }
+
+                guard let documents = snapshot?.documents else {
+                    subject.send([])
+                    return
+                }
+
+                let tasks = documents.compactMap { doc -> Task? in
+                    try? doc.data(as: Task.self)
+                }
+
+                subject.send(tasks)
+            }
+
+        return subject.eraseToAnyPublisher()
+    }
+
     // MARK: - Fetch Tasks (Paginated)
 
     /// 獲取任務 - 分頁版本
