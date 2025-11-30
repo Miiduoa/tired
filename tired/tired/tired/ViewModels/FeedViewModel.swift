@@ -139,9 +139,19 @@ class FeedViewModel: ObservableObject {
             return results
         }
         
-        // Ensure posts are sorted by creation date (most recent first)
-        enrichedPosts.sort { $0.post.createdAt > $1.post.createdAt }
-        
+        // 排序：置頂的貼文在前面，然後按創建時間排序（Moodle-like）
+        enrichedPosts.sort { post1, post2 in
+            // 優先顯示置頂貼文
+            if post1.post.isPinned && !post2.post.isPinned {
+                return true
+            } else if !post1.post.isPinned && post2.post.isPinned {
+                return false
+            } else {
+                // 相同置頂狀態，按創建時間排序
+                return post1.post.createdAt > post2.post.createdAt
+            }
+        }
+
         return enrichedPosts
     }
 

@@ -10,6 +10,7 @@ class ResourceListViewModel: ObservableObject {
     @Published var resources: [Resource] = []
     @Published var categories: [String] = []
     @Published var canManage = false
+    @Published var currentMembership: Membership? = nil // 新增：當前用戶的成員資格
 
     let appInstanceId: String
     let organizationId: String
@@ -22,8 +23,35 @@ class ResourceListViewModel: ObservableObject {
     init(appInstanceId: String, organizationId: String) {
         self.appInstanceId = appInstanceId
         self.organizationId = organizationId
+        fetchMembership() // 新增：先獲取成員資格
         setupSubscriptions()
         checkPermissions()
+    }
+
+    // 新增：獲取當前用戶的成員資格
+    private func fetchMembership() {
+        guard let userId = userId else { return }
+
+        _Concurrency.Task {
+            let organizationService = OrganizationService()
+            if let membership = try? await organizationService.getMembership(userId: userId, organizationId: organizationId) {
+                await MainActor.run {
+                    self.currentMembership = membership
+                }
+            }
+        }
+    }
+
+    /// 過濾後的資源列表（只顯示有權存取的資源）
+    var accessibleResources: [Resource] {
+        guard let membership = currentMembership else {
+            // 如果沒有成員資格，只顯示公開資源
+            return resources.filter { $0.isPublic }
+        }
+
+        return resources.filter { resource in
+            resource.canAccess(userRoleIds: membership.roleIds)
+        }
     }
 
     private func setupSubscriptions() {

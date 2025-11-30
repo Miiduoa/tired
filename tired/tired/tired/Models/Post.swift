@@ -21,6 +21,12 @@ struct Post: Codable, Identifiable {
     var visibility: PostVisibility
     var postType: PostType = .post // NEW
 
+    // Moodle-like discussion features
+    var isPinned: Bool = false              // 置頂
+    var category: String?                    // 主題分類（例如：「公告」、「討論」、「問題」）
+    var tags: [String]?                      // 標籤
+    var readByUserIds: [String]?            // 已讀用戶 ID 列表
+
     var createdAt: Date
     var updatedAt: Date
 
@@ -32,6 +38,10 @@ struct Post: Codable, Identifiable {
         case imageUrls
         case visibility
         case postType // NEW
+        case isPinned
+        case category
+        case tags
+        case readByUserIds
         case createdAt
         case updatedAt
     }
@@ -44,6 +54,10 @@ struct Post: Codable, Identifiable {
         imageUrls: [String]? = nil,
         visibility: PostVisibility = .public,
         postType: PostType = .post, // NEW
+        isPinned: Bool = false,
+        category: String? = nil,
+        tags: [String]? = nil,
+        readByUserIds: [String]? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -54,8 +68,25 @@ struct Post: Codable, Identifiable {
         self.imageUrls = imageUrls
         self.visibility = visibility
         self.postType = postType // NEW
+        self.isPinned = isPinned
+        self.category = category
+        self.tags = tags
+        self.readByUserIds = readByUserIds
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    // MARK: - Helper Methods
+
+    /// 檢查用戶是否已讀
+    func isReadBy(userId: String) -> Bool {
+        return readByUserIds?.contains(userId) ?? false
+    }
+
+    /// 未讀數量（供管理員查看）
+    var unreadCount: Int {
+        // 這需要結合組織成員總數來計算
+        return 0 // Placeholder
     }
 }
 
