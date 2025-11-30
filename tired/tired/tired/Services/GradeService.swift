@@ -70,14 +70,21 @@ class GradeService: ObservableObject {
         if let isReleased = isReleased {
             updates["isReleased"] = isReleased
         }
-        
+
         // 如果已評分，更新狀態和時間
         if score != nil || grade != nil || isPass != nil {
             updates["status"] = GradeStatus.graded.rawValue
             updates["gradedAt"] = Timestamp(date: Date())
         }
-        
+
         try await gradeRef.updateData(updates)
+
+        // Moodle-like 功能：成績發布後通知學生
+        if isReleased == true && !currentGrade.isReleased {
+            // 成績剛被發布，發送通知給學生
+            let updatedGrade = try await getGrade(gradeId: gradeId)
+            await sendGradeReleasedNotification(grade: updatedGrade)
+        }
     }
     
     /// 刪除成績
@@ -405,9 +412,47 @@ class GradeService: ObservableObject {
             .whereField("organizationId", isEqualTo: organizationId)
             .order(by: "createdAt", descending: false)
             .getDocuments()
-        
+
         return try snapshot.documents.compactMap { doc -> GradeCategory? in
             try? doc.data(as: GradeCategory.self)
+        }
+    }
+
+    // MARK: - Notification Integration (Moodle-like)
+
+    /// 發送成績發布通知給學生
+    private func sendGradeReleasedNotification(grade: Grade) async {
+        do {
+            // 獲取組織名稱
+            let orgDoc = try await db.collection("organizations")
+                .document(grade.organizationId)
+                .getDocument()
+            let organizationName = orgDoc.data()?["name"] as? String ?? "課程"
+
+            // 獲取作業標題（如果有）
+            var assignmentTitle = "作業"
+            if let taskId = grade.taskId {
+                let taskDoc = try await db.collection("tasks")
+                    .document(taskId)
+                    .getDocument()
+                assignmentTitle = taskDoc.data()?["title"] as? String ?? "作業"
+            } else if let gradeItemId = grade.gradeItemId {
+                let itemDoc = try await db.collection("gradeItems")
+                    .document(gradeItemId)
+                    .getDocument()
+                assignmentTitle = itemDoc.data()?["name"] as? String ?? "成績項目"
+            }
+
+            // 發送通知
+            NotificationService.shared.notifyStudentOfGrade(
+                assignmentTitle: assignmentTitle,
+                grade: grade,
+                organizationName: organizationName
+            )
+
+            print("✅ Grade release notification sent for: \(assignmentTitle)")
+        } catch {
+            print("❌ Error sending grade notification: \(error)")
         }
     }
 }

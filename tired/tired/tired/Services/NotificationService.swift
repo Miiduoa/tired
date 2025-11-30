@@ -115,4 +115,124 @@ class NotificationService {
         guard let eventId = event.id else { return }
         cancelNotification(withIdentifier: "event-\(eventId)")
     }
+
+    // MARK: - Moodle-like Notifications
+
+    /// 通知教師有新的作業提交
+    /// - Parameters:
+    ///   - studentName: 學生姓名
+    ///   - assignmentTitle: 作業標題
+    ///   - organizationName: 組織名稱
+    func notifyTeacherOfSubmission(
+        studentName: String,
+        assignmentTitle: String,
+        organizationName: String
+    ) {
+        let content = UNMutableNotificationContent()
+        content.title = "📝 新的作業提交"
+        content.body = "\(studentName) 已提交「\(assignmentTitle)」（\(organizationName)）"
+        content.sound = .default
+        content.categoryIdentifier = "ASSIGNMENT_SUBMISSION"
+
+        // 立即通知
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let identifier = "submission-\(UUID().uuidString)"
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+
+        notificationCenter.add(request) { error in
+            if let error = error {
+                print("❌ Error sending submission notification: \(error)")
+            } else {
+                print("✅ Submission notification sent to teacher")
+            }
+        }
+    }
+
+    /// 通知學生成績已發布
+    /// - Parameters:
+    ///   - assignmentTitle: 作業標題
+    ///   - grade: 成績
+    ///   - organizationName: 組織名稱
+    func notifyStudentOfGrade(
+        assignmentTitle: String,
+        grade: Grade,
+        organizationName: String
+    ) {
+        let content = UNMutableNotificationContent()
+        content.title = "✅ 成績已發布"
+        content.body = "「\(assignmentTitle)」成績：\(grade.displayGrade)（\(organizationName)）"
+        content.sound = .default
+        content.categoryIdentifier = "GRADE_RELEASED"
+
+        // 立即通知
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let identifier = "grade-\(UUID().uuidString)"
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+
+        notificationCenter.add(request) { error in
+            if let error = error {
+                print("❌ Error sending grade notification: \(error)")
+            } else {
+                print("✅ Grade notification sent to student")
+            }
+        }
+    }
+
+    /// 通知學生有新的公告
+    /// - Parameters:
+    ///   - announcementTitle: 公告標題
+    ///   - organizationName: 組織名稱
+    func notifyOfAnnouncement(
+        announcementTitle: String,
+        organizationName: String
+    ) {
+        let content = UNMutableNotificationContent()
+        content.title = "📢 新公告"
+        content.body = "\(announcementTitle)（\(organizationName)）"
+        content.sound = .default
+        content.categoryIdentifier = "ANNOUNCEMENT"
+
+        // 立即通知
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let identifier = "announcement-\(UUID().uuidString)"
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+
+        notificationCenter.add(request) { error in
+            if let error = error {
+                print("❌ Error sending announcement notification: \(error)")
+            } else {
+                print("✅ Announcement notification sent")
+            }
+        }
+    }
+
+    /// 通知用戶有新的評論
+    /// - Parameters:
+    ///   - commenterName: 評論者姓名
+    ///   - postTitle: 貼文標題
+    ///   - organizationName: 組織名稱
+    func notifyOfComment(
+        commenterName: String,
+        postTitle: String,
+        organizationName: String
+    ) {
+        let content = UNMutableNotificationContent()
+        content.title = "💬 新評論"
+        content.body = "\(commenterName) 評論了「\(postTitle)」（\(organizationName)）"
+        content.sound = .default
+        content.categoryIdentifier = "COMMENT"
+
+        // 立即通知
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let identifier = "comment-\(UUID().uuidString)"
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+
+        notificationCenter.add(request) { error in
+            if let error = error {
+                print("❌ Error sending comment notification: \(error)")
+            } else {
+                print("✅ Comment notification sent")
+            }
+        }
+    }
 }
