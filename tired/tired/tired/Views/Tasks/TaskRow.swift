@@ -8,6 +8,9 @@ struct TaskRow: View {
     var onTap: (() -> Void)? = nil
     var showSubtasks: Bool = true
     @State private var isProcessing = false
+    @State private var grade: Grade? = nil // 作業成績（新增）
+
+    private let gradeService = GradeService() // 成績服務
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -169,8 +172,18 @@ struct TaskRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilitySummary)
         .accessibilityHint(isBlocked ? "此任務被其他任務鎖定，無法操作" : "點擊以查看詳情")
+        .task {
+            // 載入作業成績（Moodle-like 功能）
+            if task.taskType == .homework, let taskId = task.id {
+                do {
+                    grade = try await gradeService.getTaskGrade(taskId: taskId)
+                } catch {
+                    print("❌ Error loading grade for task \(taskId): \(error)")
+                }
+            }
+        }
     }
-    
+
     // MARK: - Accessibility
     
     private var accessibilitySummary: String {
@@ -253,12 +266,26 @@ struct TaskRow: View {
 
     private var statusBadge: some View {
         Group {
-            if task.isOverdue {
-                StatusBadge(text: "已過期", color: .red)
-            } else if task.isDueSoon {
-                StatusBadge(text: "即將到期", color: .orange)
-            } else if task.priority == .high {
-                StatusBadge(text: "高優先", color: .red.opacity(0.8))
+            // 作業成績顯示（Moodle-like 功能）
+            if task.taskType == .homework {
+                if let grade = grade, grade.isReleased {
+                    GradeBadge(grade: grade)
+                } else if task.isDone {
+                    StatusBadge(text: "待評分", color: .blue)
+                } else if task.isOverdue {
+                    StatusBadge(text: "已過期", color: .red)
+                } else if task.isDueSoon {
+                    StatusBadge(text: "即將到期", color: .orange)
+                }
+            } else {
+                // 非作業任務的原有邏輯
+                if task.isOverdue {
+                    StatusBadge(text: "已過期", color: .red)
+                } else if task.isDueSoon {
+                    StatusBadge(text: "即將到期", color: .orange)
+                } else if task.priority == .high {
+                    StatusBadge(text: "高優先", color: .red.opacity(0.8))
+                }
             }
         }
     }
@@ -427,6 +454,41 @@ struct TagView: View {
             .padding(.vertical, 2)
             .background(AppDesignSystem.accentColor.opacity(0.1))
             .cornerRadius(4)
+    }
+}
+
+@available(iOS 17.0, *)
+struct GradeBadge: View {
+    let grade: Grade
+
+    var body: some View {
+        HStack(spacing: 4) {
+            // 成績圖標
+            Image(systemName: grade.isGraded ? "checkmark.seal.fill" : "clock.fill")
+                .font(.system(size: 9))
+                .foregroundColor(.white)
+
+            // 成績文字
+            Text(grade.displayGrade)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(.white)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(gradeBackgroundColor)
+        .cornerRadius(6)
+    }
+
+    private var gradeBackgroundColor: Color {
+        // 解析 hex 顏色字符串
+        let hexColor = grade.gradeColor
+        let hex = hexColor.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let r = Double((int & 0xFF0000) >> 16) / 255.0
+        let g = Double((int & 0x00FF00) >> 8) / 255.0
+        let b = Double(int & 0x0000FF) / 255.0
+        return Color(red: r, green: g, blue: b)
     }
 }
 
