@@ -38,12 +38,6 @@ extension Color {
         Color(hex: category.color)
     }
 
-    /// Cross‑platform system background color
-    static var appBackground: Color {
-        #if os(iOS)
-        return Color(UIColor.systemBackground)
-        #else
-        return Color(NSColor.windowBackgroundColor)
-        #endif
-    }
+    // 注意：appBackground 已在 AppDesignSystem.swift 中定義
+    // 這裡不再重複定義，以避免衝突
 }

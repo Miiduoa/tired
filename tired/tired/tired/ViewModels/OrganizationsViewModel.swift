@@ -12,7 +12,8 @@ class OrganizationsViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     private let organizationService = OrganizationService()
-    private let algoliaService: AlgoliaService? = AlgoliaService()
+    // 暫時不需要 AlgoliaService，改用 Firebase 原生查詢
+    // private let algoliaService: AlgoliaService? = AlgoliaService()
     private var cancellables = Set<AnyCancellable>()
 
     private var userId: String? {
@@ -59,18 +60,22 @@ class OrganizationsViewModel: ObservableObject {
         )
 
         await MainActor.run { isLoading = true }
-        defer {
-            DispatchQueue.main.async { [weak self] in self?.isLoading = false }
-        }
-
-        // The service now handles creating default roles and owner membership internally
+        // Use explicit main actor updates instead of defer/dispatch to ensure order
+        
         do {
             let orgId = try await organizationService.createOrganization(org)
-            ToastManager.shared.showToast(message: "組織創建成功！", type: .success)
+            
+            await MainActor.run {
+                isLoading = false
+                ToastManager.shared.showToast(message: "組織創建成功！", type: .success)
+            }
             return orgId
         } catch {
-            ToastManager.shared.showToast(message: "組織創建失敗：\(error.localizedDescription)", type: .error)
-            throw error // Re-throw the error as the function is async throws
+            await MainActor.run {
+                isLoading = false
+                ToastManager.shared.showToast(message: "組織創建失敗：\(error.localizedDescription)", type: .error)
+            }
+            throw error
         }
     }
 
@@ -95,18 +100,10 @@ class OrganizationsViewModel: ObservableObject {
         try await organizationService.deleteMembership(id: membershipId)
     }
 
-    /// 搜索組織 (使用 Algolia)
+    /// 搜索組織 (使用 Firebase 前綴搜尋)
     func searchOrganizations(query: String) async {
-        guard !query.isEmpty else {
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
             await MainActor.run { allOrganizations = [] }
-            return
-        }
-
-        guard let algoliaService = algoliaService else {
-            await MainActor.run {
-                self.errorMessage = "搜尋服務未設定"
-                ToastManager.shared.showToast(message: "搜尋服務未設定", type: .error)
-            }
             return
         }
 
@@ -120,29 +117,52 @@ class OrganizationsViewModel: ObservableObject {
         }
 
         do {
-            // 1. 使用 Algolia 取得組織 ID
-            let orgIDs = try await algoliaService.search(query: query)
-
-            if orgIDs.isEmpty {
-                await MainActor.run { self.allOrganizations = [] }
-                return
-            }
-
-            // 2. 使用 OrganizationService 的快取機制批次獲取組織完整資料
-            let orgsDict = try await organizationService.fetchOrganizations(ids: orgIDs)
+            // 使用 Firebase 前綴查詢
+            let queryEnd = query + "\u{f8ff}"
+            let snapshot = try await Firestore.firestore().collection("organizations")
+                .whereField("name", isGreaterThanOrEqualTo: query)
+                .whereField("name", isLessThan: queryEnd)
+                .limit(to: 10)
+                .getDocuments()
             
-            // 維持 Algolia 回傳的排序
-            let sortedOrgs = orgIDs.compactMap { orgsDict[$0] }
+            let orgs = snapshot.documents.compactMap { try? $0.data(as: Organization.self) }
 
             await MainActor.run {
-                self.allOrganizations = sortedOrgs
+                self.allOrganizations = orgs
             }
         } catch {
-            print("❌ Error searching organizations with Algolia: \(error)")
+            print("❌ Error searching organizations: \(error)")
             await MainActor.run {
                 self.errorMessage = "搜尋失敗：\(error.localizedDescription)"
                 ToastManager.shared.showToast(message: "搜尋失敗：\(error.localizedDescription)", type: .error)
             }
+        }
+    }
+    
+    /// 透過邀請碼加入組織
+    func joinByInvitationCode(code: String) async throws -> String {
+        guard let userId = userId else {
+            throw NSError(domain: "OrganizationsViewModel", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])
+        }
+        
+        await MainActor.run { isLoading = true }
+        defer {
+            DispatchQueue.main.async { [weak self] in self?.isLoading = false }
+        }
+        
+        do {
+            let orgId = try await organizationService.joinByInvitationCode(code: code, userId: userId)
+            
+            // 成功後，可能需要重新整理列表 (subscription 自動處理) 或執行導航
+            await MainActor.run {
+                ToastManager.shared.showToast(message: "成功加入組織！", type: .success)
+            }
+            return orgId
+        } catch {
+            await MainActor.run {
+                ToastManager.shared.showToast(message: "加入失敗：\(error.localizedDescription)", type: .error)
+            }
+            throw error
         }
     }
 }

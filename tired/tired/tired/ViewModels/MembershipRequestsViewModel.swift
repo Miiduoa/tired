@@ -74,6 +74,31 @@ class MembershipRequestsViewModel: ObservableObject {
         }
     }
 
+    /// 非同步版本（回傳成功/失敗）供 UI 使用
+    func approveRequestAsync(_ request: MembershipRequest) async -> Bool {
+        do {
+            try await organizationService.approveMembershipRequest(request: request)
+            await MainActor.run { AlertHelper.shared.showSuccess("已批准申請") }
+            return true
+        } catch {
+            print("❌ approveRequestAsync error: \(error)")
+            await MainActor.run { AlertHelper.shared.showError("批准申請失敗：\(error.localizedDescription)") }
+            return false
+        }
+    }
+
+    func rejectRequestAsync(_ request: MembershipRequest) async -> Bool {
+        do {
+            try await organizationService.rejectMembershipRequest(request: request)
+            await MainActor.run { AlertHelper.shared.showSuccess("已拒絕申請") }
+            return true
+        } catch {
+            print("❌ rejectRequestAsync error: \(error)")
+            await MainActor.run { AlertHelper.shared.showError("拒絕申請失敗：\(error.localizedDescription)") }
+            return false
+        }
+    }
+
     /// 包裝給 View 使用的同步方法
     func handleReject(_ request: MembershipRequest) {
         _Concurrency.Task {

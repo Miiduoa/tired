@@ -2,6 +2,12 @@ import Foundation
 import FirebaseFirestore
 import FirebaseFirestoreSwift
 
+// MARK: - Post Type Enum (NEW)
+enum PostType: String, Codable {
+    case post         // A regular post by a member
+    case announcement // An official announcement by a role with permission
+}
+
 // MARK: - Post
 
 struct Post: Codable, Identifiable {
@@ -13,6 +19,7 @@ struct Post: Codable, Identifiable {
     var imageUrls: [String]?
 
     var visibility: PostVisibility
+    var postType: PostType = .post // NEW
 
     var createdAt: Date
     var updatedAt: Date
@@ -24,6 +31,7 @@ struct Post: Codable, Identifiable {
         case contentText
         case imageUrls
         case visibility
+        case postType // NEW
         case createdAt
         case updatedAt
     }
@@ -35,6 +43,7 @@ struct Post: Codable, Identifiable {
         contentText: String,
         imageUrls: [String]? = nil,
         visibility: PostVisibility = .public,
+        postType: PostType = .post, // NEW
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -44,6 +53,7 @@ struct Post: Codable, Identifiable {
         self.contentText = contentText
         self.imageUrls = imageUrls
         self.visibility = visibility
+        self.postType = postType // NEW
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -56,6 +66,7 @@ struct Comment: Codable, Identifiable {
     var postId: String
     var authorUserId: String
     var contentText: String
+    var mentionedUserIds: [String]? // For @mentions
 
     var createdAt: Date
     var updatedAt: Date
@@ -65,6 +76,7 @@ struct Comment: Codable, Identifiable {
         case postId
         case authorUserId
         case contentText
+        case mentionedUserIds
         case createdAt
         case updatedAt
     }

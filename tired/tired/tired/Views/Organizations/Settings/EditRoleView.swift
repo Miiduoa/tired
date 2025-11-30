@@ -29,7 +29,7 @@ struct EditRoleView: View {
                 Form {
                     Section {
                         TextField("例如：幹部、老師...", text: $roleName)
-                            .textFieldStyle(FrostedTextFieldStyle())
+                            .textFieldStyle(StandardTextFieldStyle(icon: "person.badge.key"))
                             .listRowBackground(Color.clear) // Make form row transparent
                     } header: {
                         Text("角色名稱")
@@ -79,8 +79,17 @@ struct EditRoleView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("儲存") { saveAndDismiss() }
                         .buttonStyle(GlassmorphicButtonStyle(cornerRadius: AppDesignSystem.cornerRadiusSmall, textColor: AppDesignSystem.accentColor))
-                        .disabled(roleName.isEmpty)
+                        .disabled(roleName.isEmpty || viewModel.isLoading)
                 }
+            }
+        }
+        .overlay {
+            if viewModel.isLoading {
+                Color.black.opacity(0.25).ignoresSafeArea()
+                ProgressView("處理中...")
+                    .padding(12)
+                    .background(.ultraThinMaterial)
+                    .cornerRadius(8)
             }
         }
     }

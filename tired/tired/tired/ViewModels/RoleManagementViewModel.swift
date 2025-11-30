@@ -27,7 +27,7 @@ class RoleManagementViewModel: ObservableObject {
     }
 
     func addRole(name: String, permissions: [String]) async {
-        guard let orgId = organization.id, let currentUserId = userId else {
+        guard let orgId = organization.id, let _ = userId else {
             ToastManager.shared.showToast(message: "操作失敗：用戶未登入或組織ID無效。", type: .error)
             return
         }
@@ -60,26 +60,11 @@ class RoleManagementViewModel: ObservableObject {
     }
 
     func updateRole(_ role: Role) async {
-        guard let orgId = organization.id, let currentUserId = userId else {
+        guard let orgId = organization.id, let _ = userId else {
             ToastManager.shared.showToast(message: "操作失敗：用戶未登入或組織ID無效。", type: .error)
             return
         }
-        guard !canEditOrDelete(role: role) else { // Use helper for checks
-            ToastManager.shared.showToast(message: "您沒有權限編輯此角色或此角色為預設角色。", type: .error)
-            return
-        }
-
-        // RBAC Check
-        do {
-            let hasPermission = try await permissionService.hasPermissionForCurrentUser(organizationId: orgId, permission: AppPermissions.manageOrgRoles)
-            guard hasPermission else {
-                ToastManager.shared.showToast(message: "您沒有權限編輯組織角色。", type: .error)
-                return
-            }
-        } catch {
-            ToastManager.shared.showToast(message: "檢查權限失敗: \(error.localizedDescription)", type: .error)
-            return
-        }
+        guard await ensureCanModify(role: role, action: "編輯") else { return }
 
         isLoading = true
         do {
@@ -93,26 +78,11 @@ class RoleManagementViewModel: ObservableObject {
     }
 
     func deleteRole(_ role: Role) async {
-        guard let orgId = organization.id, let currentUserId = userId else {
+        guard let orgId = organization.id, let _ = userId else {
             ToastManager.shared.showToast(message: "操作失敗：用戶未登入或組織ID無效。", type: .error)
             return
         }
-        guard !canEditOrDelete(role: role) else { // Use helper for checks
-            ToastManager.shared.showToast(message: "您沒有權限刪除此角色或此角色為預設角色。", type: .error)
-            return
-        }
-
-        // RBAC Check
-        do {
-            let hasPermission = try await permissionService.hasPermissionForCurrentUser(organizationId: orgId, permission: AppPermissions.manageOrgRoles)
-            guard hasPermission else {
-                ToastManager.shared.showToast(message: "您沒有權限刪除組織角色。", type: .error)
-                return
-            }
-        } catch {
-            ToastManager.shared.showToast(message: "檢查權限失敗: \(error.localizedDescription)", type: .error)
-            return
-        }
+        guard await ensureCanModify(role: role, action: "刪除") else { return }
         
         isLoading = true
         do {
@@ -128,7 +98,7 @@ class RoleManagementViewModel: ObservableObject {
     private func refreshOrganization() async {
         guard let orgId = organization.id else { return }
         do {
-            self.organization = try await organizationService.fetchOrganization(id: orgId) ?? self.organization
+            self.organization = try await organizationService.fetchOrganization(id: orgId)
         } catch {
             ToastManager.shared.showToast(message: "刷新組織資料失敗: \(error.localizedDescription)", type: .error)
         }
@@ -136,7 +106,7 @@ class RoleManagementViewModel: ObservableObject {
     
     /// 判斷當前用戶是否可以管理角色 (e.g., 創建新角色)
     func canManageRoles() async -> Bool {
-        guard let orgId = organization.id, let currentUserId = userId else { return false }
+        guard let orgId = organization.id, let _ = userId else { return false }
         do {
             return try await permissionService.hasPermissionForCurrentUser(organizationId: orgId, permission: AppPermissions.manageOrgRoles)
         } catch {
@@ -147,14 +117,44 @@ class RoleManagementViewModel: ObservableObject {
     
     /// 判斷當前用戶是否可以編輯或刪除特定角色 (考慮預設角色)
     func canEditOrDelete(role: Role) -> Bool {
-        guard let orgId = organization.id, let currentUserId = userId else { return false }
+        // 僅用於同步 UI 判斷：預設角色禁止編輯/刪除
+        return role.isDefault != true
+    }
+    
+    /// 異步檢查是否可以編輯或刪除特定角色
+    func canEditOrDeleteAsync(role: Role) async -> Bool {
+        guard let _ = organization.id, let _ = userId else { return false }
         
         // Default roles cannot be edited or deleted
         guard role.isDefault != true else { return false }
 
-        // Check if user has manageOrgRoles permission (async check)
-        return Task {
-            return await canManageRoles()
-        }.value ?? false // Use value property to get the result of the Task
+        // Check if user has manageOrgRoles permission
+        return await canManageRoles()
+    }
+    
+    /// 確認當前使用者是否可以對指定角色進行變更（含權限與預設角色判斷）
+    private func ensureCanModify(role: Role, action: String) async -> Bool {
+        guard role.isDefault != true else {
+            ToastManager.shared.showToast(message: "預設角色不可\(action)。", type: .error)
+            return false
+        }
+        
+        guard let orgId = organization.id else {
+            ToastManager.shared.showToast(message: "組織ID無效，無法\(action)角色。", type: .error)
+            return false
+        }
+        
+        do {
+            let hasPermission = try await permissionService.hasPermissionForCurrentUser(organizationId: orgId, permission: AppPermissions.manageOrgRoles)
+            guard hasPermission else {
+                ToastManager.shared.showToast(message: "您沒有權限\(action)組織角色。", type: .error)
+                return false
+            }
+        } catch {
+            ToastManager.shared.showToast(message: "檢查權限失敗: \(error.localizedDescription)", type: .error)
+            return false
+        }
+        
+        return true
     }
 }

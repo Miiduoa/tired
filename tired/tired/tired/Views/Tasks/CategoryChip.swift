@@ -20,9 +20,24 @@ struct CategoryChip: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(isSelected ? (color ?? AppDesignSystem.accentColor) : Material.thin)
+            .background(
+                Group {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(AppDesignSystem.accentGradient)
+                            .overlay(AppDesignSystem.surfaceGradient.opacity(0.25))
+                    } else {
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(Color.appSecondaryBackground)
+                            .overlay(AppDesignSystem.surfaceGradient.opacity(0.4))
+                    }
+                }
+            )
             .foregroundColor(isSelected ? .white : .primary)
-            .cornerRadius(20)
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(isSelected ? Color.white.opacity(0.3) : AppDesignSystem.glassOverlay, lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
     }

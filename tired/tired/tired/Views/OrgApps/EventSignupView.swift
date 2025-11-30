@@ -32,12 +32,8 @@ struct EventSignupView: View {
                             event: event,
                             isRegistered: viewModel.isRegistered(eventId: event.id ?? ""),
                             registrationCount: viewModel.getRegistrationCount(eventId: event.id ?? ""),
-                            onRegister: {
-                                viewModel.registerForEvent(event: event)
-                            },
-                            onCancel: {
-                                viewModel.cancelRegistration(event: event)
-                            }
+                            onRegister: { await viewModel.registerForEventAsync(event: event) },
+                            onCancel: { await viewModel.cancelRegistrationAsync(event: event) }
                         )
                     }
                 }
@@ -92,8 +88,9 @@ struct EventCard: View {
     let event: Event
     let isRegistered: Bool
     let registrationCount: Int
-    let onRegister: () -> Void
-    let onCancel: () -> Void
+    let onRegister: () async -> Bool
+    let onCancel: () async -> Bool
+    @State private var isProcessing = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -171,16 +168,41 @@ struct EventCard: View {
                 }
             }
 
-            // Action button
-            Button(action: isRegistered ? onCancel : onRegister) {
-                Text(isRegistered ? "取消報名" : "立即報名")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(isRegistered ? .red : .white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(isRegistered ? Color.red.opacity(0.1) : Color.blue)
-                    .cornerRadius(8)
+            // Action button with loading state
+                    Button {
+                _Concurrency.Task {
+                    guard !isProcessing else { return }
+                    isProcessing = true
+                    var success = false
+                    if isRegistered {
+                        success = await onCancel()
+                    } else {
+                        success = await onRegister()
+                    }
+                    if !success {
+                        ToastManager.shared.showToast(message: "操作失敗，請稍後再試。", type: .error)
+                    }
+                    // small delay to ensure state changes propagate
+                    try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000)
+                    isProcessing = false
+                }
+            } label: {
+                HStack {
+                    if isProcessing {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .scaleEffect(0.8)
+                    }
+                    Text(isRegistered ? "取消報名" : "立即報名")
+                        .font(.system(size: 14, weight: .medium))
+                }
+                .foregroundColor(isRegistered ? .red : .white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(isRegistered ? Color.red.opacity(0.1) : Color.blue)
+                .cornerRadius(8)
             }
+            .disabled(isProcessing)
         }
         .padding()
         .background(Color.appBackground)
@@ -263,12 +285,15 @@ struct CreateEventView: View {
                     capacity: hasCapacity ? capacity : nil
                 )
                 await MainActor.run {
+                    isCreating = false
+                    AlertHelper.shared.showSuccess("活動已創建")
                     dismiss()
                 }
             } catch {
                 print("❌ Error creating event: \(error)")
                 await MainActor.run {
                     isCreating = false
+                    AlertHelper.shared.showError("創建活動失敗：\(error.localizedDescription)")
                 }
             }
         }

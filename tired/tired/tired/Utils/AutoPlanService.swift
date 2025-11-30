@@ -61,35 +61,17 @@ class AutoPlanService {
         var updatedTasks = tasks
         var scheduledTaskCount = 0
         let today = calendar.startOfDay(for: Date())
+        let dependencyService = TaskDependencyService()
 
         // 1. 篩選候選任務（未完成、未鎖定、未排程）
-        let candidates = tasks
-            .filter { task in
+        let candidates = dependencyService.topologicalSort(
+            tasks.filter { task in
                 !task.isDone &&
                 !task.isDateLocked &&
                 task.plannedDate == nil
-            }
-            .sorted { t1, t2 in
-                // ✅ 改进排序逻辑：优先级 > Deadline > 创建时间
-
-                // 第一步：按优先级排序 (high > medium > low)
-                let priorityOrder: [TaskPriority] = [.high, .medium, .low]
-                if let p1 = priorityOrder.firstIndex(of: t1.priority),
-                   let p2 = priorityOrder.firstIndex(of: t2.priority),
-                   p1 != p2 {
-                    return p1 < p2  // 优先级高的排前面
-                }
-
-                // 第二步：优先级相同，按 deadline 排序
-                if let d1 = t1.deadlineAt, let d2 = t2.deadlineAt {
-                    return d1 < d2
-                }
-                if t1.deadlineAt != nil { return true }
-                if t2.deadlineAt != nil { return false }
-
-                // 第三步：都没有 deadline，按创建时间
-                return t1.createdAt < t2.createdAt
-            }
+            },
+            preferPriority: true
+        )
 
         // 2. 計算每天已排程的時間（只計算今天及之後的日期）
         var dayMinutes: [Date: Int] = [:]
@@ -257,5 +239,194 @@ class AutoPlanService {
         }
 
         return loads
+    }
+    
+    // MARK: - 智能排程建議
+    
+    /// 自動排程報告
+    struct AutoPlanReport {
+        let scheduledTasks: [Task]
+        let skippedTasks: [(task: Task, reason: String)]
+        let overloadedDays: [Date]
+        let totalScheduledMinutes: Int
+        let suggestions: [String]
+    }
+    
+    /// 進行自動排程並生成報告
+    func autoplanWithReport(tasks: [Task], busyBlocks: [BusyTimeBlock] = [], options: AutoPlanOptions) -> AutoPlanReport {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let weekEnd = calendar.date(byAdding: .day, value: 7, to: options.weekStart) ?? options.weekStart
+        
+        var scheduledTasks: [Task] = []
+        var skippedTasks: [(task: Task, reason: String)] = []
+        var overloadedDays: [Date] = []
+        var suggestions: [String] = []
+        var totalScheduledMinutes = 0
+        
+        // 執行排程
+        let (updatedTasks, scheduledCount) = autoplanWeek(tasks: tasks, busyBlocks: busyBlocks, options: options)
+        
+        // 分析結果
+        for task in updatedTasks {
+            if task.plannedDate != nil && !task.isDone && !task.isDateLocked {
+                if let original = tasks.first(where: { $0.id == task.id }),
+                   original.plannedDate == nil {
+                    scheduledTasks.append(task)
+                    totalScheduledMinutes += task.estimatedMinutes ?? 60
+                }
+            }
+        }
+        
+        // 檢查被跳過的任務
+        let candidates = tasks.filter { !$0.isDone && !$0.isDateLocked && $0.plannedDate == nil }
+        for candidate in candidates {
+            let wasScheduled = scheduledTasks.contains { $0.id == candidate.id }
+            if !wasScheduled {
+                var reason = "無法找到合適的時間段"
+                
+                if let deadline = candidate.deadlineAt, deadline < today {
+                    reason = "截止日期已過期"
+                } else if (candidate.estimatedMinutes ?? 0) > options.dailyCapacityMinutes {
+                    reason = "預估時間超過每日容量"
+                }
+                
+                skippedTasks.append((candidate, reason))
+            }
+        }
+        
+        // 檢查超載的日期
+        var dayMinutes: [Date: Int] = [:]
+        for task in updatedTasks {
+            guard let planned = task.plannedDate, !task.isDone else { continue }
+            let plannedDay = calendar.startOfDay(for: planned)
+            if plannedDay >= options.weekStart && plannedDay < weekEnd {
+                dayMinutes[plannedDay, default: 0] += task.estimatedMinutes ?? 0
+            }
+        }
+        
+        for (day, minutes) in dayMinutes {
+            if minutes > options.dailyCapacityMinutes {
+                overloadedDays.append(day)
+            }
+        }
+        
+        // 生成建議
+        if !overloadedDays.isEmpty {
+            suggestions.append("⚠️ 有 \(overloadedDays.count) 天的工作量超過每日容量，建議重新分配任務或調整截止日期。")
+        }
+        
+        if !skippedTasks.isEmpty {
+            suggestions.append("📋 有 \(skippedTasks.count) 個任務無法自動排程，請手動安排或調整條件。")
+        }
+        
+        let highPriorityUnscheduled = skippedTasks.filter { $0.task.priority == .high }
+        if !highPriorityUnscheduled.isEmpty {
+            suggestions.append("🔴 有 \(highPriorityUnscheduled.count) 個高優先級任務未排程，建議優先處理。")
+        }
+        
+        let overdueTasks = updatedTasks.filter { $0.isOverdue && !$0.isDone }
+        if !overdueTasks.isEmpty {
+            suggestions.append("⏰ 有 \(overdueTasks.count) 個任務已過期，請盡快處理。")
+        }
+        
+        if scheduledCount > 0 {
+            suggestions.insert("✅ 成功排程 \(scheduledCount) 個任務，共 \(formatMinutes(totalScheduledMinutes))。", at: 0)
+        }
+        
+        return AutoPlanReport(
+            scheduledTasks: scheduledTasks,
+            skippedTasks: skippedTasks,
+            overloadedDays: overloadedDays,
+            totalScheduledMinutes: totalScheduledMinutes,
+            suggestions: suggestions
+        )
+    }
+    
+    /// 格式化分鐘數為人類可讀格式
+    private func formatMinutes(_ minutes: Int) -> String {
+        if minutes < 60 {
+            return "\(minutes) 分鐘"
+        } else {
+            let hours = minutes / 60
+            let remainingMinutes = minutes % 60
+            if remainingMinutes == 0 {
+                return "\(hours) 小時"
+            } else {
+                return "\(hours) 小時 \(remainingMinutes) 分鐘"
+            }
+        }
+    }
+    
+    /// 優化現有排程 - 平衡每天的負載
+    func optimizeSchedule(tasks: [Task], options: AutoPlanOptions) -> [Task] {
+        let calendar = Calendar.current
+        var optimizedTasks = tasks
+        let today = calendar.startOfDay(for: Date())
+        
+        // 計算每天的負載
+        var dayLoad: [Date: Int] = [:]
+        var dayTasks: [Date: [Task]] = [:]
+        
+        for task in tasks {
+            guard let planned = task.plannedDate, !task.isDone, !task.isDateLocked else { continue }
+            let plannedDay = calendar.startOfDay(for: planned)
+            
+            dayLoad[plannedDay, default: 0] += task.estimatedMinutes ?? 60
+            dayTasks[plannedDay, default: []].append(task)
+        }
+        
+        // 找出過載的日期和負載較輕的日期
+        var overloadedDays = dayLoad.filter { $0.value > options.dailyCapacityMinutes }
+        let underloadedDays = dayLoad.filter { $0.value < options.dailyCapacityMinutes / 2 }
+        
+        // 嘗試將過載日期的任務移到負載較輕的日期
+        for (overloadedDay, _) in overloadedDays.sorted(by: { $0.value > $1.value }) {
+            guard let tasksToMove = dayTasks[overloadedDay] else { continue }
+            
+            // 按優先級從低到高排序（先移動低優先級的任務）
+            let sortedTasks = tasksToMove.sorted { $0.priority.hierarchyValue < $1.priority.hierarchyValue }
+            
+            for task in sortedTasks {
+                // 跳過有截止日期限制的任務
+                if let deadline = task.deadlineAt {
+                    let deadlineDay = calendar.startOfDay(for: deadline)
+                    if deadlineDay <= overloadedDay {
+                        continue
+                    }
+                }
+                
+                // 找一個負載較輕的日期
+                let targetDay = underloadedDays.keys
+                    .filter { $0 >= today }
+                    .filter { day in
+                        if let deadline = task.deadlineAt {
+                            return day <= deadline
+                        }
+                        return true
+                    }
+                    .min { dayLoad[$0, default: 0] < dayLoad[$1, default: 0] }
+                
+                if let targetDay = targetDay,
+                   let taskIndex = optimizedTasks.firstIndex(where: { $0.id == task.id }) {
+                    let taskDuration = task.estimatedMinutes ?? 60
+                    let newLoad = dayLoad[targetDay, default: 0] + taskDuration
+                    
+                    // 確保目標日期不會因此過載
+                    if newLoad <= options.dailyCapacityMinutes {
+                        optimizedTasks[taskIndex].plannedDate = targetDay
+                        dayLoad[overloadedDay, default: 0] -= taskDuration
+                        dayLoad[targetDay, default: 0] = newLoad
+                        
+                        // 如果原日期不再過載，停止移動
+                        if dayLoad[overloadedDay, default: 0] <= options.dailyCapacityMinutes {
+                            break
+                        }
+                    }
+                }
+            }
+        }
+        
+        return optimizedTasks
     }
 }

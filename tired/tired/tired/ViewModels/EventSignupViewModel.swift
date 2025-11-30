@@ -43,14 +43,15 @@ class EventSignupViewModel: ObservableObject {
     }
 
     private func loadRegistrationData(for events: [Event]) {
-        guard let userId = userId else { return }
+        guard let _ = userId else { return }
 
         _Concurrency.Task {
             for event in events {
                 guard let eventId = event.id else { continue }
+                guard let currentUserId = self.userId else { continue } // Use self.userId inside Task
 
                 // 檢查是否已報名
-                let isReg = (try? await eventService.isUserRegistered(eventId: eventId, userId: userId)) ?? false
+                let isReg = (try? await eventService.isUserRegistered(eventId: eventId, userId: currentUserId)) ?? false
 
                 // 獲取報名人數
                 let count = (try? await eventService.getRegistrationCount(eventId: eventId)) ?? 0
@@ -64,7 +65,7 @@ class EventSignupViewModel: ObservableObject {
     }
 
     private func checkPermissions() {
-        guard let userId = userId else { return }
+        guard let _ = userId else { return }
 
         _Concurrency.Task {
             // Use PermissionService to check permissions
@@ -94,7 +95,7 @@ class EventSignupViewModel: ObservableObject {
     }
 
     func createEvent(title: String, description: String?, startAt: Date, endAt: Date, location: String?, capacity: Int?) async throws {
-        guard let userId = userId else {
+        guard userId != nil else {
             ToastManager.shared.showToast(message: "用戶未登入", type: .error)
             throw NSError(domain: "EventSignupViewModel", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])
         }
@@ -127,50 +128,73 @@ class EventSignupViewModel: ObservableObject {
     }
 
     func registerForEvent(event: Event) {
-        guard let userId = userId, let eventId = event.id else {
+        guard let _ = userId, let _ = event.id else {
             ToastManager.shared.showToast(message: "用戶未登入或活動ID無效。", type: .error)
             return
         }
-
+        // Backwards-compatible wrapper to the async version
         _Concurrency.Task {
-            do {
-                try await eventService.registerForEvent(eventId: eventId, userId: userId)
-
-                await MainActor.run {
-                    self.registrations[eventId] = true
-                    self.registrationCounts[eventId] = (self.registrationCounts[eventId] ?? 0) + 1
-                    ToastManager.shared.showToast(message: "報名成功！", type: .success)
-                }
-            } catch {
-                print("❌ Error registering for event: \(error)")
-                await MainActor.run {
-                    ToastManager.shared.showToast(message: "報名失敗：\(error.localizedDescription)", type: .error)
-                }
-            }
+            _ = await self.registerForEventAsync(event: event)
         }
     }
 
     func cancelRegistration(event: Event) {
-        guard let userId = userId, let eventId = event.id else {
+        guard let _ = userId, let _ = event.id else {
             ToastManager.shared.showToast(message: "用戶未登入或活動ID無效。", type: .error)
             return
         }
-
+        // Backwards-compatible wrapper to the async version
         _Concurrency.Task {
-            do {
-                try await eventService.cancelRegistration(eventId: eventId, userId: userId)
+            _ = await self.cancelRegistrationAsync(event: event)
+        }
+    }
 
-                await MainActor.run {
-                    self.registrations[eventId] = false
-                    self.registrationCounts[eventId] = max(0, (self.registrationCounts[eventId] ?? 1) - 1)
-                    ToastManager.shared.showToast(message: "已取消報名。", type: .success)
-                }
-            } catch {
-                print("❌ Error canceling registration: \(error)")
-                await MainActor.run {
-                    ToastManager.shared.showToast(message: "取消報名失敗：\(error.localizedDescription)", type: .error)
-                }
+    // MARK: - Async helpers
+    /// 非同步註冊，回傳是否成功
+    func registerForEventAsync(event: Event) async -> Bool {
+        guard let userId = userId, let eventId = event.id else {
+            await MainActor.run { ToastManager.shared.showToast(message: "用戶未登入或活動ID無效。", type: .error) }
+            return false
+        }
+
+        do {
+            try await eventService.registerForEvent(eventId: eventId, userId: userId)
+            await MainActor.run {
+                self.registrations[eventId] = true
+                self.registrationCounts[eventId] = (self.registrationCounts[eventId] ?? 0) + 1
+                ToastManager.shared.showToast(message: "報名成功！", type: .success)
             }
+            return true
+        } catch {
+            print("❌ Error registering for event async: \(error)")
+            await MainActor.run {
+                ToastManager.shared.showToast(message: "報名失敗：\(error.localizedDescription)", type: .error)
+            }
+            return false
+        }
+    }
+
+    /// 非同步取消註冊，回傳是否成功
+    func cancelRegistrationAsync(event: Event) async -> Bool {
+        guard let userId = userId, let eventId = event.id else {
+            await MainActor.run { ToastManager.shared.showToast(message: "用戶未登入或活動ID無效。", type: .error) }
+            return false
+        }
+
+        do {
+            try await eventService.cancelRegistration(eventId: eventId, userId: userId)
+            await MainActor.run {
+                self.registrations[eventId] = false
+                self.registrationCounts[eventId] = max(0, (self.registrationCounts[eventId] ?? 1) - 1)
+                ToastManager.shared.showToast(message: "已取消報名。", type: .success)
+            }
+            return true
+        } catch {
+            print("❌ Error canceling registration async: \(error)")
+            await MainActor.run {
+                ToastManager.shared.showToast(message: "取消報名失敗：\(error.localizedDescription)", type: .error)
+            }
+            return false
         }
     }
 }

@@ -4,6 +4,7 @@ import Foundation
 struct AppPermissions {
     // 貼文相關權限
     static let createPostInOrg = "create_post_in_org"
+    static let createAnnouncementInOrg = "create_announcement_in_org"
     static let deleteAnyPostInOrg = "delete_any_post_in_org" // 允許刪除組織內任何貼文
     static let deleteOwnPost = "delete_own_post" // 允許刪除自己的貼文 (通常預設允許)
     

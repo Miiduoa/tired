@@ -14,7 +14,12 @@ class CalendarService {
 
     /// Checks the current authorization status for calendar access.
     var isAuthorized: Bool {
-        EKEventStore.authorizationStatus(for: .event) == .authorized
+        let status = EKEventStore.authorizationStatus(for: .event)
+        if #available(iOS 17.0, *) {
+            return status == .fullAccess || status == .writeOnly
+        } else {
+            return status == .authorized
+        }
     }
 
     /// Requests access to the user's calendar.

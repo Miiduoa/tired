@@ -95,7 +95,7 @@ class TaskBoardViewModel: ObservableObject {
             estimatedMinutes: estimatedMinutes
         )
 
-        try await taskService.createTask(task)
+        _ = try await taskService.createTask(task)
     }
 
     func syncToPersonalTasks(task: Task) async throws {
@@ -110,8 +110,21 @@ class TaskBoardViewModel: ObservableObject {
         personalTask.sourceType = .orgTask
         personalTask.plannedDate = nil // 讓用戶自己排程
 
-        try await taskService.createTask(personalTask)
+        _ = try await taskService.createTask(personalTask)
 
         print("✅ Task synced to personal tasks")
+    }
+
+    /// 非同步版本，回傳成功/失敗給 UI
+    func syncToPersonalTasksAsync(task: Task) async -> Bool {
+        do {
+            try await syncToPersonalTasks(task: task)
+            await MainActor.run { ToastManager.shared.showToast(message: "任務同步成功！", type: .success) }
+            return true
+        } catch {
+            print("❌ Error syncing to personal tasks async: \(error)")
+            await MainActor.run { ToastManager.shared.showToast(message: "同步失敗：\(error.localizedDescription)", type: .error) }
+            return false
+        }
     }
 }

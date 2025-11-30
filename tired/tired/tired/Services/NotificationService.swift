@@ -22,9 +22,23 @@ class NotificationService {
     ///   - task: The task for which to schedule a reminder.
     ///   - reminderOffset: How long before the deadline to show the notification. Defaults to 15 minutes.
     func scheduleNotification(for task: Task, reminderOffset: TimeInterval = 15 * 60) {
-        guard let deadline = task.deadlineAt, let taskId = task.id else { return }
-
-        let triggerDate = deadline.addingTimeInterval(-reminderOffset)
+        guard let taskId = task.id else { return }
+        
+        // Always clear any pending notification first to avoid duplicates
+        cancelNotification(withIdentifier: "task-\(taskId)")
+        
+        // Respect reminder toggle
+        guard task.hasReminder else { return }
+        
+        // Choose explicit reminder time first, then fallback to deadline offset
+        let triggerDate: Date
+        if let reminderAt = task.reminderAt {
+            triggerDate = reminderAt
+        } else if let deadline = task.deadlineAt {
+            triggerDate = deadline.addingTimeInterval(-reminderOffset)
+        } else {
+            return
+        }
         
         // Only schedule notifications in the future
         guard triggerDate > Date() else { return }

@@ -22,13 +22,21 @@ class FirebaseManager {
         guard let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
               FileManager.default.fileExists(atPath: path) else {
             print("❌ 錯誤: 找不到 GoogleService-Info.plist")
-            print("   請確認檔案已添加到 Xcode 專案，並且 Target Membership 已勾選")
-            fatalError("GoogleService-Info.plist 未找到。請確認檔案已正確添加到專案中。")
+            return
         }
-        
+
         print("✅ 找到 GoogleService-Info.plist: \(path)")
         FirebaseApp.configure()
-        print("✅ Firebase 初始化成功")
+        
+        // 啟用離線 persistence
+        let settings = FirestoreSettings()
+        // isPersistenceEnabled is deprecated and enabled by default in newer SDKs or controlled via cacheSettings
+        // settings.isPersistenceEnabled = true 
+        // 設置快取大小為 100 MB
+        settings.cacheSettings = PersistentCacheSettings(sizeBytes: NSNumber(value: 100 * 1024 * 1024))
+        Firestore.firestore().settings = settings
+        
+        print("✅ Firebase 初始化成功 (已啟用離線支援)")
     }
 
     var db: Firestore {

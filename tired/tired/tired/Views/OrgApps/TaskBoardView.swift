@@ -27,12 +27,11 @@ struct TaskBoardView: View {
                 if viewModel.tasks.isEmpty {
                     emptyState
                 } else {
-                    ForEach(viewModel.tasks) { task in
-                        OrgTaskCard(task: task) {
-                            // This closure is now async throws
-                            try await viewModel.syncToPersonalTasks(task: task)
-                        }
-                    }
+                                    ForEach(viewModel.tasks) { task in
+                                        OrgTaskCard(task: task) {
+                                            await viewModel.syncToPersonalTasksAsync(task: task)
+                                        }
+                                    }
                 }
             }
             .padding()
@@ -40,8 +39,8 @@ struct TaskBoardView: View {
         .navigationTitle(appInstance.name ?? "任務看板")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if viewModel.canManage {
-                ToolbarItem(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .primaryAction) {
+                if viewModel.canManage {
                     Button {
                         showingCreateTask = true
                     } label: {
@@ -83,7 +82,8 @@ struct TaskBoardView: View {
 @available(iOS 17.0, *)
 struct OrgTaskCard: View {
     let task: Task
-    let onSync: () async throws -> Void // Changed signature
+    let onSync: () async -> Bool
+    @State private var isProcessingSync = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -125,22 +125,24 @@ struct OrgTaskCard: View {
                 Spacer()
 
                 Button {
-                    // Call the onSync closure in a Task to handle async throws
                     _Concurrency.Task {
-                        do {
-                            try await onSync()
-                            await MainActor.run {
-                                ToastManager.shared.showToast(message: "任務同步成功！", type: .success)
-                            }
-                        } catch {
-                            print("❌ Error syncing task: \(error)")
-                            await MainActor.run {
-                                ToastManager.shared.showToast(message: "同步失敗: \(error.localizedDescription)", type: .error)
-                            }
+                        guard !isProcessingSync else { return }
+                        await MainActor.run { isProcessingSync = true }
+                        let success = await onSync()
+                        if success {
+                            await MainActor.run { ToastManager.shared.showToast(message: "任務同步成功！", type: .success) }
+                        }
+                        // small debounce
+                        try? await _Concurrency.Task.sleep(nanoseconds: 120_000_000)
+                        await MainActor.run { isProcessingSync = false }
+                        if !success {
+                            // onSync already shows toast on failure, but ensure user sees it
+                            await MainActor.run { ToastManager.shared.showToast(message: "同步失敗，請稍後再試。", type: .error) }
                         }
                     }
                 } label: {
                     HStack(spacing: 4) {
+                        if isProcessingSync { ProgressView().scaleEffect(0.8) }
                         Image(systemName: "arrow.down.circle")
                         Text("同步")
                     }
@@ -151,6 +153,7 @@ struct OrgTaskCard: View {
                     .background(Color.blue.opacity(0.1))
                     .cornerRadius(16)
                 }
+                .disabled(isProcessingSync)
             }
         }
         .padding()
@@ -181,7 +184,7 @@ struct CreateOrgTaskView: View {
     var body: some View {
         NavigationView {
             Form {
-                Section("基本信息") {
+                SwiftUI.Section("基本信息") {
                     TextField("任務標題", text: $title)
                     TextField("描述（選填）", text: $description, axis: .vertical)
                         .lineLimit(3...6)
@@ -192,7 +195,7 @@ struct CreateOrgTaskView: View {
                     }
                 }
 
-                Section("時間估計") {
+                SwiftUI.Section("時間估計") {
                     HStack {
                         Text("預估時長")
                         Spacer()
@@ -202,7 +205,7 @@ struct CreateOrgTaskView: View {
                     Slider(value: $estimatedHours, in: 0.5...8, step: 0.5)
                 }
 
-                Section("截止日期") {
+                SwiftUI.Section("截止日期") {
                     Toggle("設置截止日期", isOn: $hasDeadline)
                     if hasDeadline {
                         DatePicker("截止時間", selection: $deadline, displayedComponents: [.date, .hourAndMinute])

@@ -108,5 +108,23 @@ class ResourceListViewModel: ObservableObject {
             print("❌ Error deleting resource: \(error)")
         }
     }
+
+    /// Async wrapper that returns whether deletion succeeded; shows toast on success/failure.
+    func deleteResourceAsync(_ resource: Resource) async -> Bool {
+        guard let resourceId = resource.id else {
+            ToastManager.shared.showToast(message: "資源 ID 無效，無法刪除。", type: .error)
+            return false
+        }
+
+        do {
+            try await FirebaseManager.shared.db.collection("resources").document(resourceId).delete()
+            ToastManager.shared.showToast(message: "資源已刪除。", type: .success)
+            return true
+        } catch {
+            print("❌ Error deleting resource: \(error)")
+            ToastManager.shared.showToast(message: "刪除資源失敗：\(error.localizedDescription)", type: .error)
+            return false
+        }
+    }
 }
 

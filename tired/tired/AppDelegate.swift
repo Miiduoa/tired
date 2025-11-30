@@ -98,8 +98,10 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
 // Custom Notification Names for SwiftUI navigation
 extension Notification.Name {
     static let navigateToTaskDetail = Notification.Name("navigateToTaskDetail")
+    static let navigateToTasksTab = Notification.Name("navigateToTasksTab")
     static let navigateToEventDetail = Notification.Name("navigateToEventDetail")
     static let navigateToOrganizationDetail = Notification.Name("navigateToOrganizationDetail")
+    static let showAutoplan = Notification.Name("showAutoplan")
 }
 // [END ios_10_message_handling]
 

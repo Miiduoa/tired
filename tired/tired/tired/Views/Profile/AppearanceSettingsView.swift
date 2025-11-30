@@ -4,61 +4,50 @@ import SwiftUI
 
 @available(iOS 17.0, *)
 struct AppearanceSettingsView: View {
+    @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var authService: AuthService
-    @State private var selectedTheme = "auto"
-    @State private var showingSaved = false
-
+    
     private let userService = UserService()
 
     var body: some View {
         Form {
             Section {
-                Picker("主題", selection: $selectedTheme) {
-                    Text("跟隨系統").tag("auto")
-                    Text("淺色").tag("light")
-                    Text("深色").tag("dark")
+                Picker("主題", selection: $themeManager.currentTheme) {
+                    ForEach(Theme.allCases) { theme in
+                        Text(theme.displayName).tag(theme)
+                    }
                 }
                 .pickerStyle(.inline)
-                .onChange(of: selectedTheme) { _, _ in
-                    saveSettings()
+                .onChange(of: themeManager.currentTheme) { _, newTheme in
+                    // Also save the preference to the user's backend profile
+                    saveThemePreference(theme: newTheme)
                 }
             } header: {
                 Text("外觀主題")
-            } footer: {
-                if showingSaved {
-                    Text("已儲存")
-                        .font(.caption)
-                        .foregroundColor(.green)
-                }
             }
         }
         .navigationTitle("外觀")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            loadSettings()
+            // Sync the theme manager with the user's profile setting if it exists
+            if let profileTheme = authService.userProfile?.theme,
+               let theme = Theme(rawValue: profileTheme),
+               theme != themeManager.currentTheme {
+                themeManager.currentTheme = theme
+            }
         }
     }
-
-    private func loadSettings() {
-        if let profile = authService.userProfile {
-            selectedTheme = profile.theme ?? "auto"
-        }
-    }
-
-    private func saveSettings() {
+    
+    private func saveThemePreference(theme: Theme) {
         guard let userId = authService.userProfile?.id else { return }
 
         _Concurrency.Task {
             do {
-                try await userService.updateAppearanceSettings(userId: userId, theme: selectedTheme)
-                await MainActor.run {
-                    showingSaved = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        showingSaved = false
-                    }
-                }
+                try await userService.updateAppearanceSettings(userId: userId, theme: theme.rawValue)
+                // The visual feedback is now handled by the theme changing instantly.
+                // A toast could be added here if explicit "Saved" confirmation is desired.
             } catch {
-                print("❌ Error saving appearance settings: \(error)")
+                print("❌ Error saving appearance settings to user profile: \(error)")
             }
         }
     }

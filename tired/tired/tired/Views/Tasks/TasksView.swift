@@ -1,15 +1,25 @@
 import SwiftUI
+import UIKit
 
 @available(iOS 17.0, *)
 struct TasksView: View {
     @StateObject private var viewModel = TasksViewModel()
+    @StateObject private var calendarViewModel = CalendarViewModel()
     @State private var selectedTab: TaskTab = .today
+    @State private var viewMode: ViewMode = .list
     @State private var showingAddTask = false
     @State private var showingSortOptions = false
-    @State private var showingSearch = false
     @State private var searchText = ""
     @State private var showQuickAdd = false
     @State private var quickAddTitle = ""
+    @State private var quickAddDeadline: Date? = nil
+    @State private var quickAddPriority: TaskPriority = .medium
+    @State private var showQuickAddDeadlinePicker = false
+    @State private var showingAutoplan = false
+    @Namespace private var tabAnimation
+    @State private var processingTaskIds: Set<String> = []
+    @State private var deepLinkTask: Task? = nil
+    @State private var selectedCalendarDate: Date? = Date()
 
     enum TaskTab: String, CaseIterable {
         case today = "今天"
@@ -24,100 +34,173 @@ struct TasksView: View {
             }
         }
     }
+    
+    enum ViewMode {
+        case list
+        case calendar
+    }
 
     var body: some View {
         ZStack {
-            Color.appPrimaryBackground.edgesIgnoringSafeArea(.all)
+            Color.appPrimaryBackground.ignoresSafeArea()
 
-            NavigationView {
-                VStack(spacing: 0) {
-                    // Stats header
-                    statsHeader
-
-                    // Search bar (if active)
-                    if showingSearch {
-                        searchBar
-                    }
-
-                    // Tab selector with icons
-                    customTabSelector
-
-                    // Category filter
-                    CategoryFilterBar(selectedCategory: $viewModel.selectedCategory)
-                        .padding(.horizontal, AppDesignSystem.paddingMedium)
-                        .padding(.bottom, AppDesignSystem.paddingSmall)
-
-                    // Content
-                    if viewModel.isLoading {
-                        loadingView
+            NavigationStack {
+                ZStack(alignment: .bottom) {
+                    if viewMode == .calendar {
+                        calendarView
                     } else {
-                        contentView
+                        ScrollView {
+                            VStack(spacing: AppDesignSystem.paddingMedium) {
+                                heroHeader
+
+                                statsHeader
+
+                                searchAndActions
+
+                                filterSection
+
+                                contentView
+
+                                Spacer(minLength: 32)
+                            }
+                            .padding(.horizontal, AppDesignSystem.paddingMedium)
+                            .padding(.top, AppDesignSystem.paddingMedium)
+                            .padding(.bottom, AppDesignSystem.paddingLarge)
+                        }
+                        .scrollIndicators(.hidden)
+                        .refreshable {
+                            await MainActor.run {
+                                viewModel.setupSubscriptions()
+                            }
+                        }
                     }
 
-                    // Bottom toolbar
-                    bottomToolbar
+                    floatingActionBar
                 }
                 .navigationTitle("任務中樞")
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            withAnimation(.spring(response: 0.3)) {
-                                showingSearch.toggle()
-                                if !showingSearch {
-                                    searchText = ""
-                                }
-                            }
-                        } label: {
-                            Image(systemName: showingSearch ? "xmark.circle.fill" : "magnifyingglass")
-                                .font(.title3)
-                                .foregroundColor(showingSearch ? .red : .primary)
-                        }
-                    }
-
-                    ToolbarItem(placement: .primaryAction) {
-                        Menu {
-                            Button {
-                                showingSortOptions = true
-                            } label: {
-                                Label("排序方式", systemImage: "arrow.up.arrow.down")
-                            }
-
-                            Divider()
-
-                            ForEach(TaskSortOption.allCases, id: \.self) { option in
-                                Button {
-                                    viewModel.sortOption = option
-                                } label: {
-                                    HStack {
-                                        Image(systemName: option.icon)
-                                        Text(option.rawValue)
-                                        if viewModel.sortOption == option {
-                                            Image(systemName: "checkmark")
-                                        }
-                                    }
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "ellipsis.circle")
-                                .font(.title3)
-                                .foregroundColor(.primary)
-                        }
-                    }
-                }
+                .toolbar { toolbarContent }
                 .sheet(isPresented: $showingAddTask) {
                     AddTaskView(viewModel: viewModel)
                 }
                 .sheet(isPresented: $showingSortOptions) {
                     SortOptionsView(sortOption: $viewModel.sortOption)
                 }
+                .sheet(isPresented: $showingAutoplan) {
+                    AutoPlanView(viewModel: viewModel)
+                }
             }
 
-            // Quick add overlay
             if showQuickAdd {
                 quickAddOverlay
             }
+            
+            // Undo Snackbar
+            if viewModel.showUndoOption {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Text("任務已刪除")
+                            .foregroundColor(.white)
+                            .font(AppDesignSystem.bodyFont)
+                        Spacer()
+                        Button {
+                            withAnimation {
+                                viewModel.undoDelete()
+                            }
+                        } label: {
+                            Text("復原")
+                                .fontWeight(.bold)
+                                .foregroundColor(AppDesignSystem.accentColor)
+                        }
+                    }
+                    .padding()
+                    .background(Color.black.opacity(0.85))
+                    .cornerRadius(AppDesignSystem.cornerRadiusMedium)
+                    .shadow(radius: 10)
+                    .padding(.horizontal)
+                    .padding(.bottom, 100) // Above tab bar
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(100)
+            }
+            
+            // Loading Overlay
+            if viewModel.isLoading {
+                ZStack {
+                    Color.black.opacity(0.4).ignoresSafeArea()
+                    ProgressView("處理中...")
+                        .padding()
+                        .background(Material.thin)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .zIndex(101)
+            }
+            
+            // 慶祝動畫 Overlay
+            if viewModel.showCelebration {
+                CelebrationView(
+                    achievement: viewModel.latestAchievement,
+                    onDismiss: {
+                        viewModel.dismissCelebration()
+                    }
+                )
+                .zIndex(102)
+                .transition(.opacity.combined(with: .scale))
+            }
         }
+        .animation(.spring(response: 0.4), value: viewModel.showCelebration)
+        .navigationDestination(item: $deepLinkTask) { task in
+            TaskDetailView(viewModel: viewModel, task: task)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskDetail)) { notification in
+            if let taskId = notification.userInfo?["taskId"] as? String {
+                // Fetch task and navigate
+                _Concurrency.Task {
+                    if let task = try? await viewModel.fetchTask(id: taskId) {
+                        await MainActor.run {
+                            self.deepLinkTask = task
+                        }
+                    }
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showAutoplan)) { _ in
+            showingAutoplan = true
+        }
+    }
+
+    // MARK: - Header
+
+    private var heroHeader: some View {
+        let total = allTasks.count
+        let completed = allTasks.filter { $0.isDone }.count
+        
+        return HStack(alignment: .center, spacing: AppDesignSystem.paddingMedium) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("今天的任務")
+                    .font(.title2.bold())
+                    .foregroundColor(.primary)
+                Text(currentDateString)
+                    .font(AppDesignSystem.bodyFont)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+            
+            if total > 0 {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(Int(completionRate * 100))%")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundColor(AppDesignSystem.accentColor)
+                    Text("已完成 \(completed)/\(total)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, AppDesignSystem.paddingSmall)
+        .padding(.top, AppDesignSystem.paddingSmall)
     }
 
     // MARK: - Stats Header
@@ -165,120 +248,246 @@ struct TasksView: View {
                     )
                 }
             }
-            .padding(.horizontal, AppDesignSystem.paddingMedium)
-            .padding(.vertical, AppDesignSystem.paddingSmall)
+            .padding(.horizontal, AppDesignSystem.paddingSmall)
+            .padding(.vertical, 4)
         }
     }
 
-    // MARK: - Search Bar
+    // MARK: - Search & Actions
 
-    private var searchBar: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
+    private var searchAndActions: some View {
+        HStack(spacing: AppDesignSystem.paddingSmall) {
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.secondary)
+                TextField("搜尋任務、描述或標籤", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .font(AppDesignSystem.bodyFont)
+                    .textInputAutocapitalization(.none)
 
-            TextField("搜尋任務...", text: $searchText)
-                .textFieldStyle(.plain)
-                .font(AppDesignSystem.bodyFont)
-
-            if !searchText.isEmpty {
-                Button {
-                    searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                    }
+                    .accessibilityLabel("清除搜尋文字")
                 }
             }
-        }
-        .padding(AppDesignSystem.paddingMedium)
-        .glassmorphicCard(cornerRadius: AppDesignSystem.cornerRadiusMedium)
-        .padding(.horizontal, AppDesignSystem.paddingMedium)
-        .padding(.bottom, AppDesignSystem.paddingSmall)
-        .transition(.move(edge: .top).combined(with: .opacity))
-    }
+            .padding(AppDesignSystem.paddingMedium)
+            .background(Color.appSecondaryBackground)
+            .cornerRadius(AppDesignSystem.cornerRadiusMedium)
+            .overlay(
+                RoundedRectangle(cornerRadius: AppDesignSystem.cornerRadiusMedium)
+                    .stroke(Color.appCardBorder, lineWidth: 1)
+            )
 
-    // MARK: - Custom Tab Selector
-
-    private var customTabSelector: some View {
-        HStack(spacing: 4) {
-            ForEach(TaskTab.allCases, id: \.self) { tab in
-                Button {
-                    withAnimation(.spring(response: 0.3)) {
-                        selectedTab = tab
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: tab.icon)
-                            .font(.system(size: 14, weight: .semibold))
-                        Text(tab.rawValue)
-                            .font(.system(size: 14, weight: .semibold))
-                    }
-                    .foregroundColor(selectedTab == tab ? .white : .primary)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(
-                        selectedTab == tab ?
-                        AnyView(AppDesignSystem.accentColor) :
-                        AnyView(Color.clear)
-                    )
+            Button {
+                showingSortOptions = true
+            } label: {
+                Image(systemName: "line.3.horizontal.decrease.circle")
+                    .font(.title2)
+                    .foregroundColor(AppDesignSystem.accentColor)
+                    .padding(AppDesignSystem.paddingMedium)
+                    .background(Color.appSecondaryBackground)
                     .cornerRadius(AppDesignSystem.cornerRadiusMedium)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppDesignSystem.cornerRadiusMedium)
+                            .stroke(Color.appCardBorder, lineWidth: 1)
+                    )
+            }
+            .accessibilityLabel("排序選項")
+        }
+    }
+    
+    // MARK: - Filters
+
+    private var filterSection: some View {
+        VStack(spacing: AppDesignSystem.paddingSmall) {
+            // 分類篩選
+            HStack {
+                Text("分類：")
+                    .font(AppDesignSystem.captionFont)
+                    .foregroundColor(.secondary)
+                
+                CategoryFilterBar(selectedCategory: $viewModel.selectedCategory)
+                
+                Spacer()
+            }
+            
+            // 組織篩選
+            if !viewModel.userOrganizations.isEmpty {
+                HStack {
+                    Text("組織：")
+                        .font(AppDesignSystem.captionFont)
+                        .foregroundColor(.secondary)
+                    
+                    Menu {
+                        Button {
+                            viewModel.selectedOrganizationId = nil
+                        } label: {
+                            HStack {
+                                Text("所有組織")
+                                if viewModel.selectedOrganizationId == nil {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                        
+                        ForEach(viewModel.userOrganizations, id: \.id) { org in
+                            Button {
+                                viewModel.selectedOrganizationId = org.id
+                            } label: {
+                                HStack {
+                                    Text(org.name)
+                                    if org.id == viewModel.selectedOrganizationId {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "building.2")
+                                .font(.caption)
+                            Text(viewModel.selectedOrganizationId == nil 
+                                 ? "所有組織" 
+                                 : viewModel.userOrganizations.first(where: { $0.id == viewModel.selectedOrganizationId })?.name ?? "已選組織")
+                                .font(AppDesignSystem.captionFont)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10))
+                        }
+                        .foregroundColor(viewModel.selectedOrganizationId == nil ? .secondary : AppDesignSystem.accentColor)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.appSecondaryBackground)
+                        .cornerRadius(AppDesignSystem.cornerRadiusSmall)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AppDesignSystem.cornerRadiusSmall)
+                                .stroke(viewModel.selectedOrganizationId == nil ? Color.appCardBorder : AppDesignSystem.accentColor, lineWidth: 1)
+                        )
+                    }
+                    
+                    // 清除組織篩選按鈕
+                    if viewModel.selectedOrganizationId != nil {
+                        Button {
+                            viewModel.selectedOrganizationId = nil
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                                .font(.caption)
+                        }
+                    }
+                    
+                    Spacer()
                 }
             }
         }
-        .padding(4)
-        .background(Material.thin)
-        .cornerRadius(AppDesignSystem.cornerRadiusMedium + 4)
-        .padding(.horizontal, AppDesignSystem.paddingMedium)
-        .padding(.bottom, AppDesignSystem.paddingSmall)
+        .padding(.horizontal, AppDesignSystem.paddingSmall)
     }
 
-    // MARK: - Loading View
+    // MARK: - Toolbar
 
-    private var loadingView: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .scaleEffect(1.2)
-            Text("載入中...")
-                .font(AppDesignSystem.captionFont)
-                .foregroundColor(.secondary)
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Picker("視圖模式", selection: $viewMode) {
+                Label("列表", systemImage: "list.bullet").tag(ViewMode.list)
+                Label("日曆", systemImage: "calendar").tag(ViewMode.calendar)
+            }
+            .pickerStyle(.segmented)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        
+        ToolbarItem(placement: .topBarTrailing) {
+            HStack {
+                if !viewModel.isCalendarAuthorized {
+                    Button {
+                        _Concurrency.Task { await viewModel.requestCalendarAccess() }
+                    } label: {
+                        Image(systemName: "calendar.badge.plus")
+                    }
+                }
+                
+                Menu {
+                    Button {
+                        showingAutoplan = true
+                    } label: {
+                        Label("智能排程", systemImage: "wand.and.stars")
+                    }
+                    
+                    Button {
+                        viewModel.runAutoplan()
+                    } label: {
+                        Label("快速排程", systemImage: "bolt.fill")
+                    }
+                    
+                    Divider()
+                    
+                    Button {
+                        withAnimation(.spring(response: 0.3)) {
+                            viewModel.setupSubscriptions()
+                        }
+                    } label: {
+                        Label("重新整理", systemImage: "arrow.clockwise")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+            }
+        }
     }
+
+
 
     // MARK: - Content View
 
     private var contentView: some View {
-        ScrollView {
-            LazyVStack(spacing: AppDesignSystem.paddingMedium) {
-                // Search results
-                if showingSearch && !searchText.isEmpty {
-                    searchResultsView
-                } else {
-                    switch selectedTab {
-                    case .today:
-                        TodayTasksView(viewModel: viewModel)
-                    case .week:
-                        WeekTasksView(viewModel: viewModel)
-                    case .backlog:
-                        BacklogTasksView(viewModel: viewModel)
-                    }
+        LazyVStack(spacing: AppDesignSystem.paddingMedium) {
+            if let error = viewModel.errorMessage {
+                InlineBanner(icon: "exclamationmark.triangle.fill", text: error, tint: .orange)
+            }
+
+            if !viewModel.timeConflicts.isEmpty {
+                ConflictBanner(conflicts: viewModel.timeConflicts)
+            }
+
+            let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            if allTasks.isEmpty && trimmedQuery.isEmpty {
+                EmptyStateView(
+                    icon: "checkmark.circle",
+                    title: "現在沒有任務",
+                    message: "建立一個新的任務或嘗試自動排程，保持節奏。"
+                )
+                .frame(maxWidth: .infinity)
+            }
+
+            if !trimmedQuery.isEmpty {
+                searchResultsView
+            } else {
+                switch selectedTab {
+                case .today:
+                    TodayTasksView(viewModel: viewModel)
+                case .week:
+                    WeekTasksView(viewModel: viewModel)
+                case .backlog:
+                    BacklogTasksView(viewModel: viewModel)
                 }
             }
-            .padding(AppDesignSystem.paddingMedium)
         }
-        .refreshable {
-            viewModel.setupSubscriptions()
-        }
+        .padding(.vertical, AppDesignSystem.paddingSmall)
     }
 
     // MARK: - Search Results
 
     private var searchResultsView: some View {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         let allTasks = viewModel.todayTasks + viewModel.weekTasks + viewModel.backlogTasks
         let filteredTasks = allTasks.filter { task in
-            task.title.localizedCaseInsensitiveContains(searchText) ||
-            (task.description?.localizedCaseInsensitiveContains(searchText) ?? false) ||
-            (task.tags?.contains { $0.localizedCaseInsensitiveContains(searchText) } ?? false)
+            task.title.localizedCaseInsensitiveContains(query) ||
+            (task.description?.localizedCaseInsensitiveContains(query) ?? false) ||
+            (task.tags?.contains { $0.localizedCaseInsensitiveContains(query) } ?? false)
         }
 
         return Group {
@@ -290,150 +499,633 @@ struct TasksView: View {
                 )
             } else {
                 ForEach(filteredTasks) { task in
-                    TaskRow(task: task) {
-                        viewModel.toggleTaskDone(task: task)
+                    NavigationLink(destination: TaskDetailView(viewModel: viewModel, task: task)) {
+                        TaskRow(task: task, isBlocked: viewModel.isTaskBlocked(task)) { await toggleTask(task) }
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
     }
 
-    // MARK: - Bottom Toolbar
+    private func toggleTask(_ task: Task) async -> Bool {
+        guard let id = task.id else { return false }
+        await MainActor.run {
+            guard !processingTaskIds.contains(id) else { return }
+            processingTaskIds.insert(id)
+        }
 
-    private var bottomToolbar: some View {
-        HStack(spacing: AppDesignSystem.paddingMedium) {
-            // Quick add button
+        let success = await viewModel.toggleTaskDoneAsync(task: task)
+
+        if success {
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.impactOccurred()
+        }
+
+        try? await _Concurrency.Task.sleep(nanoseconds: 150_000_000)
+
+        _ = await MainActor.run { processingTaskIds.remove(id) }
+
+        return success
+    }
+
+    // MARK: - Floating Action Bar
+
+    private var floatingActionBar: some View {
+        HStack(spacing: 16) {
+            Spacer()
+            
             Button {
                 withAnimation(.spring(response: 0.3)) {
                     showQuickAdd = true
                 }
             } label: {
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 44))
+                Image(systemName: "bolt.fill")
+                    .font(.title3)
                     .foregroundColor(AppDesignSystem.accentColor)
-                    .shadow(color: AppDesignSystem.accentColor.opacity(0.3), radius: 8, y: 4)
+                    .padding(16)
+                    .background(Color.appSecondaryBackground)
+                    .clipShape(Circle())
+                    .shadow(color: AppDesignSystem.shadow, radius: 4, x: 0, y: 2)
+                    .overlay(
+                        Circle().stroke(Color.appCardBorder, lineWidth: 1)
+                    )
             }
+            .buttonStyle(ScaleButtonStyle())
+            .accessibilityLabel("快速新增任務")
 
-            Spacer()
-
-            // Add task button
             Button {
                 showingAddTask = true
             } label: {
-                Label("新增任務", systemImage: "square.and.pencil")
-                    .font(AppDesignSystem.bodyFont.weight(.semibold))
+                Image(systemName: "plus")
+                    .font(.title2.bold())
+                    .foregroundColor(.white)
+                    .padding(16)
+                    .background(AppDesignSystem.accentColor)
+                    .clipShape(Circle())
+                    .shadow(color: AppDesignSystem.shadow.opacity(0.3), radius: 8, x: 0, y: 4)
             }
-            .buttonStyle(GlassmorphicButtonStyle(textColor: .primary, cornerRadius: AppDesignSystem.cornerRadiusMedium))
-
-            // Auto plan & Calendar section
-            if selectedTab == .week || selectedTab == .backlog {
-                if !viewModel.isCalendarAuthorized {
-                    Button {
-                        Task {
-                            await viewModel.requestCalendarAccess()
-                        }
-                    } label: {
-                        Label("連接行事曆", systemImage: "calendar.badge.plus")
-                            .font(AppDesignSystem.bodyFont.weight(.semibold))
-                    }
-                    .buttonStyle(GlassmorphicButtonStyle(textColor: .primary, cornerRadius: AppDesignSystem.cornerRadiusMedium))
-                }
-                
-                Button {
-                    viewModel.runAutoplan()
-                } label: {
-                    Label("排程", systemImage: "wand.and.stars")
-                        .font(AppDesignSystem.bodyFont.weight(.semibold))
-                }
-                .buttonStyle(GlassmorphicButtonStyle(textColor: AppDesignSystem.accentColor, cornerRadius: AppDesignSystem.cornerRadiusMedium))
-                .disabled(viewModel.isLoading)
-            }
+            .buttonStyle(ScaleButtonStyle())
+            .accessibilityLabel("新增任務")
         }
-        .padding(AppDesignSystem.paddingMedium)
-        .background(Material.bar)
+        .padding(.horizontal, AppDesignSystem.paddingLarge)
+        .padding(.bottom, AppDesignSystem.paddingMedium)
     }
 
     // MARK: - Quick Add Overlay
 
     private var quickAddOverlay: some View {
         ZStack {
-            Color.black.opacity(0.4)
-                .edgesIgnoringSafeArea(.all)
-                .onTapGesture {
-                    withAnimation(.spring(response: 0.3)) {
-                        showQuickAdd = false
-                        quickAddTitle = ""
-                    }
-                }
-
-            VStack(spacing: 16) {
-                Text("快速新增")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-
-                HStack(spacing: 12) {
-                    TextField("輸入任務名稱...", text: $quickAddTitle)
-                        .textFieldStyle(FrostedTextFieldStyle())
-                        .submitLabel(.done)
-                        .onSubmit {
-                            quickAddTask()
-                        }
-
-                    Button {
-                        quickAddTask()
-                    } label: {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 32))
-                            .foregroundColor(quickAddTitle.isEmpty ? .secondary : AppDesignSystem.accentColor)
-                    }
-                    .disabled(quickAddTitle.isEmpty)
-                }
-
-                // Quick category selection
-                HStack(spacing: 8) {
-                    ForEach(TaskCategory.allCases, id: \.self) { category in
-                        Button {
-                            quickAddTask(category: category)
-                        } label: {
-                            VStack(spacing: 4) {
-                                Circle()
-                                    .fill(Color.forCategory(category))
-                                    .frame(width: 32, height: 32)
-                                Text(category.displayName)
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                        .disabled(quickAddTitle.isEmpty)
-                    }
+            quickAddBackground
+            quickAddContent
+        }
+    }
+    
+    private var quickAddBackground: some View {
+        Color.black.opacity(0.4)
+            .ignoresSafeArea()
+            .onTapGesture {
+                withAnimation(.spring(response: 0.3)) {
+                    showQuickAdd = false
+                    quickAddTitle = ""
                 }
             }
-            .padding(AppDesignSystem.paddingLarge)
-            .glassmorphicCard(cornerRadius: AppDesignSystem.cornerRadiusLarge)
-            .padding(AppDesignSystem.paddingLarge)
-            .transition(.scale.combined(with: .opacity))
+    }
+    
+    private var quickAddContent: some View {
+        VStack(spacing: AppDesignSystem.paddingMedium) {
+            quickAddDragIndicator
+            quickAddHeaderText
+            quickAddInputSection
+            quickAddOptionsSection
+            quickAddCategoryButtons
         }
+        .standardCard(cornerRadius: AppDesignSystem.cornerRadiusLarge, padding: AppDesignSystem.paddingLarge)
+        .padding(AppDesignSystem.paddingLarge)
+        .transition(.scale.combined(with: .opacity))
+        .sheet(isPresented: $showQuickAddDeadlinePicker) {
+            QuickAddDeadlineSheet(
+                deadline: $quickAddDeadline,
+                isPresented: $showQuickAddDeadlinePicker
+            )
+            .presentationDetents([.medium])
+        }
+    }
+    
+    private var quickAddDragIndicator: some View {
+        Capsule()
+            .fill(Color.secondary.opacity(0.2))
+            .frame(width: 40, height: 4)
+    }
+    
+    private var quickAddHeaderText: some View {
+        Text("快速新增")
+            .font(AppDesignSystem.headlineFont)
+            .foregroundColor(.primary)
+    }
+    
+    private var quickAddInputSection: some View {
+        HStack(spacing: AppDesignSystem.paddingSmall) {
+            Image(systemName: "text.cursor")
+                .foregroundColor(.secondary)
+            TextField("輸入任務名稱...", text: $quickAddTitle)
+                .textFieldStyle(.plain)
+                .font(AppDesignSystem.bodyFont)
+                .submitLabel(.done)
+                .onSubmit { quickAddTask() }
+
+            quickAddSubmitButton
+        }
+        .padding()
+        .background(Color.appSecondaryBackground)
+        .cornerRadius(AppDesignSystem.cornerRadiusMedium)
+        .overlay(
+            RoundedRectangle(cornerRadius: AppDesignSystem.cornerRadiusMedium)
+                .stroke(Color.appCardBorder, lineWidth: 1)
+        )
+    }
+    
+    private var quickAddOptionsSection: some View {
+        HStack(spacing: AppDesignSystem.paddingSmall) {
+            // 優先級選擇
+            Menu {
+                ForEach(TaskPriority.allCases, id: \.self) { priority in
+                    Button {
+                        quickAddPriority = priority
+                    } label: {
+                        HStack {
+                            Image(systemName: priority == .high ? "exclamationmark.3" : priority == .medium ? "exclamationmark.2" : "exclamationmark")
+                            Text(priority.displayName)
+                            if quickAddPriority == priority {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "flag.fill")
+                        .foregroundColor(quickAddPriority == .high ? .red : quickAddPriority == .medium ? .orange : .blue)
+                    Text(quickAddPriority.displayName)
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.appSecondaryBackground)
+                .cornerRadius(AppDesignSystem.cornerRadiusSmall)
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppDesignSystem.cornerRadiusSmall)
+                        .stroke(Color.appCardBorder, lineWidth: 1)
+                )
+            }
+            
+            // 截止日期選擇
+            Button {
+                showQuickAddDeadlinePicker = true
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "calendar")
+                        .foregroundColor(quickAddDeadline != nil ? AppDesignSystem.accentColor : .secondary)
+                    if let deadline = quickAddDeadline {
+                        Text(deadline.formatShort())
+                            .font(.system(size: 13, weight: .medium))
+                    } else {
+                        Text("截止日期")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.appSecondaryBackground)
+                .cornerRadius(AppDesignSystem.cornerRadiusSmall)
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppDesignSystem.cornerRadiusSmall)
+                        .stroke(quickAddDeadline != nil ? AppDesignSystem.accentColor : Color.appCardBorder, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            
+            // 清除截止日期
+            if quickAddDeadline != nil {
+                Button {
+                    quickAddDeadline = nil
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            
+            Spacer()
+        }
+    }
+    
+    private var quickAddSubmitButton: some View {
+        Button {
+            quickAddTask()
+        } label: {
+            Image(systemName: "arrow.up.circle.fill")
+                .font(.system(size: 30))
+                .foregroundColor(quickAddTitle.isEmpty ? .secondary : AppDesignSystem.accentColor)
+        }
+        .disabled(quickAddTitle.isEmpty)
+    }
+    
+    private var quickAddCategoryButtons: some View {
+        HStack(spacing: AppDesignSystem.paddingSmall) {
+            ForEach(TaskCategory.allCases, id: \.self) { category in
+                quickAddCategoryButton(category: category)
+            }
+        }
+    }
+    
+    private func quickAddCategoryButton(category: TaskCategory) -> some View {
+        Button {
+            quickAddTask(category: category)
+        } label: {
+            VStack(spacing: 6) {
+                Circle()
+                    .fill(Color.forCategory(category))
+                    .frame(width: 36, height: 36)
+                Text(category.displayName)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(quickAddTitle.isEmpty)
     }
 
     private func quickAddTask(category: TaskCategory = .personal) {
         guard !quickAddTitle.isEmpty else { return }
+        
+        let trimmedTitle = quickAddTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else {
+            ToastManager.shared.showToast(message: "任務標題不能為空", type: .warning)
+            return
+        }
 
-        viewModel.createTask(
-            title: quickAddTitle,
-            description: nil,
-            category: category,
-            priority: .medium,
-            deadline: nil,
-            estimatedMinutes: 60,
-            plannedDate: selectedTab == .today ? Date() : nil,
-            isDateLocked: false,
-            sourceOrgId: nil
+        _Concurrency.Task {
+            let success = await viewModel.createTaskAsync(
+                title: trimmedTitle,
+                description: nil,
+                category: category,
+                priority: quickAddPriority,
+                deadline: quickAddDeadline,
+                estimatedMinutes: 60,
+                plannedDate: selectedTab == .today ? Date() : nil,
+                isDateLocked: false,
+                sourceOrgId: nil,
+                assigneeUserIds: nil,
+                dependsOnTaskIds: [],
+                tags: [],
+                reminderAt: nil,
+                reminderEnabled: false,
+                subtasks: nil,
+                completionPercentage: nil,
+                taskType: .generic
+            )
+            
+            await MainActor.run {
+                if success {
+                    // 優化：新增觸覺回饋
+                    let generator = UINotificationFeedbackGenerator()
+                    generator.notificationOccurred(.success)
+                    
+                    withAnimation(.spring(response: 0.3)) {
+                        showQuickAdd = false
+                        quickAddTitle = ""
+                        quickAddDeadline = nil
+                        quickAddPriority = .medium
+                    }
+                } else {
+                    let generator = UINotificationFeedbackGenerator()
+                    generator.notificationOccurred(.error)
+                    
+                    // 保留輸入以便重試
+                    ToastManager.shared.showToast(message: "快速新增任務失敗，請稍後重試", type: .error)
+                }
+            }
+        }
+    }
+
+    // MARK: - Calendar View
+    
+    private var calendarView: some View {
+        VStack(spacing: 0) {
+            if calendarViewModel.isLoading {
+                ProgressView("正在讀取日曆資料...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let errorMessage = calendarViewModel.errorMessage {
+                Text(errorMessage)
+                    .foregroundColor(.red)
+                    .padding()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                CalendarViewRepresentable(
+                    interval: DateInterval(start: .distantPast, end: .distantFuture),
+                    itemsByDate: calendarViewModel.calendarItems,
+                    selectedDate: $selectedCalendarDate
+                )
+                .frame(height: 350)
+                
+                Divider()
+                
+                // 顯示選定日期的項目
+                if let date = selectedCalendarDate,
+                   let items = calendarViewModel.calendarItems[Calendar.current.startOfDay(for: date)],
+                   !items.isEmpty {
+                    ScrollView {
+                        LazyVStack(spacing: AppDesignSystem.paddingSmall) {
+                            ForEach(items) { item in
+                                CalendarItemRow(item: item)
+                                    .padding(.horizontal, AppDesignSystem.paddingMedium)
+                                    .padding(.vertical, AppDesignSystem.paddingSmall)
+                                    .background(Color.appSecondaryBackground)
+                                    .cornerRadius(AppDesignSystem.cornerRadiusMedium)
+                                    .onTapGesture {
+                                        handleCalendarItemTap(item)
+                                    }
+                            }
+                        }
+                        .padding(AppDesignSystem.paddingMedium)
+                    }
+                } else {
+                    VStack(spacing: AppDesignSystem.paddingSmall) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 48))
+                            .foregroundColor(.secondary.opacity(0.5))
+                        Text(selectedCalendarDate == nil ? "請選擇一個日期" : "這天沒有活動或任務")
+                            .foregroundColor(.secondary)
+                            .font(AppDesignSystem.bodyFont)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+        }
+        .onAppear {
+            calendarViewModel.fetchData()
+        }
+    }
+    
+    private func handleCalendarItemTap(_ item: CalendarItem) {
+        switch item.type {
+        case .task:
+            _Concurrency.Task {
+                if let task = try? await viewModel.fetchTask(id: item.id) {
+                    await MainActor.run {
+                        deepLinkTask = task
+                    }
+                }
+            }
+        case .event:
+            // 處理事件點擊（可以導航到事件詳情）
+            print("點擊了活動: \(item.title)")
+        }
+    }
+
+    // MARK: - Metrics
+
+    private var allTasks: [Task] {
+        viewModel.todayTasks + viewModel.weekTasks + viewModel.backlogTasks
+    }
+
+    private var completionRate: Double {
+        let total = allTasks.count
+        guard total > 0 else { return 0 }
+        let completed = allTasks.filter { $0.isDone }.count
+        return Double(completed) / Double(total)
+    }
+
+    private var overdueCount: Int {
+        allTasks.filter { $0.isOverdue }.count
+    }
+
+    private var dueSoonCount: Int {
+        allTasks.filter { $0.isDueSoon && !$0.isOverdue }.count
+    }
+
+    private var currentDateString: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_TW")
+        formatter.dateFormat = "M月d日 EEEE"
+        return formatter.string(from: Date())
+    }
+}
+
+private struct PillView: View {
+    let icon: String
+    let text: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+            Text(text)
+                .font(.system(size: 12, weight: .semibold))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(tint.opacity(0.15))
+        .foregroundColor(tint)
+        .overlay(
+            Capsule()
+                .stroke(tint.opacity(0.35), lineWidth: 1)
         )
+        .clipShape(Capsule())
+    }
+}
 
-        withAnimation(.spring(response: 0.3)) {
-            showQuickAdd = false
-            quickAddTitle = ""
+private struct InlineBanner: View {
+    let icon: String
+    let text: String
+    let tint: Color
+    
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .foregroundColor(tint)
+            Text(text)
+                .font(AppDesignSystem.captionFont)
+                .foregroundColor(.primary)
+            Spacer()
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, AppDesignSystem.paddingMedium)
+        .background(Color.appSecondaryBackground)
+        .overlay(
+            RoundedRectangle(cornerRadius: AppDesignSystem.cornerRadiusMedium, style: .continuous)
+                .stroke(tint.opacity(0.35), lineWidth: 1)
+        )
+        .cornerRadius(AppDesignSystem.cornerRadiusMedium)
+    }
+}
+
+private struct ConflictBanner: View {
+    let conflicts: [TaskConflict]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
+                    .foregroundColor(.red)
+                Text("發現行程衝突")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                Spacer()
+                Text("\(conflicts.count) 個衝突")
+                    .font(.caption)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.red.opacity(0.1))
+                    .foregroundColor(.red)
+                    .cornerRadius(8)
+            }
+
+            ForEach(conflicts.prefix(2)) { conflict in
+                HStack(alignment: .top, spacing: 8) {
+                    Text(conflict.severity.emoji)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(conflict.description)
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                        Text(conflict.involvedOrganizations.isEmpty ? "個人行程" : "跨組織行程")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(8)
+                .background(Color.appPrimaryBackground)
+                .cornerRadius(8)
+            }
+
+            if conflicts.count > 2 {
+                Text("還有 \(conflicts.count - 2) 個衝突...")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding()
+        .background(Color.red.opacity(0.05))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.red.opacity(0.2), lineWidth: 1)
+        )
+        .cornerRadius(12)
+    }
+}
+
+// MARK: - Quick Add Deadline Sheet
+
+@available(iOS 17.0, *)
+private struct QuickAddDeadlineSheet: View {
+    @Binding var deadline: Date?
+    @Binding var isPresented: Bool
+    @State private var selectedDate: Date = Date().addingTimeInterval(86400)
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: AppDesignSystem.paddingMedium) {
+                // 快速選擇按鈕
+                VStack(spacing: AppDesignSystem.paddingSmall) {
+                    Text("快速選擇")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    HStack(spacing: AppDesignSystem.paddingSmall) {
+                        QuickDateButton(title: "今天", date: Date()) { date in
+                            selectedDate = date
+                            deadline = date
+                        }
+                        QuickDateButton(title: "明天", date: Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()) { date in
+                            selectedDate = date
+                            deadline = date
+                        }
+                        QuickDateButton(title: "下週", date: Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()) { date in
+                            selectedDate = date
+                            deadline = date
+                        }
+                        QuickDateButton(title: "下個月", date: Calendar.current.date(byAdding: .month, value: 1, to: Date()) ?? Date()) { date in
+                            selectedDate = date
+                            deadline = date
+                        }
+                    }
+                }
+                .padding(.horizontal, AppDesignSystem.paddingMedium)
+                
+                Divider()
+                
+                // 日期選擇器
+                DatePicker(
+                    "截止日期",
+                    selection: $selectedDate,
+                    in: Date()...,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+                .datePickerStyle(.graphical)
+                .padding(.horizontal, AppDesignSystem.paddingMedium)
+                .onChange(of: selectedDate) {
+                    deadline = selectedDate
+                }
+                
+                Spacer()
+            }
+            .padding(.top, AppDesignSystem.paddingMedium)
+            .navigationTitle("選擇截止日期")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") {
+                        isPresented = false
+                    }
+                    .foregroundColor(.red)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("確定") {
+                        deadline = selectedDate
+                        isPresented = false
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+        .onAppear {
+            if let existingDeadline = deadline {
+                selectedDate = existingDeadline
+            }
         }
     }
 }
 
+@available(iOS 17.0, *)
+private struct QuickDateButton: View {
+    let title: String
+    let date: Date
+    let onSelect: (Date) -> Void
+    
+    var body: some View {
+        Button {
+            onSelect(date)
+        } label: {
+            VStack(spacing: 4) {
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                Text(date.formatShort())
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(Color.appSecondaryBackground)
+            .cornerRadius(AppDesignSystem.cornerRadiusSmall)
+            .overlay(
+                RoundedRectangle(cornerRadius: AppDesignSystem.cornerRadiusSmall)
+                    .stroke(Color.appCardBorder, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}

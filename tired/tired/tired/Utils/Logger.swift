@@ -185,7 +185,10 @@ struct AppAlertModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .alert(alertHelper.alertTitle, isPresented: $alertHelper.showAlert) {
-                Button("確定", role: .cancel) {}
+                Button("確定", role: .cancel) {
+                    // 明確關閉 alert（雖然系統會自動處理，但在多 thread 情況下明確設置使行為一致）
+                    alertHelper.showAlert = false
+                }
             } message: {
                 Text(alertHelper.alertMessage)
             }

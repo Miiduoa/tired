@@ -132,10 +132,18 @@ class AuthService: ObservableObject {
 
             // 保存 profile 到 Firestore
             try await createUserProfile(profile)
-
-            // 等待一下確保 profile 已寫入，然後手動觸發獲取
-            try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000) // 0.5秒
+            
+            // 優化：樂觀更新 (Optimistic Update)
+            // 不等待 Firestore 寫入完成後的讀取，直接使用剛創建的資料更新本地狀態
+            // 這樣可以避免網路延遲導致的資料不同步或需要人工等待 (sleep)
             await MainActor.run {
+                self.userProfile = profile
+                self.isLoading = false
+            }
+            
+            // 背景觸發一次真實的 Fetch 以確保一致性
+            _Concurrency.Task {
+                try? await _Concurrency.Task.sleep(nanoseconds: 1_000_000_000) // 1秒後檢查
                 self.fetchUserProfile(uid: uid)
             }
         } catch {
@@ -210,12 +218,18 @@ class AuthService: ObservableObject {
 
             try await createUserProfile(profile)
 
-            // 等待一下確保 profile 已寫入
-            try? await _Concurrency.Task.sleep(nanoseconds: 500_000_000)
+            // 優化：樂觀更新本地狀態
+            await MainActor.run {
+                self.userProfile = profile
+            }
         }
-
-        // 手動觸發獲取 profile
-        await MainActor.run {
+        
+        // 手動觸發獲取 profile (背景執行)
+        _Concurrency.Task {
+            // 如果剛創建，給一點時間寫入；如果是舊用戶，直接讀取
+            if userDoc?.exists == false {
+                try? await _Concurrency.Task.sleep(nanoseconds: 1_000_000_000)
+            }
             self.fetchUserProfile(uid: uid)
         }
     }
