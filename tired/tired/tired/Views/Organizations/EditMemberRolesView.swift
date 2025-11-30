@@ -4,16 +4,18 @@ import SwiftUI
 struct EditMemberRolesView: View {
     let member: MemberWithProfile
     let organization: Organization
-    let onSave: ([String]) -> Void
+    let onSave: ([String], String?) -> Void
     
     @State private var selectedRoleIds: Set<String>
+    @State private var memberTitle: String
     @Environment(\.dismiss) private var dismiss
 
-    init(member: MemberWithProfile, organization: Organization, onSave: @escaping ([String]) -> Void) {
+    init(member: MemberWithProfile, organization: Organization, onSave: @escaping ([String], String?) -> Void) {
         self.member = member
         self.organization = organization
         self.onSave = onSave
         _selectedRoleIds = State(initialValue: Set(member.membership.roleIds))
+        _memberTitle = State(initialValue: member.membership.title ?? "")
     }
 
     var body: some View {
@@ -33,6 +35,21 @@ struct EditMemberRolesView: View {
                         }
                     } header: {
                         Text("成員資訊")
+                            .font(AppDesignSystem.captionFont)
+                            .foregroundColor(.secondary)
+                    }
+                    .glassmorphicCard(cornerRadius: AppDesignSystem.cornerRadiusMedium, material: .regularMaterial)
+                    .listRowInsets(EdgeInsets(top: AppDesignSystem.paddingSmall, leading: 0, bottom: AppDesignSystem.paddingLarge, trailing: 0))
+                    
+                    Section {
+                        TextField("例如：大二資管系、晚班工讀生", text: $memberTitle)
+                            .textFieldStyle(StandardTextFieldStyle(icon: "person.text.rectangle"))
+                    } header: {
+                        Text("成員頭銜（選填）")
+                            .font(AppDesignSystem.captionFont)
+                            .foregroundColor(.secondary)
+                    } footer: {
+                        Text("頭銜用於在組織中顯示成員的職位或身份，例如「大二資管系」、「晚班工讀生」等。")
                             .font(AppDesignSystem.captionFont)
                             .foregroundColor(.secondary)
                     }
@@ -72,7 +89,7 @@ struct EditMemberRolesView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("儲存") {
-                        onSave(Array(selectedRoleIds))
+                        onSave(Array(selectedRoleIds), memberTitle.isEmpty ? nil : memberTitle)
                         dismiss()
                     }
                     .buttonStyle(GlassmorphicButtonStyle(cornerRadius: AppDesignSystem.cornerRadiusSmall, textColor: AppDesignSystem.accentColor))

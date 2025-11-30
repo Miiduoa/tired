@@ -5,6 +5,8 @@ struct OrganizationsView: View {
     @StateObject private var viewModel = OrganizationsViewModel()
     @State private var showingCreateOrganization = false
     @State private var showingSearch = false
+    @State private var showingJoinByCode = false
+    @State private var invitationCode = ""
 
     var body: some View {
         ZStack {
@@ -20,6 +22,15 @@ struct OrganizationsView: View {
                                     .font(AppDesignSystem.headlineFont)
                                     .foregroundColor(.primary)
                                 Spacer()
+                                
+                                Button {
+                                    showingJoinByCode = true
+                                } label: {
+                                    Label("加入", systemImage: "keyboard")
+                                        .font(AppDesignSystem.captionFont.weight(.semibold))
+                                }
+                                .buttonStyle(GlassmorphicButtonStyle(material: .regularMaterial, cornerRadius: AppDesignSystem.cornerRadiusSmall, textColor: AppDesignSystem.accentColor))
+                                
                                 Button {
                                     showingSearch = true
                                 } label: {
@@ -64,10 +75,47 @@ struct OrganizationsView: View {
                 .navigationBarTitleDisplayMode(.large)
                 .background(Color.clear) // Make NavigationView's background clear
                 .sheet(isPresented: $showingCreateOrganization) {
-                    CreateOrganizationView(viewModel: viewModel)
+                    CreateOrganizationView(
+                        viewModel: viewModel,
+                        isPresented: $showingCreateOrganization
+                    )
                 }
                 .sheet(isPresented: $showingSearch) {
                     SearchOrganizationsView(viewModel: viewModel)
+                }
+                .alert("輸入邀請碼", isPresented: $showingJoinByCode) {
+                    TextField("邀請碼 (8碼)", text: $invitationCode)
+                        #if os(iOS)
+                        .textInputAutocapitalization(.characters)
+                        #endif
+                    Button("加入") {
+                        joinByCode()
+                    }
+                    Button("取消", role: .cancel) { }
+                } message: {
+                    Text("請輸入組織提供的 8 碼邀請碼")
+                }
+            }
+        }
+    }
+    
+    private func joinByCode() {
+        guard !invitationCode.trimmingCharacters(in: .whitespaces).isEmpty else {
+            ToastManager.shared.showToast(message: "請輸入邀請碼", type: .error)
+            return
+        }
+        
+        _Concurrency.Task {
+            do {
+                let orgId = try await viewModel.joinByInvitationCode(code: invitationCode.trimmingCharacters(in: .whitespaces))
+                await MainActor.run {
+                    invitationCode = "" // clear on success
+                    // 成功消息由 ViewModel 處理
+                }
+            } catch {
+                // error handled in VM
+                await MainActor.run {
+                    invitationCode = "" // 清空以便重新輸入
                 }
             }
         }
@@ -177,6 +225,7 @@ struct OrganizationCard: View {
 @available(iOS 17.0, *)
 struct CreateOrganizationView: View {
     @ObservedObject var viewModel: OrganizationsViewModel
+    @Binding var isPresented: Bool
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""
@@ -187,60 +236,102 @@ struct CreateOrganizationView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                Color.appPrimaryBackground.edgesIgnoringSafeArea(.all) // Background for sheet
-                Form {
-                    Section {
-                        TextField("組織名稱", text: $name)
-                            .textFieldStyle(FrostedTextFieldStyle())
+                Color.appPrimaryBackground.edgesIgnoringSafeArea(.all)
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // 基本信息區塊
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("基本信息")
+                                .font(.headline)
+                                .foregroundColor(.secondary)
+                            
+                            VStack(spacing: 12) {
+                                // 組織名稱輸入
+                                TextField("組織名稱", text: $name)
+                                    .textFieldStyle(.plain)
+                                    .padding()
+                                    .background(Color.white.opacity(0.1))
+                                    .cornerRadius(12)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                    )
+                                    .foregroundColor(.primary)
 
-                        Picker("類型", selection: $type) {
-                            ForEach(OrgType.allCases, id: \.self) { orgType in
-                                HStack {
-                                    Image(systemName: iconForOrgType(orgType))
-                                    Text(orgType.displayName)
+                                // 類型選擇
+                                Menu {
+                                    Picker("類型", selection: $type) {
+                                        ForEach(OrgType.allCases, id: \.self) { orgType in
+                                            Label(orgType.displayName, systemImage: iconForOrgType(orgType))
+                                                .tag(orgType)
+                                        }
+                                    }
+                                } label: {
+                                    HStack {
+                                        Label(type.displayName, systemImage: iconForOrgType(type))
+                                            .foregroundColor(.primary)
+                                        Spacer()
+                                        Image(systemName: "chevron.up.chevron.down")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .padding()
+                                    .background(Color.white.opacity(0.1))
+                                    .cornerRadius(12)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                    )
                                 }
-                                .tag(orgType)
                             }
+                            .padding()
+                            .glassmorphicCard()
                         }
-                        .glassmorphicCard(cornerRadius: AppDesignSystem.cornerRadiusSmall, material: .regularMaterial)
-                        .listRowBackground(Color.clear) // Make form row transparent
-                    } header: {
-                        Text("基本信息")
-                            .font(AppDesignSystem.captionFont)
-                            .foregroundColor(.secondary)
+                        
+                        // 描述區塊
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("描述（選填）")
+                                .font(.headline)
+                                .foregroundColor(.secondary)
+                            
+                            TextEditor(text: $description)
+                                .frame(height: 120)
+                                .padding(8)
+                                .scrollContentBackground(.hidden) // 重要：移除預設背景
+                                .background(Color.white.opacity(0.1))
+                                .cornerRadius(12)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                )
+                                .foregroundColor(.primary)
+                                .padding()
+                                .glassmorphicCard()
+                        }
                     }
-                    .glassmorphicCard(cornerRadius: AppDesignSystem.cornerRadiusMedium, material: .regularMaterial)
-                    .listRowBackground(Color.clear)
-
-                    Section {
-                        TextEditor(text: $description)
-                            .font(AppDesignSystem.bodyFont)
-                            .padding(AppDesignSystem.paddingSmall)
-                            .glassmorphicCard(cornerRadius: AppDesignSystem.cornerRadiusSmall, material: .regularMaterial)
-                            .frame(height: 100)
-                            .listRowBackground(Color.clear)
-                    } header: {
-                        Text("描述（選填）")
-                            .font(AppDesignSystem.captionFont)
-                            .foregroundColor(.secondary)
-                    }
-                    .glassmorphicCard(cornerRadius: AppDesignSystem.cornerRadiusMedium, material: .regularMaterial)
-                    .listRowBackground(Color.clear)
+                    .padding()
                 }
-                .background(Color.clear) // Make Form background clear
             }
             .navigationTitle("創建組織")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
-                        .buttonStyle(GlassmorphicButtonStyle(material: .regularMaterial, cornerRadius: AppDesignSystem.cornerRadiusSmall, textColor: .red))
+                        .foregroundColor(.red)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("創建") {
+                    Button {
                         createOrganization()
+                    } label: {
+                        if isCreating {
+                            ProgressView()
+                                .tint(.blue)
+                        } else {
+                            Text("創建")
+                                .fontWeight(.bold)
+                        }
                     }
-                    .buttonStyle(GlassmorphicButtonStyle(cornerRadius: AppDesignSystem.cornerRadiusSmall, textColor: .white))
                     .disabled(name.isEmpty || isCreating)
                 }
             }
@@ -248,23 +339,42 @@ struct CreateOrganizationView: View {
     }
 
     private func createOrganization() {
-        isCreating = true
+        guard !name.isEmpty else { return }
+        
+        // Dismiss keyboard
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        
+        withAnimation {
+            isCreating = true
+        }
+        print("🚀 Starting createOrganization flow in View...")
 
         _Concurrency.Task {
             do {
                 let desc = description.isEmpty ? nil : description
+                print("Calling viewModel.createOrganization...")
+                
+                // 執行創建邏輯
                 _ = try await viewModel.createOrganization(
                     name: name,
                     type: type,
                     description: desc
                 )
-                await MainActor.run {
-                    dismiss()
+                print("✅ viewModel.createOrganization returned successfully.")
+                
+                // 強制在主線程執行 UI 更新和關閉操作
+                DispatchQueue.main.async {
+                    print("📲 Updating UI on Main Queue...")
+                    self.isCreating = false
+                    self.isPresented = false
+                    self.dismiss()
+                    print("👋 Dismiss actions called.")
                 }
             } catch {
                 print("❌ Error creating organization: \(error)")
-                await MainActor.run {
-                    isCreating = false
+                DispatchQueue.main.async {
+                    self.isCreating = false
+                    // 錯誤提示由 ViewModel 的 ToastManager 處理
                 }
             }
         }
@@ -389,7 +499,7 @@ struct SearchOrganizationsView: View {
                                     SearchResultCard(
                                         organization: org,
                                         onRequest: {
-                                            requestToJoin(org)
+                                            await requestToJoinAsync(org)
                                         }
                                     )
                                 }
@@ -418,21 +528,19 @@ struct SearchOrganizationsView: View {
         }
     }
 
-    private func requestToJoin(_ org: Organization) {
+    private func requestToJoinAsync(_ org: Organization) async {
         guard let orgId = org.id else { return }
 
-        _Concurrency.Task {
-            do {
-                try await viewModel.requestToJoinOrganization(organizationId: orgId)
-                await MainActor.run {
-                    ToastManager.shared.showToast(message: "申請已送出！等待審核。", type: .success)
-                    dismiss()
-                }
-            } catch {
-                print("❌ Error requesting to join organization: \(error)")
-                await MainActor.run {
-                    ToastManager.shared.showToast(message: "申請失敗: \(error.localizedDescription)", type: .error)
-                }
+        do {
+            try await viewModel.requestToJoinOrganization(organizationId: orgId)
+            await MainActor.run {
+                AlertHelper.shared.showSuccess("申請已送出！等待審核。")
+                dismiss()
+            }
+        } catch {
+            print("❌ Error requesting to join organization: \(error)")
+            await MainActor.run {
+                AlertHelper.shared.showError("申請失敗: \(error.localizedDescription)")
             }
         }
     }
@@ -443,7 +551,8 @@ struct SearchOrganizationsView: View {
 @available(iOS 17.0, *)
 struct SearchResultCard: View {
     let organization: Organization
-    let onRequest: () -> Void
+    let onRequest: () async -> Void
+    @State private var isProcessing = false
 
     var body: some View {
         HStack(spacing: AppDesignSystem.paddingMedium) {
@@ -489,16 +598,27 @@ struct SearchResultCard: View {
 
             Spacer()
 
+            
             Button {
-                onRequest()
+                _Concurrency.Task {
+                    guard !isProcessing else { return }
+                    isProcessing = true
+                    await onRequest()
+                    // small delay to let state update
+                    try? await _Concurrency.Task.sleep(nanoseconds: 80_000_000)
+                    isProcessing = false
+                }
             } label: {
-                Text("申請加入")
-                    .font(AppDesignSystem.bodyFont.weight(.semibold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, AppDesignSystem.paddingMedium)
-                    .padding(.vertical, AppDesignSystem.paddingSmall)
-                    .background(AppDesignSystem.accentColor)
-                    .cornerRadius(AppDesignSystem.cornerRadiusMedium)
+                HStack {
+                    if isProcessing { ProgressView().scaleEffect(0.8) }
+                    Text("申請加入")
+                        .font(AppDesignSystem.bodyFont.weight(.semibold))
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, AppDesignSystem.paddingMedium)
+                .padding(.vertical, AppDesignSystem.paddingSmall)
+                .background(AppDesignSystem.accentColor)
+                .cornerRadius(AppDesignSystem.cornerRadiusMedium)
             }
             .buttonStyle(.plain) // Remove default button styling for custom background
         }

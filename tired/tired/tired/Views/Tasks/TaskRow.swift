@@ -3,122 +3,216 @@ import SwiftUI
 @available(iOS 17.0, *)
 struct TaskRow: View {
     let task: Task
-    let onToggle: () -> Void
+    let isBlocked: Bool
+    let onToggle: () async -> Bool
     var onTap: (() -> Void)? = nil
     var showSubtasks: Bool = true
+    @State private var isProcessing = false
 
     var body: some View {
-        Button(action: { onTap?() }) {
-            VStack(alignment: .leading, spacing: 0) {
-                // Main content
-                HStack(alignment: .top, spacing: AppDesignSystem.paddingMedium) {
-                    // Left side: Priority indicator + Checkbox
-                    VStack(spacing: 4) {
-                        // Priority indicator
-                        priorityIndicator
+        VStack(alignment: .leading, spacing: 0) {
+            // Main content
+            HStack(alignment: .top, spacing: AppDesignSystem.paddingMedium) {
+                // Left side: Priority indicator + Checkbox
+                VStack(spacing: 4) {
+                    // Priority indicator
+                    priorityIndicator
+                        .accessibilityLabel("優先級: \(task.priority.displayName)")
 
-                        // Checkbox
-                        Button(action: onToggle) {
-                            ZStack {
+                    // Checkbox
+                    Button {
+                        _Concurrency.Task {
+                            guard !isProcessing else { return }
+                            await MainActor.run { isProcessing = true }
+                            let success = await onToggle()
+                            if !success {
+                                // Toast is already shown by ViewModel in most cases
+                            }
+                            try? await _Concurrency.Task.sleep(nanoseconds: 120_000_000)
+                            await MainActor.run { isProcessing = false }
+                        }
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .stroke(checkboxColor, lineWidth: 2)
+                                .frame(width: 24, height: 24)
+
+                            if task.isDone {
                                 Circle()
-                                    .stroke(checkboxColor, lineWidth: 2)
-                                    .frame(width: 24, height: 24)
-
-                                if task.isDone {
-                                    Circle()
-                                        .fill(AppDesignSystem.accentColor)
-                                        .frame(width: 24, height: 24)
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 12, weight: .bold))
-                                        .foregroundColor(.white)
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    // Content
-                    VStack(alignment: .leading, spacing: 6) {
-                        // Title row with status badge
-                        HStack(alignment: .top) {
-                            Text(task.title)
-                                .font(AppDesignSystem.bodyFont.weight(.semibold))
-                                .strikethrough(task.isDone)
-                                .foregroundColor(task.isDone ? .secondary : .primary)
-                                .lineLimit(2)
-
-                            Spacer()
-
-                            // Status badge
-                            if !task.isDone {
-                                statusBadge
-                            }
-                        }
-
-                        // Description
-                        if let description = task.description, !description.isEmpty {
-                            Text(description)
-                                .font(AppDesignSystem.captionFont)
-                                .foregroundColor(.secondary)
-                                .lineLimit(2)
-                        }
-
-                        // Tags
-                        if let tags = task.tags, !tags.isEmpty {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 6) {
-                                    ForEach(tags.prefix(3), id: \.self) { tag in
-                                        TagView(text: tag)
-                                    }
-                                    if tags.count > 3 {
-                                        Text("+\(tags.count - 3)")
-                                            .font(.system(size: 10, weight: .medium))
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                            }
-                        }
-
-                        // Subtask progress
-                        if showSubtasks && task.totalSubtaskCount > 0 {
-                            subtaskProgressView
-                        }
-
-                        // Meta info row
-                        metaInfoRow
-                    }
-                }
-                .padding(AppDesignSystem.paddingMedium)
-
-                // Progress bar at bottom (if has subtasks)
-                if task.totalSubtaskCount > 0 {
-                    GeometryReader { geometry in
-                        Rectangle()
-                            .fill(AppDesignSystem.accentColor.opacity(0.3))
-                            .frame(height: 3)
-                            .overlay(alignment: .leading) {
-                                Rectangle()
                                     .fill(AppDesignSystem.accentColor)
-                                    .frame(width: geometry.size.width * task.subtaskProgress, height: 3)
+                                    .frame(width: 24, height: 24)
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(.white)
                             }
+
+                            if isProcessing {
+                                ProgressView()
+                                    .scaleEffect(0.5)
+                                    .frame(width: 24, height: 24)
+                            }
+                        }
                     }
-                    .frame(height: 3)
+                    .buttonStyle(.plain)
+                    .disabled(isBlocked || isProcessing)
+                    .accessibilityLabel(task.isDone ? "標記為未完成" : "標記為完成")
+                }
+
+                // Content
+                VStack(alignment: .leading, spacing: 6) {
+                    // Title row with status badge
+                    HStack(alignment: .top) {
+                        if isBlocked && !task.isDone {
+                            HStack(spacing: 4) {
+                                Image(systemName: "lock.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.orange)
+                                Text("等待依賴")
+                                    .font(.caption)
+                                    .foregroundColor(.orange)
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.orange.opacity(0.1))
+                            .cornerRadius(6)
+                            .accessibilityLabel("任務已鎖定，等待依賴任務完成")
+                        }
+                        
+                        Text(task.title)
+                            .font(AppDesignSystem.bodyFont.weight(.semibold))
+                            .strikethrough(task.isDone)
+                            .foregroundColor(task.isDone ? .secondary : (isBlocked ? .secondary.opacity(0.7) : .primary))
+                            .lineLimit(2)
+
+                        Spacer()
+
+                        // Status badge
+                        if !task.isDone {
+                            statusBadge
+                        }
+                    }
+
+                    // Description
+                    if let description = task.description, !description.isEmpty {
+                        Text(description)
+                            .font(AppDesignSystem.captionFont)
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                    }
+
+                    // Tags
+                    if let tags = task.tags, !tags.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(tags.prefix(3), id: \.self) { tag in
+                                    TagView(text: tag)
+                                }
+                                if tags.count > 3 {
+                                    Text("+\(tags.count - 3)")
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("標籤: \(tags.joined(separator: ", "))")
+                    }
+
+                    // Subtask progress
+                    if showSubtasks && task.totalSubtaskCount > 0 {
+                        subtaskProgressView
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("子任務進度: \(task.completedSubtaskCount) of \(task.totalSubtaskCount) 完成")
+                    }
+
+                    // Meta info row
+                    metaInfoRow
                 }
             }
-            .glassmorphicCard(cornerRadius: AppDesignSystem.cornerRadiusMedium)
-            .overlay(
-                // Left edge color indicator based on category
-                HStack {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.forCategory(task.category))
-                        .frame(width: 4)
-                    Spacer()
+            .padding(AppDesignSystem.paddingMedium)
+
+            // Progress bar at bottom (if has subtasks)
+            if task.totalSubtaskCount > 0 {
+                GeometryReader { geometry in
+                    Rectangle()
+                        .fill(AppDesignSystem.accentColor.opacity(0.3))
+                        .frame(height: 3)
+                        .overlay(alignment: .leading) {
+                            Rectangle()
+                                .fill(AppDesignSystem.accentColor)
+                                .frame(width: geometry.size.width * task.subtaskProgress, height: 3)
+                        }
                 }
-                .padding(.vertical, 8)
-            )
+                .frame(height: 3)
+                .accessibilityLabel("子任務進度 \(Int(task.subtaskProgress * 100))%")
+            }
         }
-        .buttonStyle(.plain)
+        .glassmorphicCard(cornerRadius: AppDesignSystem.cornerRadiusMedium)
+        .opacity(isBlocked ? 0.7 : 1.0)
+        .overlay(
+            // Left edge color indicator based on category
+            HStack {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color.forCategory(task.category))
+                    .frame(width: 4)
+                Spacer()
+            }
+            .padding(.vertical, 8)
+            .accessibilityHidden(true)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if !isBlocked {
+                onTap?()
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilitySummary)
+        .accessibilityHint(isBlocked ? "此任務被其他任務鎖定，無法操作" : "點擊以查看詳情")
     }
+    
+    // MARK: - Accessibility
+    
+    private var accessibilitySummary: String {
+        var summary = ""
+        
+        summary += task.title
+        summary += ", "
+        
+        if task.isDone {
+            summary += "已完成"
+        } else {
+            summary += "未完成"
+            
+            if isBlocked {
+                summary += ", 已鎖定"
+            }
+            
+            if task.isOverdue {
+                summary += ", 已過期"
+            } else if task.isDueSoon {
+                summary += ", 即將到期"
+            }
+            
+            if let deadline = task.deadlineAt {
+                summary += ", 截止於 \(formatDeadline(deadline))"
+            }
+        }
+        
+        summary += ", 優先級: \(task.priority.displayName)"
+        summary += ", 分類: \(task.category.displayName)"
+        
+        if let tags = task.tags, !tags.isEmpty {
+            summary += ", 標籤: \(tags.joined(separator: ", "))"
+        }
+        
+        if task.totalSubtaskCount > 0 {
+            summary += ", \(task.completedSubtaskCount) of \(task.totalSubtaskCount) 個子任務已完成"
+        }
+        
+        return summary
+    }
+
 
     // MARK: - Subviews
 
@@ -144,6 +238,9 @@ struct TaskRow: View {
     private var checkboxColor: Color {
         if task.isDone {
             return AppDesignSystem.accentColor
+        }
+        if isBlocked {
+            return .secondary.opacity(0.5)
         }
         if task.isOverdue {
             return .red
@@ -227,6 +324,22 @@ struct TaskRow: View {
                 }
                 .foregroundColor(.orange)
             }
+            
+            // Reminder indicator
+            if task.hasReminder {
+                Image(systemName: "bell.fill")
+                    .font(.system(size: 10))
+                    .foregroundColor(.orange)
+                    .accessibilityLabel("已設定提醒")
+            }
+            
+            // Dependency indicator
+            if task.hasDependency {
+                Image(systemName: "link")
+                    .font(.system(size: 10))
+                    .foregroundColor(.purple)
+                    .accessibilityLabel("有前置依賴任務")
+            }
 
             Spacer()
 
@@ -246,6 +359,7 @@ struct TaskRow: View {
                 Image(systemName: "repeat")
                     .font(.system(size: 10))
                     .foregroundColor(.purple)
+                    .accessibilityLabel("重複任務")
             }
         }
     }
@@ -321,7 +435,9 @@ struct TagView: View {
 @available(iOS 17.0, *)
 struct CompactTaskRow: View {
     let task: Task
-    let onToggle: () -> Void
+    let isBlocked: Bool
+    let onToggle: () async -> Bool
+    @State private var isProcessing = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -331,17 +447,43 @@ struct CompactTaskRow: View {
                 Circle()
                     .fill(priorityColor)
                     .frame(width: 6, height: 6)
+                    .accessibilityLabel("優先級: \(task.priority.displayName)")
 
                 // Checkbox
-                Button(action: onToggle) {
-                    Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 20))
-                        .foregroundColor(task.isDone ? AppDesignSystem.accentColor : .secondary)
+                Button {
+                    _Concurrency.Task {
+                        guard !isProcessing else { return }
+                        await MainActor.run { isProcessing = true }
+                        let success = await onToggle()
+                        if !success {
+                            ToastManager.shared.showToast(message: "同步任務狀態失敗，請稍後再試。", type: .error)
+                        }
+                        try? await _Concurrency.Task.sleep(nanoseconds: 120_000_000)
+                        await MainActor.run { isProcessing = false }
+                    }
+                } label: {
+                    ZStack {
+                        Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 20))
+                            .foregroundColor(task.isDone ? AppDesignSystem.accentColor : .secondary)
+                        if isProcessing {
+                            ProgressView()
+                                .scaleEffect(0.6)
+                        }
+                    }
                 }
                 .buttonStyle(.plain)
+                .disabled(isBlocked)
+                .accessibilityLabel(task.isDone ? "標記為未完成" : "標記為完成")
             }
 
             // Title
+            if isBlocked {
+                Image(systemName: "lock.fill")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .accessibilityLabel("任務已鎖定")
+            }
             Text(task.title)
                 .font(.system(size: 15, weight: .medium))
                 .strikethrough(task.isDone)
@@ -372,11 +514,16 @@ struct CompactTaskRow: View {
                         .foregroundColor(.secondary)
                 }
             }
+            .accessibilityHidden(true) // Meta info is included in the main summary
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
         .background(Color.appSecondaryBackground.opacity(0.5))
         .cornerRadius(AppDesignSystem.cornerRadiusSmall)
+        .opacity(isBlocked ? 0.7 : 1.0)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilitySummary)
+        .accessibilityHint(isBlocked ? "此任務被其他任務鎖定，無法操作" : "點擊以查看詳情")
     }
 
     private var priorityColor: Color {
@@ -385,6 +532,26 @@ struct CompactTaskRow: View {
         case .medium: return .orange
         case .low: return .blue
         }
+    }
+    
+    private var accessibilitySummary: String {
+        var summary = ""
+        summary += task.title
+        summary += ", "
+        
+        if task.isDone {
+            summary += "已完成"
+        } else {
+            summary += "未完成"
+            if isBlocked {
+                summary += ", 已鎖定"
+            }
+            if task.isOverdue {
+                summary += ", 已過期"
+            }
+        }
+        summary += ", 優先級: \(task.priority.displayName)"
+        return summary
     }
 }
 
@@ -413,9 +580,11 @@ struct TaskRow_Previews: PreviewProvider {
                                 Subtask(title: "完成習題1-5"),
                                 Subtask(title: "完成習題6-10"),
                                 Subtask(title: "整理筆記")
-                            ]
+                            ],
+                            dependsOnTaskIds: ["some-other-task"]
                         ),
-                        onToggle: {}
+                        isBlocked: true,
+                        onToggle: { await MainActor.run { true } }
                     )
 
                     // Completed task
@@ -429,7 +598,8 @@ struct TaskRow_Previews: PreviewProvider {
                             plannedDate: Date().addingTimeInterval(-86400),
                             isDone: true
                         ),
-                        onToggle: {}
+                        isBlocked: false,
+                        onToggle: { await MainActor.run { true } }
                     )
 
                     // Overdue task
@@ -443,7 +613,8 @@ struct TaskRow_Previews: PreviewProvider {
                             deadlineAt: Date().addingTimeInterval(-86400),
                             estimatedMinutes: 60
                         ),
-                        onToggle: {}
+                        isBlocked: false,
+                        onToggle: { await MainActor.run { true } }
                     )
 
                     // Low priority personal task
@@ -456,7 +627,8 @@ struct TaskRow_Previews: PreviewProvider {
                             estimatedMinutes: 30,
                             recurrence: TaskRecurrence(type: .weekly, interval: 1)
                         ),
-                        onToggle: {}
+                        isBlocked: false,
+                        onToggle: { await MainActor.run { true } }
                     )
 
                     Divider().padding(.vertical)
@@ -472,7 +644,8 @@ struct TaskRow_Previews: PreviewProvider {
                             priority: .medium,
                             deadlineAt: Date().addingTimeInterval(3600 * 2)
                         ),
-                        onToggle: {}
+                        isBlocked: true,
+                        onToggle: { await MainActor.run { true } }
                     )
                 }
                 .padding(AppDesignSystem.paddingMedium)

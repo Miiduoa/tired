@@ -104,7 +104,7 @@ class TaskTagService: ObservableObject {
         newTag.createdAt = Date()
         newTag.updatedAt = Date()
 
-        let docRef = try await db.collection("taskTags").addDocument(from: newTag)
+        let docRef = try db.collection("taskTags").addDocument(from: newTag)
         return docRef.documentID
     }
 
@@ -117,7 +117,7 @@ class TaskTagService: ObservableObject {
         var updatedTag = tag
         updatedTag.updatedAt = Date()
 
-        try await db.collection("taskTags").document(id).setData(from: updatedTag)
+        try db.collection("taskTags").document(id).setData(from: updatedTag)
     }
 
     /// 删除标签

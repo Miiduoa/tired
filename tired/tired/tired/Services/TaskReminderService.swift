@@ -74,7 +74,7 @@ class TaskReminderService: ObservableObject {
         newReminder.createdAt = Date()
         newReminder.updatedAt = Date()
 
-        _ = try await db.collection("taskReminders").addDocument(from: newReminder)
+        _ = try db.collection("taskReminders").addDocument(from: newReminder)
 
         // 安排本地通知
         if newReminder.isEnabled {
@@ -91,7 +91,7 @@ class TaskReminderService: ObservableObject {
         var updatedReminder = reminder
         updatedReminder.updatedAt = Date()
 
-        try await db.collection("taskReminders").document(id).setData(from: updatedReminder)
+        try db.collection("taskReminders").document(id).setData(from: updatedReminder)
 
         // 重新安排通知
         if updatedReminder.isEnabled {
@@ -122,7 +122,7 @@ class TaskReminderService: ObservableObject {
 
         for reminder in reminders ?? [] {
             do {
-                guard let taskId = reminder.id else { continue }
+                guard reminder.id != nil else { continue }
                 let shouldSend = try await shouldSendReminder(reminder)
 
                 if shouldSend {
@@ -269,7 +269,10 @@ class TaskReminderService: ObservableObject {
         content.title = notification.notificationTitle
         content.body = notification.notificationBody
         content.sound = .default
-        content.badge = NSNumber(value: UIApplication.shared.applicationIconBadgeNumber + 1)
+        
+        let badgeCount = await nextBadgeCount()
+        content.badge = NSNumber(value: badgeCount)
+        await applyBadgeCount(badgeCount)
 
         // 用户交互数据
         content.userInfo = [
@@ -318,7 +321,9 @@ class TaskReminderService: ObservableObject {
 
         let content = UNMutableNotificationContent()
         content.sound = .default
-        content.badge = NSNumber(value: UIApplication.shared.applicationIconBadgeNumber + 1)
+        let badgeCount = await nextBadgeCount()
+        content.badge = NSNumber(value: badgeCount)
+        await applyBadgeCount(badgeCount)
 
         var triggerDate: Date?
 
@@ -368,6 +373,43 @@ class TaskReminderService: ObservableObject {
             let request = UNNotificationRequest(identifier: reminder.id ?? UUID().uuidString, content: content, trigger: trigger)
 
             try await UNUserNotificationCenter.current().add(request)
+        }
+    }
+
+    // MARK: - Badge Handling
+
+    private func nextBadgeCount() async -> Int {
+        async let delivered = deliveredBadgeMax()
+        async let pending = pendingBadgeMax()
+        let currentMax = max(await delivered, await pending)
+        return currentMax + 1
+    }
+
+    private func applyBadgeCount(_ badgeCount: Int) async {
+        guard #available(iOS 16.0, *) else { return }
+
+        do {
+            try await UNUserNotificationCenter.current().setBadgeCount(badgeCount)
+        } catch {
+            print("Failed to set badge count: \(error.localizedDescription)")
+        }
+    }
+
+    private func deliveredBadgeMax() async -> Int {
+        await withCheckedContinuation { continuation in
+            UNUserNotificationCenter.current().getDeliveredNotifications { notifications in
+                let maxBadge = notifications.compactMap { $0.request.content.badge?.intValue }.max() ?? 0
+                continuation.resume(returning: maxBadge)
+            }
+        }
+    }
+
+    private func pendingBadgeMax() async -> Int {
+        await withCheckedContinuation { continuation in
+            UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
+                let maxBadge = requests.compactMap { $0.content.badge?.intValue }.max() ?? 0
+                continuation.resume(returning: maxBadge)
+            }
         }
     }
 

@@ -174,7 +174,7 @@ struct TimeBlock: Codable, Identifiable {
             let dayOfWeek = calendar.component(.weekday, from: date)
             // 转换为我们的格式（1=周一，7=周日）
             let normalizedDayOfWeek = dayOfWeek == 1 ? 7 : dayOfWeek - 1
-            return normalizedDayOfWeek == (dayOfWeek ?? 1)
+            return normalizedDayOfWeek == (self.dayOfWeek ?? 1)
         }
     }
 

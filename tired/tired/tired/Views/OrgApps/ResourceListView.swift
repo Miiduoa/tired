@@ -23,48 +23,62 @@ struct ResourceListView: View {
     }
 
     var body: some View {
-        ScrollView {
+        NavigationStack {
+            scrollContent
+                .navigationTitle(appInstance.name ?? "資源庫")
+                .toolbar {
+                    if viewModel.canManage {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button {
+                                showingCreateResource = true
+                            } label: {
+                                Image(systemName: "plus")
+                            }
+                        }
+                    }
+                }
+        }
+        .sheet(isPresented: $showingCreateResource) {
+            CreateResourceView(viewModel: viewModel)
+        }
+    }
+    
+    @ViewBuilder
+    private var scrollContent: some View {
+        ScrollView(.vertical, showsIndicators: true) {
             VStack(spacing: 16) {
-                // Category filter
                 if !viewModel.categories.isEmpty {
                     categoryFilter
                 }
 
-                // Resources list
                 LazyVStack(spacing: 12) {
                     if filteredResources.isEmpty {
                         emptyState
                     } else {
-                        ForEach(filteredResources) { resource in
-                            ResourceCard(
-                                resource: resource,
-                                onDelete: viewModel.canManage ? {
-                                    _Concurrency.Task {
-                                        await viewModel.deleteResource(resource)
-                                    }
-                                } : nil
-                            )
+                        ForEach(filteredResources, id: \.id) { resource in
+                            resourceCard(for: resource)
                         }
                     }
                 }
             }
             .padding()
         }
-        .navigationTitle(appInstance.name ?? "資源列表")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if viewModel.canManage {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showingCreateResource = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
+    }
+    
+    @ViewBuilder
+    private func resourceCard(for resource: Resource) -> some View {
+        if viewModel.canManage {
+            ResourceCard(
+                resource: resource,
+                onDelete: { () async -> Bool in
+                    return await viewModel.deleteResourceAsync(resource)
                 }
-            }
-        }
-        .sheet(isPresented: $showingCreateResource) {
-            CreateResourceView(viewModel: viewModel)
+            )
+        } else {
+            ResourceCard(
+                resource: resource,
+                onDelete: nil
+            )
         }
     }
 
@@ -116,6 +130,7 @@ struct ResourceListView: View {
         }
         .padding(.vertical, 60)
     }
+
 }
 
 // MARK: - Filter Chip
@@ -144,7 +159,9 @@ struct FilterChip: View {
 @available(iOS 17.0, *)
 struct ResourceCard: View {
     let resource: Resource
-    let onDelete: (() -> Void)?
+    let onDelete: (() async -> Bool)?
+
+    @State private var isDeleting = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -224,11 +241,26 @@ struct ResourceCard: View {
                 Spacer()
 
                 if let onDelete = onDelete {
-                    Button(role: .destructive, action: onDelete) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 14))
-                            .foregroundColor(.red)
+                    Button(role: .destructive) {
+                        _Concurrency.Task {
+                            guard !isDeleting else { return }
+                            await MainActor.run { isDeleting = true }
+                            let success = await onDelete()
+                            if !success {
+                                ToastManager.shared.showToast(message: "刪除資源失敗，請稍後再試。", type: .error)
+                            }
+                            await MainActor.run { isDeleting = false }
+                        }
+                    } label: {
+                        if isDeleting {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "trash")
+                                .font(.system(size: 14))
+                                .foregroundColor(.red)
+                        }
                     }
+                    .disabled(isDeleting)
                 }
             }
         }
@@ -258,16 +290,17 @@ struct CreateResourceView: View {
     @State private var isCreating = false
 
     var body: some View {
-        NavigationView {
-            Form {
-                Section("基本信息") {
+        NavigationStack {
+            ZStack {
+                Form {
+                SwiftUI.Section("基本信息") {
                     TextField("資源名稱", text: $title)
 
                     TextField("描述（選填）", text: $description, axis: .vertical)
                         .lineLimit(2...4)
                 }
 
-                Section("資源類型") {
+                SwiftUI.Section("資源類型") {
                     Picker("類型", selection: $resourceType) {
                         ForEach(ResourceType.allCases, id: \.self) { type in
                             HStack {
@@ -280,16 +313,25 @@ struct CreateResourceView: View {
                     .pickerStyle(.menu)
                 }
 
-                Section("連結") {
+                SwiftUI.Section("連結") {
                     TextField("資源連結 URL", text: $url)
                         .keyboardType(.URL)
                         .autocapitalization(.none)
                 }
 
-                Section("分類") {
+                SwiftUI.Section("分類") {
                     TextField("分類（選填）", text: $category)
 
                     TextField("標籤（用逗號分隔，選填）", text: $tagsText)
+                }
+                }
+                // Loading overlay for creation
+                if isCreating {
+                    Color.black.opacity(0.25).ignoresSafeArea()
+                    ProgressView("新增資源中...")
+                        .padding(14)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(10)
                 }
             }
             .navigationTitle("新增資源")
@@ -302,7 +344,7 @@ struct CreateResourceView: View {
                     Button("新增") {
                         createResource()
                     }
-                    .disabled(title.isEmpty || url.isEmpty || isCreating)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isCreating)
                 }
             }
         }
@@ -327,14 +369,18 @@ struct CreateResourceView: View {
                     tags: tags
                 )
                 await MainActor.run {
+                    isCreating = false
+                    AlertHelper.shared.showSuccess("資源新增成功")
                     dismiss()
                 }
             } catch {
                 print("❌ Error creating resource: \(error)")
                 await MainActor.run {
                     isCreating = false
+                    AlertHelper.shared.showError("新增資源失敗：\(error.localizedDescription)")
                 }
             }
         }
     }
 }
+

@@ -39,6 +39,7 @@ enum OrgPermission: CaseIterable {
 
     // Staff 及以上權限
     case createPosts          // 發布貼文
+    case createAnnouncement   // 發布公告
     case createEvents         // 創建活動
     case createTasks          // 創建任務
     case editOwnPosts         // 編輯自己的貼文
@@ -68,6 +69,8 @@ enum OrgPermission: CaseIterable {
             return AppPermissions.editOrgSettings
         case .createPosts:
             return AppPermissions.createPostInOrg
+        case .createAnnouncement:
+            return AppPermissions.createAnnouncementInOrg
         case .createEvents:
             return AppPermissions.createEventInOrg
         case .createTasks:
@@ -104,6 +107,8 @@ enum OrgPermission: CaseIterable {
             return "編輯組織資訊"
         case .createPosts:
             return "發布貼文"
+        case .createAnnouncement:
+            return "發布公告"
         case .createEvents:
             return "創建活動"
         case .createTasks:
@@ -178,7 +183,7 @@ enum MembershipRole: String, Codable, CaseIterable {
             return self.hierarchyLevel >= MembershipRole.admin.hierarchyLevel
 
         // Staff 及以上權限
-        case .createPosts, .createEvents, .createTasks, .editOwnPosts:
+        case .createPosts, .createAnnouncement, .createEvents, .createTasks, .editOwnPosts:
             return self.hierarchyLevel >= MembershipRole.staff.hierarchyLevel
 
         // 所有成員都有的權限
@@ -196,9 +201,9 @@ enum TaskCategory: String, Codable, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .school: return "学校"
+        case .school: return "學校"
         case .work: return "工作"
-        case .club: return "社团"
+        case .club: return "社團"
         case .personal: return "生活"
         }
     }
@@ -242,16 +247,28 @@ enum TaskSourceType: String, Codable {
     case eventSignup = "event_signup"
 }
 
-enum OrgAppTemplateKey: String, Codable {
+enum OrgAppTemplateKey: String, Codable, CaseIterable {
     case taskBoard = "task_board"
     case eventSignup = "event_signup"
     case resourceList = "resource_list"
+    
+    // School Specific (TronClass-like)
+    case courseSchedule = "course_schedule" // 課表
+    case assignmentBoard = "assignment_board" // 作業
+    case bulletinBoard = "bulletin_board" // 公告
+    case rollCall = "roll_call" // 點名
+    case gradebook = "gradebook" // 成績
 
     var displayName: String {
         switch self {
-        case .taskBoard: return "任务看板"
-        case .eventSignup: return "活动报名"
-        case .resourceList: return "资源列表"
+        case .taskBoard: return "任務看板"
+        case .eventSignup: return "活動報名"
+        case .resourceList: return "資源列表"
+        case .courseSchedule: return "課程表"
+        case .assignmentBoard: return "作業專區"
+        case .bulletinBoard: return "公告欄"
+        case .rollCall: return "點名系統"
+        case .gradebook: return "成績查詢"
         }
     }
 }

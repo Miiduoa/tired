@@ -58,7 +58,7 @@ class TimeBlockService: ObservableObject {
         newBlock.createdAt = Date()
         newBlock.updatedAt = Date()
 
-        _ = try await db.collection("timeBlocks").addDocument(from: newBlock)
+        _ = try db.collection("timeBlocks").addDocument(from: newBlock)
     }
 
     /// 更新时间块
@@ -70,7 +70,7 @@ class TimeBlockService: ObservableObject {
         var updatedBlock = timeBlock
         updatedBlock.updatedAt = Date()
 
-        try await db.collection("timeBlocks").document(id).setData(from: updatedBlock)
+        try db.collection("timeBlocks").document(id).setData(from: updatedBlock)
     }
 
     /// 删除时间块

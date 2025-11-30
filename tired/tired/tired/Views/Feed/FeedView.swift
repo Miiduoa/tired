@@ -7,6 +7,7 @@ struct FeedView: View {
     @StateObject private var viewModel = FeedViewModel()
     @State private var showingCreatePost = false
     @State private var selectedPostForComments: PostWithAuthor?
+    @State private var isProcessingDeletePost = false
 
     var body: some View {
         ZStack {
@@ -25,13 +26,13 @@ struct FeedView: View {
                                 PostCardView(
                                     post: postWithAuthor.post,
                                     postWithAuthor: postWithAuthor,
-                                    feedViewModel: viewModel, // Pass the viewModel here
-                                    onLike: {
-                                        _Concurrency.Task { await viewModel.toggleReaction(post: postWithAuthor) }
-                                    },
+                                    feedViewModel: viewModel,
+                                    onLike: { return await viewModel.toggleReaction(post: postWithAuthor) },
                                     onComment: { selectedPostForComments = postWithAuthor },
                                     onDelete: {
-                                        viewModel.postToDelete = postWithAuthor
+                                        // Set the pending delete and let FeedView handle confirmation
+                                        await MainActor.run { viewModel.postToDelete = postWithAuthor }
+                                        return true
                                     }
                                 )
                                 .onAppear {
@@ -93,13 +94,27 @@ struct FeedView: View {
                     set: { _ in viewModel.postToDelete = nil }
                 )) {
                     Button("刪除", role: .destructive) {
-                        if let post = viewModel.postToDelete {
-                            _Concurrency.Task { await viewModel.deletePost(post: post) }
+                        _Concurrency.Task {
+                            guard !isProcessingDeletePost, let post = viewModel.postToDelete else { return }
+                            await MainActor.run { isProcessingDeletePost = true }
+                            await viewModel.deletePost(post: post)
+                            await MainActor.run {
+                                isProcessingDeletePost = false
+                                // 清除選擇的待刪除貼文，以關閉對話
+                                viewModel.postToDelete = nil
+                            }
                         }
                     }
-                    Button("取消", role: .cancel) {}
+                    Button("取消", role: .cancel) {
+                        // 明確清除待刪除的貼文，確保 UI 有回應
+                        viewModel.postToDelete = nil
+                    }
                 } message: {
-                    Text("您確定要刪除此貼文嗎？此操作無法撤銷。")
+                    if isProcessingDeletePost {
+                        Text("正在刪除貼文，請稍候...")
+                    } else {
+                        Text("您確定要刪除此貼文嗎？此操作無法撤銷。")
+                    }
                 }
             }
         }
@@ -138,6 +153,8 @@ struct FeedView: View {
 @available(iOS 17.0, *)
 struct CreatePostView: View {
     @ObservedObject var viewModel: FeedViewModel
+    let defaultOrganizationId: String?
+    let initialPostType: PostType
     @Environment(\.dismiss) private var dismiss
 
     @StateObject private var orgViewModel = OrganizationsViewModel()
@@ -148,6 +165,18 @@ struct CreatePostView: View {
     @State private var showingImagePicker = false
     @State private var imageUrls: [String] = []
     @State private var isUploadingImages = false
+    @State private var isAnnouncement = false
+    @State private var canCreateAnnouncement = false
+    @State private var permissionService = PermissionService()
+    
+    // Draft support
+    private let draftKey = "create_post_draft_v1"
+    
+    init(viewModel: FeedViewModel, defaultOrganizationId: String? = nil, initialPostType: PostType = .post) {
+        self.viewModel = viewModel
+        self.defaultOrganizationId = defaultOrganizationId
+        self.initialPostType = initialPostType
+    }
 
     var body: some View {
         NavigationView {
@@ -238,8 +267,32 @@ struct CreatePostView: View {
                         .glassmorphicCard(cornerRadius: AppDesignSystem.cornerRadiusSmall, material: .regularMaterial)
                         .listRowBackground(Color.clear)
                     }
+
+                    Section("貼文類型") {
+                        if canCreateAnnouncement {
+                            Toggle("設為組織公告", isOn: $isAnnouncement)
+                                .tint(AppDesignSystem.accentColor)
+                        } else {
+                            Text(selectedOrganization == nil ? "個人貼文" : "組織貼文")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .listRowBackground(Color.clear)
                 }
                 .background(Color.clear) // Make Form background clear
+
+                // Loading overlay
+                if isCreating || isUploadingImages {
+                    Color.black.opacity(0.25).ignoresSafeArea()
+                    VStack(spacing: 12) {
+                        ProgressView(isUploadingImages ? "上傳圖片中..." : "發布中...")
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .padding(16)
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(12)
+                    }
+                    .padding()
+                }
             }
             .navigationTitle("發布動態")
             .navigationBarTitleDisplayMode(.inline)
@@ -247,6 +300,13 @@ struct CreatePostView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
                         .buttonStyle(GlassmorphicButtonStyle(material: .regularMaterial, cornerRadius: AppDesignSystem.cornerRadiusSmall, textColor: .red))
+                }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("保存草稿") {
+                        saveDraft()
+                        AlertHelper.shared.showSuccess("草稿已儲存")
+                    }
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("發布") {
@@ -259,6 +319,52 @@ struct CreatePostView: View {
             .sheet(isPresented: $showingImagePicker) {
                 ImagePicker(images: $selectedImages, maxSelection: 9)
             }
+            .onAppear {
+                loadDraft()
+                
+                // Apply defaults when opened from an organization entry point
+                if (selectedOrganization == nil || selectedOrganization?.isEmpty == true) {
+                    selectedOrganization = defaultOrganizationId
+                }
+                if initialPostType == .announcement {
+                    isAnnouncement = true
+                }
+                
+                _Concurrency.Task { await checkAnnouncementPermission(for: selectedOrganization) }
+            }
+            .onChange(of: text) {
+                saveDraft()
+            }
+            .onChange(of: selectedOrganization) { oldValue, newValue in
+                _Concurrency.Task {
+                    await checkAnnouncementPermission(for: newValue)
+                }
+                // If org changes, reset the announcement toggle
+                isAnnouncement = false
+                saveDraft()
+            }
+            .onChange(of: isAnnouncement) {
+                saveDraft()
+            }
+        }
+    }
+
+    private func checkAnnouncementPermission(for orgId: String?) async {
+        guard let orgId = orgId else {
+            await MainActor.run { canCreateAnnouncement = false }
+            return
+        }
+        
+        do {
+            let hasPermission = try await permissionService.hasPermissionForCurrentUser(organizationId: orgId, permission: AppPermissions.createAnnouncementInOrg)
+            await MainActor.run {
+                canCreateAnnouncement = hasPermission
+            }
+        } catch {
+            print("Error checking announcement permission: \(error)")
+            await MainActor.run {
+                canCreateAnnouncement = false
+            }
         }
     }
 
@@ -266,41 +372,77 @@ struct CreatePostView: View {
         isCreating = true
 
         _Concurrency.Task {
-            // 先上傳圖片
+            // 先上傳圖片（若有）
             if !selectedImages.isEmpty {
                 isUploadingImages = true
-                imageUrls = await uploadImages(selectedImages)
+                do {
+                    imageUrls = try await uploadImages(selectedImages)
+                } catch {
+                    // 上傳失敗，顯示錯誤並允許重試
+                    isUploadingImages = false
+                    isCreating = false
+                    AlertHelper.shared.showError("圖片上傳失敗：\(error.localizedDescription)")
+                    return
+                }
                 isUploadingImages = false
             }
-            
+
             // 創建貼文
-            await viewModel.createPost(text: text, organizationId: selectedOrganization, imageUrls: imageUrls.isEmpty ? nil : imageUrls)
+            let postType: PostType = isAnnouncement ? .announcement : .post
+            let success = await viewModel.createPost(text: text, organizationId: selectedOrganization, imageUrls: imageUrls.isEmpty ? nil : imageUrls, postType: postType)
             await MainActor.run {
-                dismiss()
+                if success {
+                    // 發布成功，刪除草稿並關閉
+                    clearDraft()
+                    dismiss()
+                } else {
+                    isCreating = false
+                    AlertHelper.shared.showError("發布貼文失敗，請稍後重試。")
+                }
             }
         }
     }
     
-    private func uploadImages(_ images: [UIImage]) async -> [String] {
+    private func uploadImages(_ images: [UIImage]) async throws -> [String] {
         guard let userId = Auth.auth().currentUser?.uid else { return [] }
         
         let storageService = StorageService()
         var urls: [String] = []
-        
         for image in images {
             // 壓縮和調整圖片大小
             let resizedImage = storageService.resizeImage(image, maxDimension: 1200)
             guard let imageData = storageService.compressImage(resizedImage, maxSizeKB: 500) else { continue }
-            
+
             do {
                 let url = try await storageService.uploadPostImage(userId: userId, imageData: imageData)
                 urls.append(url)
             } catch {
-                print("❌ Error uploading image: \(error)")
+                // 若任一張上傳失敗，拋出錯誤讓上層處理（避免不完整的上傳導致使用者誤以為全部成功）
+                throw error
             }
         }
-        
+
         return urls
+    }
+
+    // MARK: - Draft methods
+    private func saveDraft() {
+        let dict: [String: String] = ["text": text, "org": selectedOrganization ?? ""]
+        UserDefaults.standard.setValue(dict, forKey: draftKey)
+    }
+
+    private func loadDraft() {
+        guard let dict = UserDefaults.standard.dictionary(forKey: draftKey) as? [String: String] else { return }
+        if let savedText = dict["text"], !savedText.isEmpty {
+            text = savedText
+        }
+        if let org = dict["org"], !org.isEmpty {
+            selectedOrganization = org
+        }
+    }
+
+    private func clearDraft() {
+        UserDefaults.standard.removeObject(forKey: draftKey)
     }
 }
 
@@ -365,6 +507,8 @@ struct CommentsView: View {
     @StateObject private var viewModel: CommentsViewModel
     @State private var newCommentText = ""
     @FocusState private var isInputFocused: Bool
+    @State private var isProcessingDeleteComment = false
+    @State private var isSendingLocal = false // Local UI state for send button
 
     init(postWithAuthor: PostWithAuthor, feedViewModel: FeedViewModel) {
         self.postWithAuthor = postWithAuthor
@@ -395,13 +539,12 @@ struct CommentsView: View {
                             } else {
                                 ForEach(viewModel.comments) { commentWithAuthor in
                                     CommentRow(
-                                        comment: commentWithAuthor,
-                                        commentsViewModel: viewModel,
-                                        onDelete: {
-                                            // Trigger confirmation dialog
-                                            viewModel.commentToDelete = commentWithAuthor
-                                        }
-                                    )
+                                                comment: commentWithAuthor,
+                                                commentsViewModel: viewModel,
+                                                onDelete: {
+                                                    await MainActor.run { viewModel.commentToDelete = commentWithAuthor }
+                                                }
+                                            )
                                     .padding(.horizontal, AppDesignSystem.paddingMedium)
                                 }
                             }
@@ -424,16 +567,32 @@ struct CommentsView: View {
             .background(Color.clear) // Make NavigationView's background clear
             .confirmationDialog("刪除評論", isPresented: Binding<Bool>(
                 get: { viewModel.commentToDelete != nil },
-                set: { _ in viewModel.commentToDelete = nil }
+                set: { _ in _Concurrency.Task { await MainActor.run { viewModel.commentToDelete = nil } } }
             )) {
                 Button("刪除", role: .destructive) {
-                    if let comment = viewModel.commentToDelete {
-                        _Concurrency.Task { await viewModel.deleteComment(comment.comment) }
+                    _Concurrency.Task {
+                        guard !isProcessingDeleteComment, let comment = viewModel.commentToDelete else { return }
+                        await MainActor.run { isProcessingDeleteComment = true }
+                        let success = await viewModel.deleteComment(comment.comment)
+                        await MainActor.run { isProcessingDeleteComment = false }
+                        if success {
+                            // 清除待刪除狀態以關閉對話
+                            viewModel.commentToDelete = nil
+                            feedViewModel.refresh()
+                        }
+                        // if failed, keep the dialog open (or it will close and user can retry)
                     }
                 }
-                Button("取消", role: .cancel) {}
+                Button("取消", role: .cancel) {
+                    // 明確清除待刪除的評論
+                    viewModel.commentToDelete = nil
+                }
             } message: {
-                Text("您確定要刪除此評論嗎？此操作無法撤銷。")
+                if isProcessingDeleteComment {
+                    Text("正在刪除評論，請稍候...")
+                } else {
+                    Text("您確定要刪除此評論嗎？此操作無法撤銷。")
+                }
             }
         }
     }
@@ -510,11 +669,16 @@ struct CommentsView: View {
                 Button {
                     sendComment()
                 } label: {
-                    Image(systemName: "paperplane.fill")
-                        .font(.title2)
-                        .foregroundColor(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary : AppDesignSystem.accentColor)
+                    if isSendingLocal || viewModel.isSending {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                    } else {
+                        Image(systemName: "paperplane.fill")
+                            .font(.title2)
+                            .foregroundColor(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary : AppDesignSystem.accentColor)
+                    }
                 }
-                .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isSending)
+                .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isSending || isSendingLocal)
             }
             .padding(.horizontal, AppDesignSystem.paddingMedium)
             .padding(.vertical, AppDesignSystem.paddingSmall)
@@ -527,11 +691,15 @@ struct CommentsView: View {
         guard !text.isEmpty else { return }
 
         _Concurrency.Task {
-            await viewModel.addComment(text: text)
+            await MainActor.run { isSendingLocal = true }
+            let success = await viewModel.addComment(text: text)
             await MainActor.run {
-                newCommentText = ""
-                isInputFocused = false
-                feedViewModel.refresh() // Update comment count in feed
+                if success {
+                    newCommentText = ""
+                    isInputFocused = false
+                    feedViewModel.refresh() // Update comment count in feed
+                }
+                isSendingLocal = false
             }
         }
     }
@@ -543,66 +711,73 @@ struct CommentsView: View {
 struct CommentRow: View {
     let comment: CommentWithAuthor
     @ObservedObject var commentsViewModel: CommentsViewModel // Inject CommentsViewModel
-    var onDelete: (() -> Void)? // Keep this for now, could be simplified later
+    var onDelete: (() async -> Void)? // Use async closure so callers can await MainActor updates
 
     @State private var canDeleteComment = false
 
     var body: some View {
         HStack(alignment: .top, spacing: AppDesignSystem.paddingSmall) {
-            NavigationLink(destination: ProfileView(userId: comment.author?.id)) {
-                // Avatar and Author Info
-                HStack(alignment: .top, spacing: AppDesignSystem.paddingSmall) {
-                    Circle()
-                        .fill(Color.secondary.opacity(0.2))
-                        .frame(width: 36, height: 36)
-                        .overlay(
-                            Text(String(comment.author?.name.prefix(1) ?? "?").uppercased())
-                                .font(AppDesignSystem.captionFont.weight(.medium))
-                                .foregroundColor(.secondary)
-                        )
-
-                    VStack(alignment: .leading, spacing: AppDesignSystem.paddingSmall / 2) {
-                        HStack {
-                            Text(comment.author?.name ?? "用戶")
-                                .font(AppDesignSystem.captionFont.weight(.semibold))
-                                .foregroundColor(.primary)
-
-                            Spacer()
-
-                            Text(comment.comment.createdAt.formatShort())
-                                .font(AppDesignSystem.captionFont)
-                                .foregroundColor(.secondary)
-                        }
-
-                        Text(comment.comment.contentText)
-                            .font(AppDesignSystem.bodyFont)
-                            .foregroundColor(.primary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+            if let authorId = comment.author?.id {
+                NavigationLink(destination: UserProfileView(userId: authorId)) {
+                    authorInfoView
                 }
+                .buttonStyle(.plain)
+            } else {
+                authorInfoView
             }
-            .buttonStyle(.plain) // Remove default button styling for NavigationLink
 
             Spacer()
 
             // Delete Button (if current user has permission)
             if canDeleteComment {
-                Menu {
-                    Button(role: .destructive) {
-                        onDelete?() // Use passed in action
+                    Menu {
+                        Button(role: .destructive) {
+                            _Concurrency.Task { await onDelete?() }
+                        } label: {
+                            Label("刪除", systemImage: "trash")
+                        }
                     } label: {
-                        Label("刪除", systemImage: "trash")
+                        Image(systemName: "ellipsis")
+                            .foregroundColor(.secondary)
                     }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .foregroundColor(.secondary)
-                }
             }
         }
         .padding(AppDesignSystem.paddingMedium)
         .glassmorphicCard(cornerRadius: AppDesignSystem.cornerRadiusMedium, material: .regularMaterial)
         .task { // Use .task to asynchronously determine if delete button should be shown
             canDeleteComment = await commentsViewModel.canDelete(comment: comment)
+        }
+    }
+    
+    private var authorInfoView: some View {
+        HStack(alignment: .top, spacing: AppDesignSystem.paddingSmall) {
+            Circle()
+                .fill(Color.secondary.opacity(0.2))
+                .frame(width: 36, height: 36)
+                .overlay(
+                    Text(String(comment.author?.name.prefix(1) ?? "?").uppercased())
+                        .font(AppDesignSystem.captionFont.weight(.medium))
+                        .foregroundColor(.secondary)
+                )
+
+            VStack(alignment: .leading, spacing: AppDesignSystem.paddingSmall / 2) {
+                HStack {
+                    Text(comment.author?.name ?? "用戶")
+                        .font(AppDesignSystem.captionFont.weight(.semibold))
+                        .foregroundColor(.primary)
+
+                    Spacer()
+
+                    Text(comment.comment.createdAt.formatShort())
+                        .font(AppDesignSystem.captionFont)
+                        .foregroundColor(.secondary)
+                }
+
+                Text(comment.comment.contentText)
+                    .font(AppDesignSystem.bodyFont)
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }

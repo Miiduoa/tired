@@ -34,7 +34,7 @@ class FeedViewModel: ObservableObject {
     // MARK: - Post Loading
 
     func loadInitialPosts() {
-        guard let userId = userId else { return } // User must be logged in
+        guard userId != nil else { return } // User must be logged in
 
         isLoading = true
         isPaginating = false
@@ -46,7 +46,7 @@ class FeedViewModel: ObservableObject {
     }
 
     func loadMorePosts() {
-        guard canLoadMore, !isLoading, !isPaginating, let userId = userId else { return }
+        guard canLoadMore, !isLoading, !isPaginating, userId != nil else { return }
 
         isPaginating = true
         _Concurrency.Task { await loadPosts(appending: true) }
@@ -148,24 +148,29 @@ class FeedViewModel: ObservableObject {
     // MARK: - Actions
 
     /// 創建新貼文
-    func createPost(text: String, organizationId: String?, imageUrls: [String]? = nil) async {
+    func createPost(text: String, organizationId: String?, imageUrls: [String]? = nil, postType: PostType) async -> Bool {
         guard let userId = userId else {
             ToastManager.shared.showToast(message: "用戶未登入", type: .error)
-            return
+            return false
         }
         
-        // Permission check for creating post in an organization
+        // Permission checks
         if let orgId = organizationId {
+            let permissionToCheck = postType == .announcement ? AppPermissions.createAnnouncementInOrg : AppPermissions.createPostInOrg
             do {
-                let hasPerm = try await permissionService.hasPermissionForCurrentUser(organizationId: orgId, permission: AppPermissions.createPostInOrg)
+                let hasPerm = try await permissionService.hasPermissionForCurrentUser(organizationId: orgId, permission: permissionToCheck)
                 guard hasPerm else {
-                    ToastManager.shared.showToast(message: "您沒有權限在此組織中創建貼文。", type: .error)
-                    return
+                    let message = postType == .announcement ? "您沒有權限在此組織中發布公告。" : "您沒有權限在此組織中創建貼文。"
+                    ToastManager.shared.showToast(message: message, type: .error)
+                    return false
                 }
             } catch {
                 ToastManager.shared.showToast(message: "檢查權限失敗: \(error.localizedDescription)", type: .error)
-                return
+                return false
             }
+        } else if postType == .announcement {
+            ToastManager.shared.showToast(message: "公告只能在組織中發布。", type: .error)
+            return false
         }
 
         let post = Post(
@@ -173,7 +178,8 @@ class FeedViewModel: ObservableObject {
             organizationId: organizationId,
             contentText: text,
             imageUrls: imageUrls,
-            visibility: organizationId != nil ? .orgMembers : .public
+            visibility: organizationId != nil ? .orgMembers : .public,
+            postType: postType
         )
 
         do {
@@ -183,15 +189,17 @@ class FeedViewModel: ObservableObject {
             if let newPost = enriched.first {
                 await MainActor.run { self.posts.insert(newPost, at: 0) } // Optimistically add new post
             }
+            return true
         } catch {
             print("❌ Error creating post: \(error)")
             ToastManager.shared.showToast(message: "發布貼文失敗: \(error.localizedDescription)", type: .error)
+            return false
         }
     }
 
-    /// 點讚/取消點讚
-    func toggleReaction(post: PostWithAuthor) async {
-        guard let postId = post.post.id, let userId = userId else { return }
+    /// 點讚/取消點讚，回傳是否成功
+    func toggleReaction(post: PostWithAuthor) async -> Bool {
+        guard let postId = post.post.id, let userId = userId else { return false }
 
         do {
             try await postService.toggleReaction(postId: postId, userId: userId)
@@ -212,9 +220,12 @@ class FeedViewModel: ObservableObject {
                     ToastManager.shared.showToast(message: updated.hasUserReacted ? "已點讚！" : "已取消點讚！", type: .success)
                 }
             }
+
+            return true
         } catch {
             print("❌ Error toggling reaction: \(error)")
             ToastManager.shared.showToast(message: "點讚失敗: \(error.localizedDescription)", type: .error)
+            return false
         }
     }
 

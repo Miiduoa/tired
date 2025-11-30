@@ -64,49 +64,93 @@ class TaskDependencyService {
 
     // MARK: - Topological Sorting
 
-    /// 按依赖关系排序任务（拓扑排序）
-    /// 依赖的任务会排在被依赖的任务之前
-    func topologicalSort(_ tasks: [Task]) -> [Task] {
-        var sorted: [Task] = []
-        var visited: Set<String> = []
-        var visiting: Set<String> = []
-
+    /// 按依赖关系排序任务（拓扑排序，支持优先级决策）
+    /// 依赖的任务会排在被依赖的任务之前，若有多个可排任务，则按优先级/截止时间/创建时间择优
+    func topologicalSort(_ tasks: [Task], preferPriority: Bool = false) -> [Task] {
+        // 以 ID 为键建立图结构；若缺少 ID，则生成临时 ID 以避免崩溃
+        var taskMap: [String: Task] = [:]
         for task in tasks {
-            topologicalSortDFS(task, allTasks: tasks, visited: &visited, visiting: &visiting, sorted: &sorted)
+            let key = task.id ?? UUID().uuidString
+            taskMap[key] = task
         }
 
-        return sorted
-    }
+        var inDegree: [String: Int] = [:]
+        var graph: [String: [String]] = [:]
+        taskMap.keys.forEach { inDegree[$0] = 0 }
 
-    private func topologicalSortDFS(
-        _ task: Task,
-        allTasks: [Task],
-        visited: inout Set<String>,
-        visiting: inout Set<String>,
-        sorted: inout [Task]
-    ) {
-        let taskId = task.id ?? ""
-
-        if visited.contains(taskId) {
-            return  // 已访问
-        }
-
-        if visiting.contains(taskId) {
-            return  // 正在访问（检测到循环）
-        }
-
-        visiting.insert(taskId)
-
-        // 先访问所有依赖的任务
-        for depId in task.dependsOnTaskIds {
-            if let depTask = allTasks.first(where: { $0.id == depId }) {
-                topologicalSortDFS(depTask, allTasks: allTasks, visited: &visited, visiting: &visiting, sorted: &sorted)
+        // 建图并统计入度
+        for (taskId, task) in taskMap {
+            for depId in task.dependsOnTaskIds {
+                // 仅对当前待排程集合中的依赖建立约束；缺失的依赖视为已满足
+                guard taskMap[depId] != nil else { continue }
+                inDegree[taskId, default: 0] += 1
+                graph[depId, default: []].append(taskId)
             }
         }
 
-        visiting.remove(taskId)
-        visited.insert(taskId)
-        sorted.append(task)
+        // 允许依赖满足的任务进入队列
+        var readyQueue: [String] = inDegree.filter { $0.value == 0 }.map { $0.key }
+
+        func taskPriorityComparator(_ lhsTask: Task, _ rhsTask: Task) -> Bool {
+            // 高优先级 > 低优先级
+            let priorityScore: [TaskPriority: Int] = [.high: 3, .medium: 2, .low: 1]
+            let lhsPriority = priorityScore[lhsTask.priority] ?? 0
+            let rhsPriority = priorityScore[rhsTask.priority] ?? 0
+            if lhsPriority != rhsPriority {
+                return lhsPriority > rhsPriority
+            }
+
+            // 截止日越早越优先
+            if let d1 = lhsTask.deadlineAt, let d2 = rhsTask.deadlineAt, d1 != d2 {
+                return d1 < d2
+            }
+
+            // 创建时间越早越优先（保持稳定性）
+            return lhsTask.createdAt < rhsTask.createdAt
+        }
+
+        func priorityComparator(lhsId: String, rhsId: String) -> Bool {
+            guard
+                let lhsTask = taskMap[lhsId],
+                let rhsTask = taskMap[rhsId]
+            else { return false }
+            return taskPriorityComparator(lhsTask, rhsTask)
+        }
+
+        var sorted: [Task] = []
+        var processedIds: Set<String> = []
+
+        while !readyQueue.isEmpty {
+            if preferPriority {
+                readyQueue.sort(by: priorityComparator)
+            }
+
+            let currentId = readyQueue.removeFirst()
+            guard let currentTask = taskMap[currentId] else { continue }
+            processedIds.insert(currentId)
+            sorted.append(currentTask)
+
+            for neighbor in graph[currentId] ?? [] {
+                inDegree[neighbor, default: 0] -= 1
+                if inDegree[neighbor, default: 0] == 0 {
+                    readyQueue.append(neighbor)
+                }
+            }
+        }
+
+        // 若存在循环依赖或缺失，补齐剩余任务并按优先级兜底排序
+        if sorted.count < taskMap.count {
+            let remainingIds = taskMap.keys.filter { !processedIds.contains($0) }
+            let remaining = remainingIds.compactMap { taskMap[$0] }
+
+            let fallback = preferPriority
+                ? remaining.sorted(by: taskPriorityComparator)
+                : remaining
+
+            sorted.append(contentsOf: fallback)
+        }
+
+        return sorted
     }
 
     // MARK: - Scheduling with Dependencies
@@ -117,7 +161,7 @@ class TaskDependencyService {
         options: AutoPlanService.AutoPlanOptions
     ) -> [Task] {
         // 首先按依赖关系排序
-        let sortedTasks = topologicalSort(tasks)
+        let sortedTasks = topologicalSort(tasks, preferPriority: true)
 
         // 对排序后的任务进行自动排程
         let autoPlanService = AutoPlanService()

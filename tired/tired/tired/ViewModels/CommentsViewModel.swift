@@ -73,10 +73,10 @@ class CommentsViewModel: ObservableObject {
         }
     }
 
-    func addComment(text: String) async {
+    func addComment(text: String) async -> Bool {
         guard let userId = userId else {
             ToastManager.shared.showToast(message: "用戶未登入", type: .error)
-            return
+            return false
         }
         
         // Permission check for adding comment in an organization post
@@ -85,33 +85,31 @@ class CommentsViewModel: ObservableObject {
                 let hasPerm = try await permissionService.hasPermissionForCurrentUser(organizationId: orgId, permission: AppPermissions.createPostCommentInOrg)
                 guard hasPerm else {
                     ToastManager.shared.showToast(message: "您沒有權限在此組織貼文下發表評論。", type: .error)
-                    return
+                    return false
                 }
             } catch {
                 ToastManager.shared.showToast(message: "檢查權限失敗: \(error.localizedDescription)", type: .error)
-                return
+                return false
             }
         }
 
-        await MainActor.run {
-            isSending = true
-        }
+        await MainActor.run { isSending = true }
 
         do {
             try await postService.addComment(postId: postId, userId: userId, text: text)
             ToastManager.shared.showToast(message: "評論已發布！", type: .success)
+            await MainActor.run { isSending = false }
+            return true
         } catch {
             print("❌ Error adding comment: \(error)")
             ToastManager.shared.showToast(message: "發布評論失敗: \(error.localizedDescription)", type: .error)
-        }
-
-        await MainActor.run {
-            isSending = false
+            await MainActor.run { isSending = false }
+            return false
         }
     }
 
-    func deleteComment(_ comment: Comment) async {
-        guard let commentId = comment.id, let currentUserId = userId else { return }
+    func deleteComment(_ comment: Comment) async -> Bool {
+        guard let commentId = comment.id, let currentUserId = userId else { return false }
 
         do {
             var hasPermission = false
@@ -126,7 +124,7 @@ class CommentsViewModel: ObservableObject {
 
             guard hasPermission else {
                 ToastManager.shared.showToast(message: "您沒有權限刪除此評論。", type: .error)
-                return
+                return false
             }
 
             try await postService.deleteComment(id: commentId)
@@ -135,9 +133,11 @@ class CommentsViewModel: ObservableObject {
             await MainActor.run {
                 comments.removeAll(where: { $0.comment.id == commentId })
             }
+            return true
         } catch {
             print("❌ Error deleting comment: \(error)")
             ToastManager.shared.showToast(message: "刪除評論失敗: \(error.localizedDescription)", type: .error)
+            return false
         }
     }
     

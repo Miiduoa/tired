@@ -23,13 +23,13 @@ enum RecurrenceRule: Codable, Equatable {
         case .weekends:
             return "周末 (周六-周日)"
         case .weekly(let day):
-            return "每周\(dayName(day))"
+            return "每周\(RecurrenceRule.dayName(day))"
         case .biweekly(let day):
-            return "每两周\(dayName(day))"
+            return "每两周\(RecurrenceRule.dayName(day))"
         case .monthly(let dayOfMonth):
             return "每月 \(dayOfMonth) 号"
         case .custom(let days):
-            let dayNames = days.sorted().map { dayName($0) }.joined(separator: "、")
+            let dayNames = days.sorted().map { RecurrenceRule.dayName($0) }.joined(separator: "、")
             return "自定义: \(dayNames)"
         }
     }
@@ -113,6 +113,7 @@ struct RecurringTask: Codable, Identifiable {
 
     // 例外处理
     var skipDates: [Date] = []               // 跳过的日期
+    var isPaused: Bool = false               // 是否暂停（如度假模式）
 
     var createdAt: Date
     var updatedAt: Date
@@ -121,7 +122,7 @@ struct RecurringTask: Codable, Identifiable {
         case id, userId, title, description, category, priority, estimatedMinutes
         case recurrenceRule, startDate, endDate
         case generatedInstanceIds, nextGenerationDate, lastGeneratedDate
-        case skipDates, createdAt, updatedAt
+        case skipDates, isPaused, createdAt, updatedAt
     }
 
     init(
@@ -136,6 +137,7 @@ struct RecurringTask: Codable, Identifiable {
         startDate: Date,
         endDate: Date? = nil,
         nextGenerationDate: Date? = nil,
+        isPaused: Bool = false,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -150,6 +152,7 @@ struct RecurringTask: Codable, Identifiable {
         self.startDate = startDate
         self.endDate = endDate
         self.nextGenerationDate = nextGenerationDate ?? startDate
+        self.isPaused = isPaused
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

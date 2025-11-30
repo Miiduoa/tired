@@ -137,7 +137,7 @@ class SubtaskService: ObservableObject {
         milestone.createdAt = Date()
         milestone.updatedAt = Date()
 
-        try await taskService.createTask(milestone)
+        _ = try await taskService.createTask(milestone)
     }
 
     /// 获取项目的所有里程碑

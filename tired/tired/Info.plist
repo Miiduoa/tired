@@ -8,12 +8,29 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>CFBundleDisplayName</string>
+			<string>Google Sign-In</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>com.googleusercontent.apps.566724358335-04e0heqf7hato4hv2kb62pkfk9fgd366</string>
 			</array>
 		</dict>
 	</array>
+	<key>GIDClientID</key>
+	<string>566724358335-04e0heqf7hato4hv2kb62pkfk9fgd366.apps.googleusercontent.com</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Tired 需要訪問您的相簿以發布照片、更換頭像或分享圖片。</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Tired 需要訪問您的相機以拍攝照片並發布。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Tired 需要訪問您的麥克風以錄製音訊。</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
+    <key>AlgoliaAppID</key>
+    <string>YOUR_ALGOLIA_APP_ID</string>
+    <key>AlgoliaSearchOnlyAPIKey</key>
+    <string>YOUR_ALGOLIA_SEARCH_API_KEY</string>
 </dict>
 </plist>

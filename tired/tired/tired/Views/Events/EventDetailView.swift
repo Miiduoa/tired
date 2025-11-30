@@ -9,6 +9,7 @@ struct EventDetailView: View {
 
     @State private var showingEditView = false
     @State private var showingDeleteConfirmation = false
+    @State private var isProcessingDelete = false
 
     init(eventId: String) {
         _viewModel = StateObject(wrappedValue: EventDetailViewModel(eventId: eventId))
@@ -44,15 +45,15 @@ struct EventDetailView: View {
 
                             // Event Details
                             VStack(alignment: .leading, spacing: 12) {
-                                InfoRow(icon: "calendar", iconColor: .blue, title: "開始時間", value: event.startAt.formatDateTime())
+                                EventInfoRow(icon: "calendar", iconColor: .blue, title: "開始時間", value: event.startAt.formatDateTime())
                                 if let endAt = event.endAt {
-                                    InfoRow(icon: "calendar.badge.clock", iconColor: .blue, title: "結束時間", value: endAt.formatDateTime())
+                                    EventInfoRow(icon: "calendar.badge.clock", iconColor: .blue, title: "結束時間", value: endAt.formatDateTime())
                                 }
                                 if let location = event.location {
-                                    InfoRow(icon: "mappin.and.ellipse", iconColor: .red, title: "地點", value: location)
+                                    EventInfoRow(icon: "mappin.and.ellipse", iconColor: .red, title: "地點", value: location)
                                 }
                                 if let capacity = event.capacity {
-                                    InfoRow(icon: "person.2.fill", iconColor: .green, title: "人數限制", value: "\(capacity) 人")
+                                    EventInfoRow(icon: "person.2.fill", iconColor: .green, title: "人數限制", value: "\(capacity) 人")
                                 }
                                 if let description = event.description, !description.isEmpty {
                                     VStack(alignment: .leading, spacing: 8) {
@@ -105,12 +106,26 @@ struct EventDetailView: View {
                     }
                     .confirmationDialog("刪除活動", isPresented: $showingDeleteConfirmation) {
                         Button("刪除", role: .destructive) {
-                            viewModel.deleteEvent()
-                            dismiss() // Dismiss after delete attempt
+                            _Concurrency.Task {
+                                guard !isProcessingDelete else { return }
+                                await MainActor.run { isProcessingDelete = true }
+                                let success = await viewModel.deleteEventAsync()
+                                await MainActor.run { isProcessingDelete = false }
+                                if success {
+                                    dismiss()
+                                }
+                            }
                         }
-                        Button("取消", role: .cancel) {}
+                        Button("取消", role: .cancel) {
+                            // 明確關閉刪除確認
+                            showingDeleteConfirmation = false
+                        }
                     } message: {
-                        Text("您確定要刪除此活動嗎？此操作無法撤銷。")
+                        if isProcessingDelete {
+                            Text("正在刪除，請稍候...")
+                        } else {
+                            Text("您確定要刪除此活動嗎？此操作無法撤銷。")
+                        }
                     }
                 } else {
                     Text("無法載入活動詳情。\(viewModel.errorMessage ?? "")")
@@ -142,19 +157,19 @@ class EventDetailViewModel: ObservableObject {
     }
     
     func fetchEvent() {
-        isLoading = true
-        errorMessage = nil
-        
-        Task {
+        _Concurrency.Task {
+            await MainActor.run {
+                self.isLoading = true
+                self.errorMessage = nil
+            }
+
             do {
                 let fetchedEvent = try await eventService.fetchEvent(id: eventId)
                 await MainActor.run {
                     self.event = fetchedEvent
                     self.isLoading = false
-                    if let orgId = fetchedEvent.organizationId {
-                        Task {
-                            await self.fetchOrganizationName(orgId: orgId)
-                        }
+                    _Concurrency.Task {
+                        await self.fetchOrganizationName(orgId: fetchedEvent.organizationId)
                     }
                 }
             } catch {
@@ -180,9 +195,9 @@ class EventDetailViewModel: ObservableObject {
     }
     
     func deleteEvent() {
-        guard let event = event else { return }
+        guard event != nil else { return }
         
-        Task {
+        _Concurrency.Task {
             do {
                 try await eventService.deleteEvent(id: eventId)
             } catch {
@@ -190,6 +205,30 @@ class EventDetailViewModel: ObservableObject {
                     self.errorMessage = "刪除失敗: \(error.localizedDescription)"
                 }
             }
+        }
+    }
+
+    // Async wrapper that returns success state so UI can react accordingly
+    func deleteEventAsync() async -> Bool {
+        guard event != nil else {
+            await MainActor.run {
+                self.errorMessage = "找不到活動"
+            }
+            return false
+        }
+
+        do {
+            try await eventService.deleteEvent(id: eventId)
+            await MainActor.run {
+                ToastManager.shared.showToast(message: "活動已刪除", type: .success)
+            }
+            return true
+        } catch {
+            await MainActor.run {
+                self.errorMessage = "刪除失敗: \(error.localizedDescription)"
+                ToastManager.shared.showToast(message: "刪除失敗: \(error.localizedDescription)", type: .error)
+            }
+            return false
         }
     }
     
@@ -222,7 +261,7 @@ class EventDetailViewModel: ObservableObject {
 }
 
 // Helper view for info rows
-struct InfoRow: View {
+private struct EventInfoRow: View {
     let icon: String
     let iconColor: Color
     let title: String
@@ -316,9 +355,9 @@ struct EditEventView: View {
     }
     
     private func updateEvent() {
-        isUpdating = true
-        
-        Task {
+        _Concurrency.Task {
+            await MainActor.run { isUpdating = true }
+
             do {
                 try await viewModel.updateEvent(
                     title: title,

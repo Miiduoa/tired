@@ -5,9 +5,10 @@ struct DayTasksCard: View {
     let date: Date
     let duration: Int
     let tasks: [Task]
-    let onToggle: (Task) -> Void
+    let onToggle: (Task) async -> Bool
+    let viewModel: TasksViewModel
 
-    private var isToday: Bool {
+    private var isTodayDate: Bool {
         Calendar.current.isDateInToday(date)
     }
 
@@ -18,9 +19,9 @@ struct DayTasksCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(date.formatLong())
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(isToday ? AppDesignSystem.accentColor : .primary)
+                        .foregroundColor(isTodayDate ? AppDesignSystem.accentColor : .primary)
 
-                    if isToday {
+                    if isTodayDate {
                         Text("今天")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(AppDesignSystem.accentColor)
@@ -57,16 +58,17 @@ struct DayTasksCard: View {
                 .padding(.vertical, AppDesignSystem.paddingSmall)
             } else {
                 ForEach(tasks) { task in
-                    CompactTaskRow(task: task) {
-                        onToggle(task)
+                    NavigationLink(destination: TaskDetailView(viewModel: viewModel, task: task)) {
+                    CompactTaskRow(task: task, isBlocked: viewModel.isTaskBlocked(task)) { await onToggle(task) }
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
         .padding(AppDesignSystem.paddingMedium)
         .glassmorphicCard()
         .overlay(
-            isToday ?
+            isTodayDate ?
             RoundedRectangle(cornerRadius: AppDesignSystem.cornerRadiusMedium)
                 .stroke(AppDesignSystem.accentColor, lineWidth: 2) :
             nil

@@ -19,11 +19,8 @@ class TaskService: ObservableObject {
     /// 獲取今天的任務（實時監聽）
     func fetchTodayTasks(userId: String) -> AnyPublisher<[Task], Error> {
         let subject = PassthroughSubject<[Task], Error>()
-        let calendar = Calendar.current
-        let todayStart = calendar.startOfDay(for: Date())
-        let todayEnd = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? todayStart
 
-        db.collection("tasks")
+        let listener = db.collection("tasks")
             .whereField("userId", isEqualTo: userId)
             .whereField("isDone", isEqualTo: false)
             .addSnapshotListener { snapshot, error in
@@ -37,23 +34,36 @@ class TaskService: ObservableObject {
                     return
                 }
 
-                let tasks = documents.compactMap { doc -> Task? in
-                    try? doc.data(as: Task.self)
-                }.filter { task in
-                    // 今天的任務：plannedDate 是今天，或者沒有 plannedDate 但 deadline 是今天
-                    if let planned = task.plannedDate {
-                        return planned >= todayStart && planned < todayEnd
+                let calendar = Calendar.current
+                let startOfToday = calendar.startOfDay(for: Date())
+                let tasks = documents
+                    .compactMap { doc -> Task? in
+                        try? doc.data(as: Task.self)
                     }
-                    if let deadline = task.deadlineAt {
-                        return deadline >= todayStart && deadline < todayEnd
+                    .filter { task in
+                        // 今日或逾期的任務（包含僅有 deadline 而無 plannedDate 的情況）
+                        if task.isOverdue { return true }
+                        if task.isTaskForToday { return true }
+
+                        // 額外保險：若 plannedDate 在今天
+                        if let planned = task.plannedDate,
+                           calendar.isDate(planned, inSameDayAs: startOfToday) {
+                            return true
+                        }
+                        // 若 deadline 在今天
+                        if let deadline = task.deadlineAt,
+                           calendar.isDate(deadline, inSameDayAs: startOfToday) {
+                            return true
+                        }
+                        return false
                     }
-                    return false
-                }
 
                 subject.send(tasks)
             }
 
-        return subject.eraseToAnyPublisher()
+        return subject
+            .handleEvents(receiveCompletion: { _ in listener.remove() }, receiveCancel: { listener.remove() })
+            .eraseToAnyPublisher()
     }
 
     /// 獲取本週的任務（實時監聽）
@@ -63,7 +73,7 @@ class TaskService: ObservableObject {
         let weekStart = calendar.dateInterval(of: .weekOfYear, for: Date())?.start ?? Date()
         let weekEnd = calendar.date(byAdding: .day, value: 7, to: weekStart) ?? weekStart
 
-        db.collection("tasks")
+        let listener = db.collection("tasks")
             .whereField("userId", isEqualTo: userId)
             .whereField("isDone", isEqualTo: false)
             .addSnapshotListener { snapshot, error in
@@ -80,9 +90,12 @@ class TaskService: ObservableObject {
                 let tasks = documents.compactMap { doc -> Task? in
                     try? doc.data(as: Task.self)
                 }.filter { task in
-                    // 本週的任務：plannedDate 在本週範圍內
+                    // 本週的任務：plannedDate 在本週範圍內，或無排程但 deadline 在本週
                     if let planned = task.plannedDate {
                         return planned >= weekStart && planned < weekEnd
+                    }
+                    if let deadline = task.deadlineAt {
+                        return deadline >= weekStart && deadline < weekEnd
                     }
                     return false
                 }
@@ -90,14 +103,16 @@ class TaskService: ObservableObject {
                 subject.send(tasks)
             }
 
-        return subject.eraseToAnyPublisher()
+        return subject
+            .handleEvents(receiveCompletion: { _ in listener.remove() }, receiveCancel: { listener.remove() })
+            .eraseToAnyPublisher()
     }
 
     /// 獲取未排程的任務（Backlog，實時監聽）
     func fetchBacklogTasks(userId: String) -> AnyPublisher<[Task], Error> {
         let subject = PassthroughSubject<[Task], Error>()
 
-        db.collection("tasks")
+        let listener = db.collection("tasks")
             .whereField("userId", isEqualTo: userId)
             .whereField("isDone", isEqualTo: false)
             .addSnapshotListener { snapshot, error in
@@ -121,7 +136,9 @@ class TaskService: ObservableObject {
                 subject.send(tasks)
             }
 
-        return subject.eraseToAnyPublisher()
+        return subject
+            .handleEvents(receiveCompletion: { _ in listener.remove() }, receiveCancel: { listener.remove() })
+            .eraseToAnyPublisher()
     }
 
     /// 搜尋任務（根據關鍵字）
@@ -129,7 +146,7 @@ class TaskService: ObservableObject {
         let subject = PassthroughSubject<[Task], Error>()
         let lowercasedKeyword = keyword.lowercased()
 
-        db.collection("tasks")
+        let listener = db.collection("tasks")
             .whereField("userId", isEqualTo: userId)
             .addSnapshotListener { snapshot, error in
                 if let error = error {
@@ -152,7 +169,9 @@ class TaskService: ObservableObject {
                 subject.send(tasks)
             }
 
-        return subject.eraseToAnyPublisher()
+        return subject
+            .handleEvents(receiveCompletion: { _ in listener.remove() }, receiveCancel: { listener.remove() })
+            .eraseToAnyPublisher()
     }
 
     /// 獲取已過期的任務
@@ -160,7 +179,7 @@ class TaskService: ObservableObject {
         let subject = PassthroughSubject<[Task], Error>()
         let now = Date()
 
-        db.collection("tasks")
+        let listener = db.collection("tasks")
             .whereField("userId", isEqualTo: userId)
             .whereField("isDone", isEqualTo: false)
             .addSnapshotListener { snapshot, error in
@@ -186,14 +205,16 @@ class TaskService: ObservableObject {
                 subject.send(tasks)
             }
 
-        return subject.eraseToAnyPublisher()
+        return subject
+            .handleEvents(receiveCompletion: { _ in listener.remove() }, receiveCancel: { listener.remove() })
+            .eraseToAnyPublisher()
     }
 
     /// 獲取所有任務（包括已完成）
     func fetchAllTasks(userId: String) -> AnyPublisher<[Task], Error> {
         let subject = PassthroughSubject<[Task], Error>()
 
-        db.collection("tasks")
+        let listener = db.collection("tasks")
             .whereField("userId", isEqualTo: userId)
             .order(by: "createdAt", descending: true)
             .addSnapshotListener { snapshot, error in
@@ -214,7 +235,9 @@ class TaskService: ObservableObject {
                 subject.send(tasks)
             }
 
-        return subject.eraseToAnyPublisher()
+        return subject
+            .handleEvents(receiveCompletion: { _ in listener.remove() }, receiveCancel: { listener.remove() })
+            .eraseToAnyPublisher()
     }
 
     // MARK: - Fetch Tasks (Paginated)
@@ -247,8 +270,8 @@ class TaskService: ObservableObject {
         case .thisWeek:
             // Similar complexity as .today for pure Firestore query.
             // Fetch active tasks and filter client-side.
-            guard let startOfWeek = Date().startOfWeek(),
-                  let endOfWeek = Calendar.current.date(byAdding: .day, value: 7, to: startOfWeek) else {
+            let startOfWeek = Date.startOfWeek()
+            guard let endOfWeek = Calendar.current.date(byAdding: .day, value: 7, to: startOfWeek) else {
                 return ([], nil)
             }
             query = query.whereField("plannedDate", isGreaterThanOrEqualTo: startOfWeek)
@@ -276,6 +299,12 @@ class TaskService: ObservableObject {
         return (tasks, snapshot.documents.last)
     }
 
+    /// 根據ID獲取單個任務
+    func fetchTask(id: String) async throws -> Task? {
+        let document = try await db.collection("tasks").document(id).getDocument()
+        return try? document.data(as: Task.self)
+    }
+    
     /// 獲取所有活躍任務（非分頁，用於 client-side 過濾 Today/Week）
     func fetchActiveTasks(userId: String) -> AnyPublisher<[Task], Error> {
         let subject = PassthroughSubject<[Task], Error>()
@@ -303,6 +332,15 @@ class TaskService: ObservableObject {
 
         return subject.eraseToAnyPublisher()
     }
+    
+    /// 獲取單個任務
+    func fetchTask(id: String) async throws -> Task {
+        let snapshot = try await db.collection("tasks").document(id).getDocument()
+        guard let task = try? snapshot.data(as: Task.self) else {
+            throw NSError(domain: "TaskService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Task not found"])
+        }
+        return task
+    }
 
     // MARK: - CRUD Operations
 
@@ -311,6 +349,9 @@ class TaskService: ObservableObject {
         var newTask = task
         newTask.createdAt = Date()
         newTask.updatedAt = Date()
+        
+        // 自動計算 isToday 欄位
+        newTask.isToday = computeIsToday(for: newTask)
 
         let ref = try db.collection("tasks").addDocument(from: newTask)
         newTask.id = ref.documentID
@@ -329,11 +370,34 @@ class TaskService: ObservableObject {
 
         var updatedTask = task
         updatedTask.updatedAt = Date()
+        
+        // 自動計算 isToday 欄位
+        updatedTask.isToday = computeIsToday(for: updatedTask)
 
         try db.collection("tasks").document(id).setData(from: updatedTask)
         
         // Reschedule notification
         NotificationService.shared.scheduleNotification(for: updatedTask)
+    }
+    
+    /// 計算任務是否屬於「今天」
+    private func computeIsToday(for task: Task) -> Bool {
+        let calendar = Calendar.current
+        
+        // 如果已完成，不算今天的任務
+        if task.isDone { return false }
+        
+        // 優先檢查 plannedDate
+        if let plannedDate = task.plannedDate {
+            return calendar.isDateInToday(plannedDate)
+        }
+        
+        // 如果沒有 plannedDate 但有 deadlineAt，且 deadline 是今天
+        if let deadline = task.deadlineAt {
+            return calendar.isDateInToday(deadline)
+        }
+        
+        return false
     }
 
     /// 删除任务
@@ -487,8 +551,8 @@ class TaskService: ObservableObject {
         }
 
         // 保存成就
-        if let achievement = achievement {
-            try await db.collection("userAchievements").document(achievement.id).setData(from: achievement)
+        if let achievement = achievement, let achievementId = achievement.id {
+            try db.collection("userAchievements").document(achievementId).setData(from: achievement)
         }
 
         return achievement
@@ -511,5 +575,18 @@ class TaskService: ObservableObject {
         }
 
         try await batch.commit()
+    }
+    
+    /// 還原已刪除的任務（保持原 ID）
+    func restoreTask(_ task: Task) async throws {
+        guard let id = task.id else {
+            throw NSError(domain: "TaskService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Task ID is missing for restore"])
+        }
+        
+        // 使用 setData 來指定 ID 寫入
+        try db.collection("tasks").document(id).setData(from: task)
+        
+        // 重新排程通知
+        NotificationService.shared.scheduleNotification(for: task)
     }
 }

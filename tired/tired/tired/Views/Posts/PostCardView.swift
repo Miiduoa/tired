@@ -7,16 +7,20 @@ import FirebaseAuth
 struct PostCardView: View {
     let post: Post
     var postWithAuthor: PostWithAuthor? // Optional: For richer display in Feed
-    
+
+    // Optional feed view model to allow CommentsView to update the same feed
+    var feedViewModel: FeedViewModel? = nil
+
     // Callbacks for actions
-    var onLike: (() async -> Void)?
+    var onLike: (() async -> Bool)?
     var onComment: (() -> Void)?
-    var onDelete: (() async -> Void)?
+    var onDelete: (() async -> Bool)?
 
     @State private var showingComments = false
     @State private var reactionCount = 0
     @State private var commentCount = 0
     @State private var hasUserReacted = false
+    @State private var isProcessingLike = false
 
     private let postService = PostService()
     private var userId: String? {
@@ -60,12 +64,60 @@ struct PostCardView: View {
             HStack(spacing: AppDesignSystem.paddingLarge) {
                 // Like Button
                 Button {
-                    onLike?()
-                    toggleLike() // Also perform internal toggle
+                    _Concurrency.Task {
+                        guard !isProcessingLike else { return }
+                        await MainActor.run { isProcessingLike = true }
+
+                        defer {
+                            _Concurrency.Task {
+                                try? await _Concurrency.Task.sleep(nanoseconds: 120_000_000)
+                                await MainActor.run { isProcessingLike = false }
+                            }
+                        }
+
+                        guard let postId = post.id else {
+                            await MainActor.run { isProcessingLike = false }
+                            return
+                        }
+
+                        do {
+                            if let onLike {
+                                let success = await onLike()
+                                if success {
+                                    await MainActor.run {
+                                        if hasUserReacted {
+                                            reactionCount = max(0, reactionCount - 1)
+                                        } else {
+                                            reactionCount += 1
+                                        }
+                                        hasUserReacted.toggle()
+                                    }
+                                } else {
+                                    ToastManager.shared.showToast(message: "點讚失敗，請稍後再試。", type: .error)
+                                }
+                            } else if let userId = userId {
+                                try await postService.toggleReaction(postId: postId, userId: userId)
+                                // update local counts on success
+                                await MainActor.run {
+                                    if hasUserReacted {
+                                        reactionCount = max(0, reactionCount - 1)
+                                    } else {
+                                        reactionCount += 1
+                                    }
+                                    hasUserReacted.toggle()
+                                }
+                            }
+                        } catch {
+                            print("❌ Error toggling reaction: \(error)")
+                        }
+                    }
                 } label: {
-                    Label("\(reactionCount)", systemImage: hasUserReacted ? "heart.fill" : "heart")
-                        .font(AppDesignSystem.captionFont)
-                        .foregroundColor(hasUserReacted ? .red : .secondary)
+                    HStack(spacing: 6) {
+                        if isProcessingLike { ProgressView().scaleEffect(0.8) }
+                        Label("\(reactionCount)", systemImage: hasUserReacted ? "heart.fill" : "heart")
+                            .font(AppDesignSystem.captionFont)
+                            .foregroundColor(hasUserReacted ? .red : .secondary)
+                    }
                 }
                 .buttonStyle(.plain) // Remove default button styling
 
@@ -93,9 +145,19 @@ struct PostCardView: View {
         .sheet(isPresented: $showingComments) {
             // CommentsView needs postWithAuthor and feedViewModel
             if let postWithAuthor = postWithAuthor {
-                CommentsView(postWithAuthor: postWithAuthor, feedViewModel: FeedViewModel()) // Pass a dummy FeedViewModel or refactor
+                // 使用傳入的 feedViewModel（若有），否則創建新的 FeedViewModel
+                CommentsView(postWithAuthor: postWithAuthor, feedViewModel: feedViewModel ?? FeedViewModel())
             } else {
-                CommentsView(post: post) // Fallback for simple post
+                // 對於簡單的post，創建一個基本的PostWithAuthor
+                let basicPostWithAuthor = PostWithAuthor(
+                    post: post,
+                    author: nil,
+                    organization: nil,
+                    reactionCount: reactionCount,
+                    commentCount: commentCount,
+                    hasUserReacted: hasUserReacted
+                )
+                CommentsView(postWithAuthor: basicPostWithAuthor, feedViewModel: feedViewModel ?? FeedViewModel())
             }
         }
         .task {
@@ -136,7 +198,7 @@ struct PostCardView: View {
     private func toggleLike() {
         guard let postId = post.id, let userId = userId else { return }
 
-        Task {
+        _Concurrency.Task {
             do {
                 try await postService.toggleReaction(postId: postId, userId: userId)
 
@@ -159,7 +221,8 @@ struct PostCardView: View {
 @available(iOS 17.0, *)
 struct FeedPostHeader: View {
     let postWithAuthor: PostWithAuthor
-    var onDelete: (() async -> Void)?
+    var onDelete: (() async -> Bool)?
+    @State private var isProcessingDelete = false
 
     var body: some View {
         HStack(spacing: AppDesignSystem.paddingSmall) {
@@ -183,7 +246,7 @@ struct FeedPostHeader: View {
                         if org.isVerified {
                             Image(systemName: "checkmark.seal.fill")
                                 .foregroundColor(AppDesignSystem.accentColor)
-                                .font(.system(size: AppDesignSystem.captionFont.pointSize))
+                                .font(AppDesignSystem.captionFont)
                         }
                     } else if let author = postWithAuthor.author {
                         Text(author.name)
@@ -214,13 +277,26 @@ struct FeedPostHeader: View {
             if let userId = FirebaseAuth.Auth.auth().currentUser?.uid, postWithAuthor.post.authorUserId == userId {
                 Menu {
                     Button(role: .destructive) {
-                        Task { await onDelete?() }
+                        _Concurrency.Task {
+                            guard !isProcessingDelete else { return }
+                            await MainActor.run { isProcessingDelete = true }
+                            let success = await (onDelete?() ?? true)
+                            if !success {
+                                ToastManager.shared.showToast(message: "刪除貼文失敗，請稍後再試。", type: .error)
+                            }
+                            await MainActor.run { isProcessingDelete = false }
+                        }
                     } label: {
                         Label("刪除", systemImage: "trash")
                     }
                 } label: {
-                    Image(systemName: "ellipsis")
-                        .foregroundColor(.secondary)
+                    if isProcessingDelete {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                    } else {
+                        Image(systemName: "ellipsis")
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
         }

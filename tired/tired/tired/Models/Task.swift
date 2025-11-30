@@ -2,9 +2,25 @@ import Foundation
 import FirebaseFirestore
 import FirebaseFirestoreSwift
 
+// MARK: - Task Type Enum (NEW)
+enum TaskType: String, Codable, CaseIterable {
+    case generic      // A standard task
+    case homework     // A homework assignment for a class
+    case work_item    // A work item assigned by a manager
+    
+    var displayName: String {
+        switch self {
+        case .generic: return "一般任務"
+        case .homework: return "作業"
+        case .work_item: return "工作項目"
+        }
+    }
+}
+
+
 // MARK: - Task (核心任務模型)
 
-struct Task: Codable, Identifiable {
+struct Task: Codable, Identifiable, Hashable {
     @DocumentID var id: String?
     var userId: String
 
@@ -12,10 +28,14 @@ struct Task: Codable, Identifiable {
     var sourceOrgId: String?
     var sourceAppInstanceId: String?
     var sourceType: TaskSourceType
+    
+    // 任務類型 (NEW)
+    var taskType: TaskType = .generic
 
     // 基本信息
     var title: String
     var description: String?
+    var assigneeUserIds: [String]?  // 任務負責人 (REPLACED: assigneeUserId: String?)
 
     // 分類與優先級
     var category: TaskCategory
@@ -31,6 +51,7 @@ struct Task: Codable, Identifiable {
     var plannedDate: Date?
     var plannedStartTime: Date?  // 具體開始時間
     var isDateLocked: Bool
+    var isToday: Bool?
 
     // 完成狀態
     var isDone: Bool
@@ -64,6 +85,9 @@ struct Task: Codable, Identifiable {
 
     // ✅ 新增：依賴關係
     var dependsOnTaskIds: [String] = []  // 前置任務 ID 列表
+    
+    // ✅ 新增：排序權重 (用於自定義排序)
+    var sortOrder: Int?
 
     var createdAt: Date
     var updatedAt: Date
@@ -71,10 +95,11 @@ struct Task: Codable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id, userId
         case sourceOrgId, sourceAppInstanceId, sourceType
-        case title, description
+        case taskType // NEW
+        case title, description, assigneeUserIds // REPLACED: assigneeUserId
         case category, priority, tags
         case deadlineAt, estimatedMinutes, actualMinutes
-        case plannedDate, plannedStartTime, isDateLocked
+        case plannedDate, plannedStartTime, isDateLocked, isToday
         case isDone, doneAt, completionPercentage
         case subtasks, parentTaskId, subtaskIds, isMilestone
         case recurrence, recurrenceParentId
@@ -82,6 +107,7 @@ struct Task: Codable, Identifiable {
         case reminderAt, reminderEnabled
         case comments, fileAttachments
         case tagIds, dependsOnTaskIds
+        case sortOrder
         case createdAt, updatedAt
     }
 
@@ -91,8 +117,10 @@ struct Task: Codable, Identifiable {
         sourceOrgId: String? = nil,
         sourceAppInstanceId: String? = nil,
         sourceType: TaskSourceType = .manual,
+        taskType: TaskType = .generic, // NEW
         title: String,
         description: String? = nil,
+        assigneeUserIds: [String]? = nil, // REPLACED: assigneeUserId
         category: TaskCategory,
         priority: TaskPriority = .medium,
         tags: [String]? = nil,
@@ -102,6 +130,7 @@ struct Task: Codable, Identifiable {
         plannedDate: Date? = nil,
         plannedStartTime: Date? = nil,
         isDateLocked: Bool = false,
+        isToday: Bool? = nil,
         isDone: Bool = false,
         doneAt: Date? = nil,
         completionPercentage: Int? = nil,
@@ -119,6 +148,7 @@ struct Task: Codable, Identifiable {
         fileAttachments: [FileAttachment]? = nil,
         tagIds: [String] = [],
         dependsOnTaskIds: [String] = [],
+        sortOrder: Int? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -127,8 +157,10 @@ struct Task: Codable, Identifiable {
         self.sourceOrgId = sourceOrgId
         self.sourceAppInstanceId = sourceAppInstanceId
         self.sourceType = sourceType
+        self.taskType = taskType // NEW
         self.title = title
         self.description = description
+        self.assigneeUserIds = assigneeUserIds // REPLACED: assigneeUserId
         self.category = category
         self.priority = priority
         self.tags = tags
@@ -138,6 +170,7 @@ struct Task: Codable, Identifiable {
         self.plannedDate = plannedDate
         self.plannedStartTime = plannedStartTime
         self.isDateLocked = isDateLocked
+        self.isToday = isToday
         self.isDone = isDone
         self.doneAt = doneAt
         self.completionPercentage = completionPercentage
@@ -155,6 +188,7 @@ struct Task: Codable, Identifiable {
         self.fileAttachments = fileAttachments
         self.tagIds = tagIds
         self.dependsOnTaskIds = dependsOnTaskIds
+        self.sortOrder = sortOrder
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -163,6 +197,11 @@ struct Task: Codable, Identifiable {
 // MARK: - Task Extensions
 
 extension Task {
+    /// 佔位任務，用於暫存或等待遠端載入
+    static var placeholder: Task {
+        Task(userId: "placeholder", title: "載入中", category: .personal)
+    }
+    
     /// 是否已過期
     var isOverdue: Bool {
         guard let deadline = deadlineAt, !isDone else { return false }
@@ -188,13 +227,18 @@ extension Task {
         return Double(minutes) / 60.0
     }
 
-    /// 是否為今天的任務
-    func isToday() -> Bool {
+    /// 是否為今天的任務 (Computed Property)
+    var isTaskForToday: Bool {
         guard let planned = plannedDate else {
             guard let deadline = deadlineAt else { return false }
             return Calendar.current.isDateInToday(deadline)
         }
         return Calendar.current.isDateInToday(planned)
+    }
+
+    /// 是否為今天的任務 (Method - Deprecated, kept for compatibility if needed, but renamed to avoid conflict)
+    func checkIsToday() -> Bool {
+        return isTaskForToday
     }
 
     /// 是否在本周
@@ -287,6 +331,34 @@ extension Task {
     var isOverdueOrUrgent: Bool {
         guard let deadline = deadlineAt, !isDone else { return false }
         return deadline <= Date()
+    }
+    
+    /// 是否有提醒設定且啟用
+    var hasReminder: Bool {
+        (reminderEnabled ?? false) && reminderAt != nil
+    }
+    
+    /// 兼容單一負責人的便捷存取；內部仍使用 `assigneeUserIds`
+    var assigneeUserId: String? {
+        get { assigneeUserIds?.first }
+        set {
+            if let newValue = newValue {
+                if var ids = assigneeUserIds {
+                    ids.removeAll { $0 == newValue }
+                    ids.insert(newValue, at: 0)
+                    assigneeUserIds = ids
+                } else {
+                    assigneeUserIds = [newValue]
+                }
+            } else {
+                assigneeUserIds = nil
+            }
+        }
+    }
+    
+    /// 是否存在前置依賴
+    var hasDependency: Bool {
+        !dependsOnTaskIds.isEmpty
     }
 }
 
@@ -409,20 +481,22 @@ struct TaskComment: Codable, Identifiable {
     var content: String
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
+    var mentionedUserIds: [String]? // For @mentions
 
     // For UI Display (不存儲到 Firestore)
     var author: UserProfile?
 
     enum CodingKeys: String, CodingKey {
-        case id, authorUserId, content, createdAt, updatedAt
+        case id, authorUserId, content, createdAt, updatedAt, mentionedUserIds
     }
 
-    init(id: String = UUID().uuidString, authorUserId: String, content: String, createdAt: Date = Date(), updatedAt: Date = Date(), author: UserProfile? = nil) {
+    init(id: String = UUID().uuidString, authorUserId: String, content: String, createdAt: Date = Date(), updatedAt: Date = Date(), mentionedUserIds: [String]? = nil, author: UserProfile? = nil) {
         self.id = id
         self.authorUserId = authorUserId
         self.content = content
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.mentionedUserIds = mentionedUserIds
         self.author = author
     }
 }
@@ -446,6 +520,7 @@ extension TaskComment: Hashable {
         hasher.combine(content)
         hasher.combine(createdAt)
         hasher.combine(updatedAt)
+        hasher.combine(mentionedUserIds)
     }
 }
 
@@ -489,6 +564,7 @@ enum TaskSortOption: String, CaseIterable {
     case category = "分類"
     case created = "創建時間"
     case urgency = "緊急程度"
+    case custom = "自定義"
 
     var icon: String {
         switch self {
@@ -497,7 +573,7 @@ enum TaskSortOption: String, CaseIterable {
         case .category: return "folder"
         case .created: return "clock"
         case .urgency: return "flame"
+        case .custom: return "arrow.up.arrow.down"
         }
     }
 }
-

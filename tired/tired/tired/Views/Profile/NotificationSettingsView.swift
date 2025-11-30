@@ -82,7 +82,7 @@ struct NotificationSettingsView: View {
             switch systemAuthStatus {
             case .notDetermined:
                 // Request permission for the first time
-                Task {
+                _Concurrency.Task {
                     let granted = await NotificationService.shared.requestAuthorization()
                     if granted {
                         await MainActor.run {

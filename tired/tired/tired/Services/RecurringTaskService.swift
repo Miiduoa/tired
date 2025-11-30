@@ -5,6 +5,7 @@ import Combine
 
 /// 周期性任务服务
 class RecurringTaskService: ObservableObject {
+    static let shared = RecurringTaskService()
     private let db = FirebaseManager.shared.db
     private let taskService = TaskService()
 
@@ -36,6 +37,46 @@ class RecurringTaskService: ObservableObject {
 
         return subject.eraseToAnyPublisher()
     }
+    /// 手動觸發生成指定週期任務的實例
+    func generateInstancesManually(for recurringTaskId: String) async throws {
+        guard var recurringTask = try? await fetchRecurringTask(id: recurringTaskId) else {
+            throw NSError(domain: "RecurringTaskService", code: -1, userInfo: [NSLocalizedDescriptionKey: "週期任務不存在"])
+        }
+
+        try await generateInstancesForRecurringTask(&recurringTask)
+    }
+
+    /// 統計週期任務的完成率
+    func getCompletionStats(for recurringTaskId: String) async throws -> (completed: Int, total: Int, rate: Double) {
+        let recurringTask = try await fetchRecurringTask(id: recurringTaskId)
+
+        let total = recurringTask.generatedInstanceIds.count
+        var completed = 0
+
+        for instanceId in recurringTask.generatedInstanceIds {
+            let taskRef = db.collection("tasks").document(instanceId)
+            let taskDoc = try await taskRef.getDocument()
+
+            if let task = try? taskDoc.data(as: Task.self), task.isDone {
+                completed += 1
+            }
+        }
+
+        let rate = total > 0 ? Double(completed) / Double(total) : 0.0
+        return (completed, total, rate)
+    }
+
+    /// 更新週期任務的規則（編輯規則）
+    func updateRecurrenceRule(for recurringTaskId: String, newRule: RecurrenceRule) async throws {
+        guard var recurringTask = try? await fetchRecurringTask(id: recurringTaskId) else {
+            throw NSError(domain: "RecurringTaskService", code: -1, userInfo: [NSLocalizedDescriptionKey: "週期任務不存在"])
+        }
+
+        recurringTask.recurrenceRule = newRule
+        recurringTask.updatedAt = Date()
+
+        try await updateRecurringTask(recurringTask)
+    }
 
     /// 获取单个周期任务
     func fetchRecurringTask(id: String) async throws -> RecurringTask {
@@ -55,7 +96,7 @@ class RecurringTaskService: ObservableObject {
         newTask.updatedAt = Date()
         newTask.nextGenerationDate = recurringTask.startDate
 
-        _ = try await db.collection("recurringTasks").addDocument(from: newTask)
+        _ = try db.collection("recurringTasks").addDocument(from: newTask)
 
         // 立即生成第一批实例
         try await generateDueInstances()
@@ -70,7 +111,7 @@ class RecurringTaskService: ObservableObject {
         var updatedTask = recurringTask
         updatedTask.updatedAt = Date()
 
-        try await db.collection("recurringTasks").document(id).setData(from: updatedTask)
+        try db.collection("recurringTasks").document(id).setData(from: updatedTask)
     }
 
     /// 删除周期任务（同时删除已生成的实例）
@@ -94,24 +135,38 @@ class RecurringTaskService: ObservableObject {
     // MARK: - Instance Generation
 
     /// 生成应该生成的任务实例（每天运行一次，通常在晚上）
-    func generateDueInstances() async throws {
+    func generateDueInstances(userId: String? = nil) async throws {
         let now = Date()
-        let calendar = Calendar.current
 
         // 获取所有有效的周期任务（没有结束或还没到结束日期）
-        let snapshot = try await db.collection("recurringTasks")
-            .getDocuments()
+        var query: Query = db.collection("recurringTasks")
+        if let userId = userId {
+            query = query.whereField("userId", isEqualTo: userId)
+        }
+        let snapshot = try await query.getDocuments()
 
         for document in snapshot.documents {
             guard var recurringTask = try? document.data(as: RecurringTask.self) else { continue }
 
             // 检查是否应该生成实例 (Safely unwrap endDate)
             let isPastEndDate = recurringTask.endDate.map { $0 <= now } ?? false
-            let shouldGenerate = recurringTask.nextGenerationDate <= now && !isPastEndDate
+            let shouldGenerate = recurringTask.nextGenerationDate <= now && !isPastEndDate && !recurringTask.isPaused
 
             if shouldGenerate {
                 try await generateInstancesForRecurringTask(&recurringTask)
             }
+        }
+    }
+
+    /// 切換週期任務的暫停狀態
+    func togglePause(for recurringTaskId: String) async throws {
+        guard var recurringTask = try? await fetchRecurringTask(id: recurringTaskId) else { return }
+        recurringTask.isPaused.toggle()
+        try await updateRecurringTask(recurringTask)
+        
+        // 如果恢復且過期，嘗試補生成
+        if !recurringTask.isPaused {
+            try await generateDueInstances(userId: recurringTask.userId)
         }
     }
 
@@ -147,17 +202,23 @@ class RecurringTaskService: ObservableObject {
         for occurrence in occurrences {
             let taskRef = db.collection("tasks").document()
             let newTaskInstance = Task(
-                id: taskRef.documentID,
                 userId: recurringTask.userId,
+                sourceOrgId: nil,
+                sourceAppInstanceId: nil,
+                sourceType: .manual,
+                taskType: .generic,
                 title: recurringTask.title,
                 description: recurringTask.description,
+                assigneeUserIds: nil,
                 category: recurringTask.category,
                 priority: recurringTask.priority,
+                tags: nil,
                 deadlineAt: occurrence,
                 estimatedMinutes: recurringTask.estimatedMinutes,
-                sourceType: .manual,
-                createdAt: Date(),
-                updatedAt: Date()
+                plannedDate: occurrence,
+                plannedStartTime: nil,
+                isDateLocked: false,
+                recurrenceParentId: recurringTask.id
             )
 
             try batch.setData(from: newTaskInstance, forDocument: taskRef)
@@ -222,23 +283,87 @@ class RecurringTaskService: ObservableObject {
         skipDates: [Date]
     ) -> [Date] {
         var occurrences: [Date] = []
-        var currentDate = startDate
         let calendar = Calendar.current
 
-        while currentDate <= endDate {
-            // 检查是否匹配规则
-            if matchesRule(currentDate, rule: rule) {
-                // 检查是否在跳过列表中
+        switch rule {
+        case .daily:
+            var currentDate = startDate
+            while currentDate <= endDate {
                 let isSkipped = skipDates.contains { calendar.isDate($0, inSameDayAs: currentDate) }
-
                 if !isSkipped {
                     occurrences.append(currentDate)
                 }
+                guard let nextDay = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
+                currentDate = nextDay
             }
 
-            // 移到下一天
-            guard let nextDay = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
-            currentDate = nextDay
+        case .weekdays, .weekends, .custom:
+            var currentDate = startDate
+            while currentDate <= endDate {
+                if matchesRule(currentDate, rule: rule) {
+                    let isSkipped = skipDates.contains { calendar.isDate($0, inSameDayAs: currentDate) }
+                    if !isSkipped {
+                        occurrences.append(currentDate)
+                    }
+                }
+                guard let nextDay = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
+                currentDate = nextDay
+            }
+
+        case .weekly(_):
+            var currentDate = startDate
+            while currentDate <= endDate {
+                if matchesRule(currentDate, rule: rule) {
+                    let isSkipped = skipDates.contains { calendar.isDate($0, inSameDayAs: currentDate) }
+                    if !isSkipped {
+                        occurrences.append(currentDate)
+                    }
+                    // 移到下一周
+                    guard let nextWeek = calendar.date(byAdding: .weekOfYear, value: 1, to: currentDate) else { break }
+                    currentDate = nextWeek
+                } else {
+                    guard let nextDay = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
+                    currentDate = nextDay
+                }
+            }
+
+        case .biweekly(let dayOfWeek):
+            // 找到第一个匹配的日期
+            var currentDate = startDate
+            let dayOfWeekNormalized = dayOfWeek == 7 ? 1 : dayOfWeek + 1  // 转换到Calendar的格式 (1=周日)
+            while currentDate <= endDate {
+                let currentDayOfWeek = calendar.component(.weekday, from: currentDate)
+                if currentDayOfWeek == dayOfWeekNormalized {
+                    let isSkipped = skipDates.contains { calendar.isDate($0, inSameDayAs: currentDate) }
+                    if !isSkipped {
+                        occurrences.append(currentDate)
+                    }
+                    // 移到下两周的同一天
+                    guard let nextTwoWeeks = calendar.date(byAdding: .weekOfYear, value: 2, to: currentDate) else { break }
+                    currentDate = nextTwoWeeks
+                } else {
+                    guard let nextDay = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
+                    currentDate = nextDay
+                }
+            }
+
+        case .monthly(let dayOfMonth):
+            var currentDate = startDate
+            while currentDate <= endDate {
+                let currentDay = calendar.component(.day, from: currentDate)
+                if currentDay == dayOfMonth {
+                    let isSkipped = skipDates.contains { calendar.isDate($0, inSameDayAs: currentDate) }
+                    if !isSkipped {
+                        occurrences.append(currentDate)
+                    }
+                    // 移到下个月的同一天
+                    guard let nextMonth = calendar.date(byAdding: .month, value: 1, to: currentDate) else { break }
+                    currentDate = nextMonth
+                } else {
+                    guard let nextDay = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
+                    currentDate = nextDay
+                }
+            }
         }
 
         return occurrences
@@ -255,26 +380,28 @@ class RecurringTaskService: ObservableObject {
         switch rule {
         case .daily:
             return true
-
+            
         case .weekdays:
             return (1...5).contains(normalizedDayOfWeek)  // 周一-周五
 
         case .weekends:
             return normalizedDayOfWeek == 6 || normalizedDayOfWeek == 7  // 周六-周日
 
-        case .weekly(let targetDayOfWeek):
-            return normalizedDayOfWeek == targetDayOfWeek
-
-        case .biweekly(let targetDayOfWeek):
-            // 这里需要额外的逻辑来跟踪两周周期
-            // 简化版：仅检查是否是目标日期（完整实现需要起始日期）
-            return normalizedDayOfWeek == targetDayOfWeek
-
-        case .monthly(let targetDayOfMonth):
-            return calendar.component(.day, from: date) == targetDayOfMonth
-
         case .custom(let daysOfWeek):
             return daysOfWeek.contains(normalizedDayOfWeek)
+            
+        case .weekly(let targetDay):
+            return normalizedDayOfWeek == targetDay
+            
+        case .biweekly(let targetDay):
+             // 注意：這只是檢查「星期幾」是否符合，至於是否是「隔週」，
+             // 是由 computeOccurrences 中的日期遞增邏輯 (.weekOfYear + 2) 來控制的。
+             // 所以這裡只要檢查星期幾即可。
+            return normalizedDayOfWeek == targetDay
+            
+        case .monthly(let targetDayOfMonth):
+            let dayOfMonth = calendar.component(.day, from: date)
+            return dayOfMonth == targetDayOfMonth
         }
     }
 
@@ -309,21 +436,27 @@ class RecurringTaskService: ObservableObject {
     private func generateInstanceForDate(_ date: Date, from recurringTask: RecurringTask) async throws {
         let taskRef = db.collection("tasks").document()
 
-        var newTask = Task(
+        let newTask = Task(
             id: taskRef.documentID,
             userId: recurringTask.userId,
+            sourceOrgId: nil,
+            sourceAppInstanceId: nil,
+            sourceType: .manual,
+            taskType: .generic,
             title: recurringTask.title,
             description: recurringTask.description,
+            assigneeUserIds: nil,
             category: recurringTask.category,
             priority: recurringTask.priority,
+            tags: nil,
             deadlineAt: date,
             estimatedMinutes: recurringTask.estimatedMinutes,
-            sourceType: .manual,
-            createdAt: Date(),
-            updatedAt: Date()
+            plannedDate: date,
+            plannedStartTime: nil,
+            isDateLocked: false
         )
 
-        try await taskService.createTask(newTask)
+        _ = try await taskService.createTask(newTask)
 
         // 更新周期任务的实例列表
         var updatedRecurringTask = recurringTask

@@ -5,7 +5,14 @@ struct TaskSection<Content: View>: View {
     let title: String
     let icon: String
     let color: Color
-    @ViewBuilder let content: Content
+    private let content: () -> Content
+
+    init(title: String, icon: String, color: Color, @ViewBuilder content: @escaping () -> Content) {
+        self.title = title
+        self.icon = icon
+        self.color = color
+        self.content = content
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppDesignSystem.paddingSmall) {
@@ -19,7 +26,7 @@ struct TaskSection<Content: View>: View {
             }
             .padding(.leading, 4)
 
-            content
+            content()
         }
     }
 }

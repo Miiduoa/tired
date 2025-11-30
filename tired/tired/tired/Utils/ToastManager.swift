@@ -43,18 +43,25 @@ class ToastManager: ObservableObject {
     private init() {}
 
     func showToast(message: String, type: ToastType, duration: TimeInterval = 3.0) {
-        // Cancel any existing toast dismissal
-        workItem?.cancel()
+        // Ensure UI updates happen on main thread
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            // Cancel any existing toast dismissal
+            self.workItem?.cancel()
 
-        currentToast = Toast(message: message, type: type, duration: duration)
-
-        let newWorkItem = DispatchWorkItem { [weak self] in
             withAnimation {
-                self?.currentToast = nil
+                self.currentToast = Toast(message: message, type: type, duration: duration)
             }
+
+            let newWorkItem = DispatchWorkItem { [weak self] in
+                withAnimation {
+                    self?.currentToast = nil
+                }
+            }
+            self.workItem = newWorkItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: newWorkItem)
         }
-        workItem = newWorkItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: newWorkItem)
     }
 }
 

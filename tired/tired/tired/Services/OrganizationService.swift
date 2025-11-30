@@ -112,52 +112,174 @@ class OrganizationService: ObservableObject {
 
     /// 创建组织 (包含預設角色)
     func createOrganization(_ org: Organization) async throws -> String {
+        print("🚀 Starting createOrganization...")
         var newOrg = org
         newOrg.createdAt = Date()
         newOrg.updatedAt = Date()
-
-        // 1. 創建組織文件
-        let orgRef = try db.collection("organizations").addDocument(from: newOrg)
+        
+        // 1. 生成文檔引用 (不立即寫入)
+        let orgRef = db.collection("organizations").document()
         let orgId = orgRef.documentID
-
-        // 2. 創建預設角色
-        let batch = db.batch()
+        
+        let membershipRef = db.collection("memberships").document()
+        let membershipId = membershipRef.documentID
+        
         let rolesCollection = orgRef.collection("roles")
-
-        // Owner Role
         let ownerRoleRef = rolesCollection.document()
-        let ownerPermissions = OrgPermission.allCases.map { $0.permissionString }
-        let ownerRole = Role(id: ownerRoleRef.documentID, name: "擁有者", permissions: ownerPermissions, isDefault: true)
-        try batch.setData(from: ownerRole, forDocument: ownerRoleRef)
-
-        // Admin Role
         let adminRoleRef = rolesCollection.document()
+        let memberRoleRef = rolesCollection.document()
+        
+        // 2. 準備數據
+        // 注意：初始化時 id 傳入 nil，因為使用 batch.setData 指定了 document reference，
+        // Firestore 會自動關聯 ID。傳入非 nil 的 @DocumentID 屬性會導致警告。
+        let ownerPermissions = OrgPermission.allCases.map { $0.permissionString }
+        let ownerRole = Role(id: nil, name: "擁有者", permissions: ownerPermissions, isDefault: true)
+        
         let adminPermissions = OrgPermission.allCases.filter {
             switch $0 {
             case .deleteOrganization, .transferOwnership: return false
             default: return true
             }
         }.map { $0.permissionString }
-        let adminRole = Role(id: adminRoleRef.documentID, name: "管理員", permissions: adminPermissions, isDefault: true)
-        try batch.setData(from: adminRole, forDocument: adminRoleRef)
-
-        // Member Role
-        let memberRoleRef = rolesCollection.document()
-        let memberPermissions: [OrgPermission] = [.viewContent, .comment, .joinEvents, .react]
-        let memberRole = Role(id: memberRoleRef.documentID, name: "成員", permissions: memberPermissions.map { $0.permissionString }, isDefault: true)
-        try batch.setData(from: memberRole, forDocument: memberRoleRef)
+        let adminRole = Role(id: nil, name: "管理員", permissions: adminPermissions, isDefault: true)
         
-        // 3. 提交批次操作以創建角色
-        try await batch.commit()
-
-        // 4. 為創建者添加 Owner 身份
-        try await createMembership(
+        let memberPermissions: [OrgPermission] = [.viewContent, .comment, .joinEvents, .react]
+        let memberRole = Role(id: nil, name: "成員", permissions: memberPermissions.map { $0.permissionString }, isDefault: true)
+        
+        let initialMembership = Membership(
+            id: nil,
             userId: org.createdByUserId,
             organizationId: orgId,
-            roleIds: [ownerRole.id!]
+            roleIds: [ownerRoleRef.documentID], // 直接賦予 Owner 角色
+            isPrimaryForType: true,
+            createdAt: Date(),
+            updatedAt: Date()
         )
         
+        // 確保 newOrg 的 id 為 nil
+        var cleanOrg = newOrg
+        cleanOrg.id = nil
+        
+        // 3. 執行批次寫入 (原子性)
+        let batch = db.batch()
+        
+        try batch.setData(from: cleanOrg, forDocument: orgRef)
+        try batch.setData(from: initialMembership, forDocument: membershipRef)
+        try batch.setData(from: ownerRole, forDocument: ownerRoleRef)
+        try batch.setData(from: adminRole, forDocument: adminRoleRef)
+        try batch.setData(from: memberRole, forDocument: memberRoleRef)
+        
+        do {
+            print("⏳ Committing batch...")
+            try await batch.commit()
+            print("✅ Batch committed successfully")
+        } catch {
+            print("❌ Failed createOrganization batch commit: \(error)")
+            throw error
+        }
+        
+        // 4. 非關鍵後續操作 (不需要等待)
+        // Use Task.detached to ensure this runs in the background and doesn't inherit the current actor context
+        _Concurrency.Task.detached(priority: .utility) {
+            // 創建組織聊天室 - 需要設置 id 以便 ChatService 使用
+            var orgWithId = newOrg
+            orgWithId.id = orgId
+            do {
+                _ = try await ChatService.shared.getOrCreateOrganizationChatRoom(for: orgWithId)
+            } catch {
+                print("⚠️ Failed to create chat room (non-fatal): \(error)")
+            }
+            
+            // 根據組織類型創建預設應用
+            if newOrg.type == .school {
+                let defaultApps: [OrgAppTemplateKey] = [.courseSchedule, .assignmentBoard, .bulletinBoard, .rollCall, .gradebook]
+                let db = FirebaseManager.shared.db
+                let appsCollection = db.collection("orgAppInstances")
+                for appKey in defaultApps {
+                    let appInstance = OrgAppInstance(
+                        organizationId: orgId,
+                        templateKey: appKey,
+                        name: appKey.displayName,
+                        isEnabled: true
+                    )
+                    let _ = try? appsCollection.addDocument(from: appInstance)
+                }
+            }
+        }
+        
         return orgId
+    }
+    
+    /// 更新組織信息
+    func updateOrganization(_ org: Organization) async throws {
+        guard let orgId = org.id else {
+            throw NSError(domain: "OrganizationService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Organization ID is missing"])
+        }
+        
+        var updatedOrg = org
+        updatedOrg.updatedAt = Date()
+        
+        try db.collection("organizations").document(orgId).setData(from: updatedOrg, merge: true)
+        
+        // 清除快取
+        organizationCache.removeValue(forKey: orgId)
+    }
+    
+    /// 刪除組織（只有擁有者可以刪除）
+    func deleteOrganization(organizationId: String, userId: String) async throws {
+        // 1. 權限檢查：只有擁有者可以刪除組織
+        let canDelete = try await checkPermission(userId: userId, organizationId: organizationId, permission: .deleteOrganization)
+        guard canDelete else {
+            throw NSError(domain: "OrganizationService", code: -10, userInfo: [NSLocalizedDescriptionKey: "權限不足：只有組織擁有者才能刪除組織。"])
+        }
+        
+        // 2. 獲取組織以確認
+        let organization = try await fetchOrganization(id: organizationId)
+        guard organization.createdByUserId == userId else {
+            throw NSError(domain: "OrganizationService", code: -11, userInfo: [NSLocalizedDescriptionKey: "權限不足：只有組織創建者才能刪除組織。"])
+        }
+        
+        // 3. 刪除組織及其所有子集合（使用批次操作）
+        let batch = db.batch()
+        
+        // 刪除所有成員資格
+        let membershipsSnapshot = try await db.collection("memberships")
+            .whereField("organizationId", isEqualTo: organizationId)
+            .getDocuments()
+        for doc in membershipsSnapshot.documents {
+            batch.deleteDocument(doc.reference)
+        }
+        
+        // 刪除所有角色
+        let rolesSnapshot = try await db.collection("organizations").document(organizationId).collection("roles").getDocuments()
+        for doc in rolesSnapshot.documents {
+            batch.deleteDocument(doc.reference)
+        }
+        
+        // 刪除所有成員申請
+        let requestsSnapshot = try await db.collection("membershipRequests")
+            .whereField("organizationId", isEqualTo: organizationId)
+            .getDocuments()
+        for doc in requestsSnapshot.documents {
+            batch.deleteDocument(doc.reference)
+        }
+        
+        // 刪除所有小應用實例
+        let appsSnapshot = try await db.collection("orgAppInstances")
+            .whereField("organizationId", isEqualTo: organizationId)
+            .getDocuments()
+        for doc in appsSnapshot.documents {
+            batch.deleteDocument(doc.reference)
+        }
+        
+        // 刪除組織本身
+        batch.deleteDocument(db.collection("organizations").document(organizationId))
+        
+        // 提交批次操作
+        try await batch.commit()
+        
+        // 清除快取
+        organizationCache.removeValue(forKey: organizationId)
     }
 
     // MARK: - Roles
@@ -178,7 +300,7 @@ class OrganizationService: ObservableObject {
         guard let roleId = role.id else {
             throw NSError(domain: "OrganizationService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Role ID is missing"])
         }
-        try await db.collection("organizations").document(orgId).collection("roles").document(roleId).setData(from: role)
+        try db.collection("organizations").document(orgId).collection("roles").document(roleId).setData(from: role)
         organizationCache.removeValue(forKey: orgId)
     }
 
@@ -272,9 +394,11 @@ class OrganizationService: ObservableObject {
         guard fromUserId != toUserId else {
             throw NSError(domain: "OrganizationService", code: -11, userInfo: [NSLocalizedDescriptionKey: "無效操作：無法將所有權轉移給自己。"])
         }
+        
+        let orgRef = db.collection("organizations").document(organizationId)
 
         // 2. 獲取角色ID
-        let roles = try await db.collection("organizations").document(organizationId).collection("roles").getDocuments()
+        let roles = try await orgRef.collection("roles").getDocuments()
         guard let ownerRole = roles.documents.first(where: { ($0["name"] as? String) == "擁有者" }),
               let adminRole = roles.documents.first(where: { ($0["name"] as? String) == "管理員" }) else {
             throw NSError(domain: "OrganizationService", code: -12, userInfo: [NSLocalizedDescriptionKey: "找不到必要的角色（擁有者/管理員）。"])
@@ -299,11 +423,16 @@ class OrganizationService: ObservableObject {
         let toMembershipRef = toMembershipSnapshot.reference
 
         // 4. 使用事務執行原子性操作
-        try await db.runTransaction { (transaction, errorPointer) -> Any? in
+        _ = try await db.runTransaction { (transaction, errorPointer) -> Any? in
             // 降級原擁有者：移除Owner角色，賦予Admin角色
             transaction.updateData(["roleIds": [adminRoleId], "updatedAt": FieldValue.serverTimestamp()], forDocument: fromMembershipRef)
             // 升級新擁有者：賦予Owner角色
             transaction.updateData(["roleIds": [ownerRoleId], "updatedAt": FieldValue.serverTimestamp()], forDocument: toMembershipRef)
+            // 更新組織創建者，確保新擁有者擁有完整的管理權限
+            transaction.updateData([
+                "createdByUserId": toUserId,
+                "updatedAt": FieldValue.serverTimestamp()
+            ], forDocument: orgRef)
             return nil
         }
         
@@ -313,7 +442,49 @@ class OrganizationService: ObservableObject {
 
     /// 當成員離開組織時的繼任處理
     func handleMemberLeave(membership: Membership) async throws {
-        // ... Omitted for now ...
+        guard let membershipId = membership.id else {
+            throw NSError(domain: "OrganizationService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Membership ID is missing"])
+        }
+
+        // 1. 獲取組織以進行權限檢查
+        let organization = try await fetchOrganization(id: membership.organizationId)
+
+        // 2. 檢查離開者是否為 Owner
+        let isOwnerLeaving = membership.isOwner(in: organization)
+
+        if !isOwnerLeaving {
+            // 如果不是 Owner，直接刪除其成員資格
+            try? await ChatService.shared.removeUserFromOrganizationChatRoom(userId: membership.userId, organizationId: membership.organizationId)
+            try await deleteMembership(id: membershipId)
+            return
+        }
+
+        // --- 以下為 Owner 離開時的繼任邏輯 ---
+
+        // 3. 獲取組織內所有其他成員
+        var otherMembers = try await fetchOrganizationMembers(organizationId: membership.organizationId)
+        otherMembers.removeAll { $0.userId == membership.userId }
+
+        // 如果沒有其他成員，組織將變為無主，直接刪除原 Owner
+        guard let successorMembership = findSuccessor(from: otherMembers, in: organization) else {
+            print("ℹ️ Owner is the last member. Organization \(organization.id ?? "") will become ownerless.")
+            try? await ChatService.shared.removeUserFromOrganizationChatRoom(userId: membership.userId, organizationId: membership.organizationId)
+            try await deleteMembership(id: membershipId)
+            return
+        }
+
+        // 5. 執行所有權轉移
+        print("ℹ️ Transferring ownership from \(membership.userId) to \(successorMembership.userId)")
+        try await transferOwnership(
+            organizationId: membership.organizationId,
+            fromUserId: membership.userId,
+            toUserId: successorMembership.userId
+        )
+
+        // 6. 刪除原 Owner 的成員資格
+        try? await ChatService.shared.removeUserFromOrganizationChatRoom(userId: membership.userId, organizationId: membership.organizationId)
+        try await deleteMembership(id: membershipId)
+        print("✅ Ownership transfer complete and original owner's membership removed.")
     }
 
     // MARK: - Membership Requests
@@ -380,6 +551,9 @@ class OrganizationService: ObservableObject {
         
         // 3. 提交批次操作
         try await batch.commit()
+
+        // 4. 將用戶加入聊天室
+        try? await ChatService.shared.addUserToOrganizationChatRoom(userId: request.userId, organizationId: request.organizationId)
     }
 
     /// 拒絕成員資格申請
@@ -393,49 +567,6 @@ class OrganizationService: ObservableObject {
         ])
     }
 
-    /// 當成員離開組織時的繼任處理
-    func handleMemberLeave(membership: Membership) async throws {
-        guard let membershipId = membership.id else {
-            throw NSError(domain: "OrganizationService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Membership ID is missing"])
-        }
-
-        // 1. 獲取組織以進行權限檢查
-        let organization = try await fetchOrganization(id: membership.organizationId)
-
-        // 2. 檢查離開者是否為 Owner
-        let isOwnerLeaving = membership.isOwner(in: organization)
-
-        if !isOwnerLeaving {
-            // 如果不是 Owner，直接刪除其成員資格
-            try await deleteMembership(id: membershipId)
-            return
-        }
-
-        // --- 以下為 Owner 離開時的繼任邏輯 ---
-
-        // 3. 獲取組織內所有其他成員
-        var otherMembers = try await fetchOrganizationMembers(organizationId: membership.organizationId)
-        otherMembers.removeAll { $0.userId == membership.userId }
-
-        // 如果沒有其他成員，組織將變為無主，直接刪除原 Owner
-        guard let successorMembership = findSuccessor(from: otherMembers, in: organization) else {
-            print("ℹ️ Owner is the last member. Organization \(organization.id ?? "") will become ownerless.")
-            try await deleteMembership(id: membershipId)
-            return
-        }
-
-        // 5. 執行所有權轉移
-        print("ℹ️ Transferring ownership from \(membership.userId) to \(successorMembership.userId)")
-        try await transferOwnership(
-            organizationId: membership.organizationId,
-            fromUserId: membership.userId,
-            toUserId: successorMembership.userId
-        )
-
-        // 6. 刪除原 Owner 的成員資格
-        try await deleteMembership(id: membershipId)
-        print("✅ Ownership transfer complete and original owner's membership removed.")
-    }
 
     /// 從候選人中尋找繼任者
     private func findSuccessor(from candidates: [Membership], in organization: Organization) -> Membership? {
@@ -503,5 +634,130 @@ class OrganizationService: ObservableObject {
         }
 
         return results
+    }
+
+    // MARK: - Invitations
+
+    /// 建立邀請
+    func createInvitation(organizationId: String, inviterId: String, roleIds: [String], maxUses: Int? = nil, expirationHours: Int? = nil) async throws -> Invitation {
+        // 1. 權限檢查
+        let canInvite = try await checkPermission(userId: inviterId, organizationId: organizationId, permission: .manageMembers)
+        guard canInvite else {
+            throw NSError(domain: "OrganizationService", code: -10, userInfo: [NSLocalizedDescriptionKey: "權限不足：您沒有權限邀請成員。"])
+        }
+
+        var expirationDate: Date?
+        if let hours = expirationHours {
+            expirationDate = Calendar.current.date(byAdding: .hour, value: hours, to: Date())
+        }
+        
+        // 產生 8 碼大寫英數混合代碼
+        let code = String(UUID().uuidString.prefix(8)).uppercased()
+
+        let invitation = Invitation(
+            organizationId: organizationId,
+            inviterId: inviterId,
+            code: code,
+            roleIds: roleIds,
+            expirationDate: expirationDate,
+            maxUses: maxUses
+        )
+        
+        let ref = try db.collection("invitations").addDocument(from: invitation)
+        var newInvitation = invitation
+        newInvitation.id = ref.documentID
+        return newInvitation
+    }
+
+    /// 獲取組織的有效邀請
+    func fetchInvitations(organizationId: String) async throws -> [Invitation] {
+        let snapshot = try await db.collection("invitations")
+            .whereField("organizationId", isEqualTo: organizationId)
+            .getDocuments()
+            
+        return snapshot.documents.compactMap { doc -> Invitation? in
+            try? doc.data(as: Invitation.self)
+        }.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    /// 刪除邀請
+    func deleteInvitation(id: String) async throws {
+        try await db.collection("invitations").document(id).delete()
+    }
+
+    /// 透過邀請碼加入組織
+    func joinByInvitationCode(code: String, userId: String) async throws -> String {
+        // 1. 查找邀請碼
+        let snapshot = try await db.collection("invitations")
+            .whereField("code", isEqualTo: code.uppercased())
+            .limit(to: 1)
+            .getDocuments()
+            
+        guard let doc = snapshot.documents.first,
+              let invitation = try? doc.data(as: Invitation.self),
+              let invitationId = invitation.id else {
+            throw NSError(domain: "OrganizationService", code: -20, userInfo: [NSLocalizedDescriptionKey: "無效的邀請碼。"])
+        }
+        
+        // 2. 檢查是否已是成員
+        let existingMember = try await db.collection("memberships")
+            .whereField("userId", isEqualTo: userId)
+            .whereField("organizationId", isEqualTo: invitation.organizationId)
+            .getDocuments()
+            
+        if !existingMember.isEmpty {
+            throw NSError(domain: "OrganizationService", code: -22, userInfo: [NSLocalizedDescriptionKey: "您已經是該組織的成員。"])
+        }
+        
+        // 3. 執行加入邏輯 (Transaction) 並再次驗證有效性與使用次數，避免競態條件
+        let orgId = invitation.organizationId        
+        let invRef = self.db.collection("invitations").document(invitationId)
+        
+        _ = try await db.runTransaction { (transaction, errorPointer) -> Any? in
+            do {
+                let freshSnapshot = try transaction.getDocument(invRef)
+                guard var freshInvitation = try? freshSnapshot.data(as: Invitation.self) else {
+                    throw NSError(domain: "OrganizationService", code: -23, userInfo: [NSLocalizedDescriptionKey: "邀請碼資料異常。"])
+                }
+                
+                // 使用最新數據重新驗證有效性
+                guard freshInvitation.isActive else {
+                    throw NSError(domain: "OrganizationService", code: -21, userInfo: [NSLocalizedDescriptionKey: "邀請碼已過期或失效。"])
+                }
+                
+                // 檢查使用次數是否已達上限（再次檢查避免併發超用）
+                if let maxUses = freshInvitation.maxUses, freshInvitation.currentUses >= maxUses {
+                    throw NSError(domain: "OrganizationService", code: -21, userInfo: [NSLocalizedDescriptionKey: "邀請碼已達最大使用次數。"])
+                }
+                
+                // 更新使用次數
+                freshInvitation.currentUses += 1
+                transaction.updateData([
+                    "currentUses": freshInvitation.currentUses,
+                    "updatedAt": FieldValue.serverTimestamp()
+                ], forDocument: invRef)
+                
+                // 建立成員資格
+                let newMembershipRef = self.db.collection("memberships").document()
+                let newMembership = Membership(
+                    userId: userId,
+                    organizationId: orgId,
+                    roleIds: freshInvitation.roleIds,
+                    createdAt: Date(),
+                    updatedAt: Date()
+                )
+                let _ = try? transaction.setData(from: newMembership, forDocument: newMembershipRef)
+            } catch {
+                errorPointer?.pointee = error as NSError
+                return nil
+            }
+            
+            return nil
+        }
+        
+        // 5. 加入聊天室
+        try? await ChatService.shared.addUserToOrganizationChatRoom(userId: userId, organizationId: orgId)
+        
+        return orgId
     }
 }

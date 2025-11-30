@@ -24,140 +24,196 @@ struct LoginView: View {
 
     var body: some View {
         ZStack {
-            // Background with modern glass effect feel
-            Color.appPrimaryBackground.edgesIgnoringSafeArea(.all)
-            
-            ParticleView() // Optional: For dynamic background visual interest
+            Color.appPrimaryBackground.ignoresSafeArea()
 
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: AppDesignSystem.paddingLarge * 2) {
-                    Spacer()
-                        .frame(minHeight: 40) // Give some top spacing
-
-                    // Logo / Title
-                    VStack(spacing: AppDesignSystem.paddingSmall) {
-                        Image(systemName: "bed.double.fill") // Example logo icon
-                            .font(.system(size: 60))
-                            .foregroundColor(AppDesignSystem.accentColor)
-
-                        Text("Tired App")
-                            .font(AppDesignSystem.titleFont)
-                            .foregroundColor(.primary)
-
-                        Text("多身份任務管理系統")
-                            .font(AppDesignSystem.bodyFont)
-                            .foregroundColor(.secondary)
-                    }
-
-                    // Login/Signup Form Card
-                    VStack(spacing: AppDesignSystem.paddingMedium) {
-                        if isSignUp {
-                            TextField("姓名", text: $name)
-                                .textFieldStyle(FrostedTextFieldStyle())
-                                .textContentType(.name)
-                        }
-
-                        TextField("信箱", text: $email)
-                            .textFieldStyle(FrostedTextFieldStyle())
-                            .textContentType(.emailAddress)
-#if os(iOS)
-                            .textInputAutocapitalization(.never)
-                            .keyboardType(.emailAddress)
-#endif
-
-                        SecureField("密碼", text: $password)
-                            .textFieldStyle(FrostedTextFieldStyle())
-                            .textContentType(isSignUp ? .newPassword : .password)
-
-                        // Error Message
-                        if let error = errorMessage {
-                            VStack(spacing: AppDesignSystem.paddingSmall) {
-                                Text(error)
-                                    .font(AppDesignSystem.captionFont)
-                                    .foregroundColor(.red)
-                                    .multilineTextAlignment(.center)
-
-                                // If "email in use" error, suggest switching to sign-in
-                                if error.contains("已被使用") || error.contains("already in use") {
-                                    Button {
-                                        withAnimation {
-                                            isSignUp = false
-                                            errorMessage = nil
-                                        }
-                                    } label: {
-                                        Text("切換到登入模式")
-                                            .font(AppDesignSystem.captionFont.weight(.medium))
-                                            .foregroundColor(AppDesignSystem.accentColor)
-                                            .underline()
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, AppDesignSystem.paddingMedium)
-                        }
-
-                        // Main Auth Button
-                        Button(action: handleAuth) {
-                            HStack {
-                                if isLoading {
-                                    ProgressView()
-                                        .progressViewStyle(.circular)
-                                        .tint(.white) // Ensure visibility on accent background
-                                } else {
-                                    Text(isSignUp ? "註冊" : "登入")
-                                }
-                            }
-                        }
-                        .buttonStyle(GlassmorphicButtonStyle(textColor: .white)) // Custom text color for primary action
-                        .disabled(isLoading || !isFormValid)
-                        
-                        // Separator
-                        HStack {
-                            Rectangle()
-                                .fill(Color.secondary.opacity(0.3))
-                                .frame(height: 1)
-                            Text("或")
-                                .font(AppDesignSystem.captionFont)
-                                .foregroundColor(.secondary)
-                                .padding(.horizontal, AppDesignSystem.paddingSmall)
-                            Rectangle()
-                                .fill(Color.secondary.opacity(0.3))
-                                .frame(height: 1)
-                        }
-                        .padding(.vertical, AppDesignSystem.paddingSmall)
-
-                        // Google Sign In Button
-                        Button(action: handleGoogleSignIn) {
-                            HStack {
-                                Image(systemName: "globe")
-                                    .font(AppDesignSystem.bodyFont.weight(.medium))
-                                Text("使用 Google 登入")
-                            }
-                        }
-                        .buttonStyle(GlassmorphicButtonStyle(material: .regularMaterial, textColor: .primary)) // Slightly different material/color
-                        .disabled(isLoading)
-
-                        // Toggle Sign Up / Login Mode
-                        Button {
-                            withAnimation(.spring()) {
-                                isSignUp.toggle()
-                                errorMessage = nil
-                            }
-                        } label: {
-                            Text(isSignUp ? "已有帳號？登入" : "沒有帳號？註冊")
-                                .font(AppDesignSystem.bodyFont)
-                                .foregroundColor(AppDesignSystem.accentColor)
-                        }
-                    }
-                    .padding(AppDesignSystem.paddingLarge)
-                    .glassmorphicCard() // Apply glassmorphic effect to the form container
-                    .padding(.horizontal, AppDesignSystem.paddingLarge)
-
-                    Spacer()
+                VStack(spacing: AppDesignSystem.paddingLarge) {
+                    header
+                    formCard
+                    securityFooter
                 }
-                .frame(maxWidth: .infinity)
+                .padding(.horizontal, AppDesignSystem.paddingLarge)
                 .padding(.vertical, AppDesignSystem.paddingLarge)
             }
         }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: AppDesignSystem.paddingMedium) {
+            HStack(spacing: AppDesignSystem.paddingSmall) {
+                Image(systemName: "sparkles")
+                    .font(.title2.bold())
+                    .foregroundColor(AppDesignSystem.accentColor)
+                Text("Tired")
+                    .font(.title2.bold())
+                    .foregroundColor(.primary)
+                Spacer()
+            }
+
+            VStack(alignment: .leading, spacing: AppDesignSystem.paddingSmall) {
+                Text("多身份任務中樞")
+                    .font(.largeTitle.bold())
+                    .foregroundColor(.primary)
+                Text("從學校、工作到社團，用同一個節奏管理待辦與活動。")
+                    .font(AppDesignSystem.bodyFont)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.bottom, AppDesignSystem.paddingMedium)
+    }
+
+    private var formCard: some View {
+        VStack(alignment: .leading, spacing: AppDesignSystem.paddingMedium) {
+            toggleButtons
+            inputFields
+            errorMessageView
+            submitButton
+            divider
+            googleSignInButton
+            toggleModeButton
+        }
+        .standardCard()
+    }
+    
+    private var toggleButtons: some View {
+        HStack(spacing: 0) {
+            ForEach([(false, "登入"), (true, "註冊")], id: \.0) { tuple in
+                Button {
+                    withAnimation(.spring(response: 0.3)) {
+                        isSignUp = tuple.0
+                        errorMessage = nil
+                    }
+                } label: {
+                    Text(tuple.1)
+                        .font(.system(size: 15, weight: .semibold))
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity)
+                        .background(tuple.0 == isSignUp ? AppDesignSystem.accentColor : Color.clear)
+                        .foregroundColor(tuple.0 == isSignUp ? .white : .primary)
+                        .cornerRadius(AppDesignSystem.cornerRadiusSmall)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(4)
+        .background(Color.appPrimaryBackground)
+        .cornerRadius(AppDesignSystem.cornerRadiusSmall + 4)
+    }
+    
+    @ViewBuilder
+    private var inputFields: some View {
+        if isSignUp {
+            TextField("姓名", text: $name)
+                .textFieldStyle(StandardTextFieldStyle(icon: "person"))
+                .textContentType(.name)
+                .autocapitalization(.words)
+        }
+
+        TextField("信箱", text: $email)
+            .textFieldStyle(StandardTextFieldStyle(icon: "envelope"))
+            .textContentType(.emailAddress)
+            .keyboardType(.emailAddress)
+            .textInputAutocapitalization(.never)
+
+        SecureField("密碼", text: $password)
+            .textFieldStyle(StandardTextFieldStyle(icon: "lock"))
+            .textContentType(isSignUp ? .newPassword : .password)
+    }
+    
+    @ViewBuilder
+    private var errorMessageView: some View {
+        if let error = errorMessage {
+            HStack(alignment: .top, spacing: AppDesignSystem.paddingSmall) {
+                Image(systemName: "exclamationmark.octagon.fill")
+                    .foregroundColor(.red)
+                    .font(.headline)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(error)
+                        .font(AppDesignSystem.captionFont)
+                        .foregroundColor(.red)
+                    if error.contains("已被使用") || error.contains("already in use") {
+                        Button {
+                            withAnimation { isSignUp = false; errorMessage = nil }
+                        } label: {
+                            Text("切換到登入模式")
+                                .font(AppDesignSystem.captionFont.weight(.semibold))
+                                .foregroundColor(AppDesignSystem.accentColor)
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, 6)
+        }
+    }
+    
+    private var submitButton: some View {
+        Button(action: handleAuth) {
+            HStack {
+                if isLoading {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(.white)
+                } else {
+                    Text(isSignUp ? "建立帳號" : "進入任務中心")
+                }
+            }
+        }
+        .buttonStyle(PrimaryButtonStyle(isEnabled: !isLoading && isFormValid))
+        .disabled(isLoading || !isFormValid)
+    }
+    
+    private var divider: some View {
+        HStack {
+            Rectangle()
+                .fill(Color.secondary.opacity(0.2))
+                .frame(height: 1)
+            Text("或")
+                .font(AppDesignSystem.captionFont)
+                .foregroundColor(.secondary)
+            Rectangle()
+                .fill(Color.secondary.opacity(0.2))
+                .frame(height: 1)
+        }
+    }
+    
+    private var googleSignInButton: some View {
+        Button(action: handleGoogleSignIn) {
+            HStack(spacing: 12) {
+                Image(systemName: "globe")
+                    .font(.system(size: 18, weight: .semibold))
+                Text("使用 Google 登入")
+            }
+        }
+        .buttonStyle(SecondaryButtonStyle())
+        .disabled(isLoading)
+    }
+    
+    private var toggleModeButton: some View {
+        Button {
+            withAnimation(.spring()) {
+                isSignUp.toggle()
+                errorMessage = nil
+            }
+        } label: {
+            Text(isSignUp ? "已有帳號？直接登入" : "沒有帳號？立即註冊")
+                .font(AppDesignSystem.bodyFont)
+                .foregroundColor(AppDesignSystem.accentColor)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.top, AppDesignSystem.paddingSmall)
+    }
+    
+    private var securityFooter: some View {
+        HStack(spacing: AppDesignSystem.paddingSmall) {
+            Image(systemName: "lock.fill")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+            Text("所有登入皆經過加密傳輸，僅在你授權後同步到多身份任務中心。")
+                .font(AppDesignSystem.captionFont)
+                .foregroundColor(.secondary)
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
     }
 
     private var isFormValid: Bool {
@@ -184,7 +240,8 @@ struct LoginView: View {
                     let nsError = error as NSError
                     if let description = nsError.userInfo[NSLocalizedDescriptionKey] as? String {
                         errorMessage = description
-                        if description.contains("已被使用") || nsError.code == 17007 { // Firebase Auth "email-already-in-use" code
+                        // 優化：優先檢查錯誤代碼 17007 (FIRAuthErrorCodeEmailAlreadyInUse)
+                        if nsError.code == 17007 { 
                             withAnimation { isSignUp = false }
                         }
                     } else {
@@ -222,17 +279,6 @@ struct LoginView: View {
                 }
             }
         }
-    }
-}
-
-// MARK: - Particle View (Placeholder for dynamic background)
-struct ParticleView: View {
-    var body: some View {
-        // This could be a complex view for dynamic particles,
-        // subtle gradients, or animated shapes that enhance the glass effect.
-        // For now, it's just a clear view.
-        LinearGradient(gradient: Gradient(colors: [Color.appPrimaryBackground.opacity(0.8), Color.appPrimaryBackground.opacity(0.9)]), startPoint: .topLeading, endPoint: .bottomTrailing)
-            .edgesIgnoringSafeArea(.all)
     }
 }
 
