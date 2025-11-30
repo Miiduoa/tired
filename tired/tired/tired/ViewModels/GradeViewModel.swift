@@ -18,7 +18,8 @@ class GradeViewModel: ObservableObject {
     @Published var selectedOrganizationId: String?
     @Published var selectedGradeItemId: String?
     @Published var showOnlyGraded = false
-    
+    @Published var isStudentView = true  // 新增：true = 學員視角, false = 教師視角
+
     private let gradeService = GradeService()
     private let userService = UserService()
     private var cancellables = Set<AnyCancellable>()
@@ -246,15 +247,20 @@ class GradeViewModel: ObservableObject {
     /// 篩選後的成績列表
     var filteredGrades: [Grade] {
         var filtered = grades
-        
+
+        // 學生視角：只顯示已發布的成績（Moodle-like 功能）
+        if isStudentView {
+            filtered = filtered.filter { $0.isReleased }
+        }
+
         if showOnlyGraded {
             filtered = filtered.filter { $0.isGraded }
         }
-        
+
         if let gradeItemId = selectedGradeItemId {
             filtered = filtered.filter { $0.gradeItemId == gradeItemId }
         }
-        
+
         return filtered.sorted { grade1, grade2 in
             // 按創建時間降序排列
             grade1.createdAt > grade2.createdAt

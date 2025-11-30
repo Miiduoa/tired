@@ -85,6 +85,9 @@ struct GradeListView: View {
             }
         }
         .onAppear {
+            // 設定視角模式
+            viewModel.isStudentView = isStudentView
+
             if isStudentView {
                 viewModel.loadStudentGrades(organizationId: organizationId)
                 viewModel.loadGradeItems(organizationId: organizationId)
