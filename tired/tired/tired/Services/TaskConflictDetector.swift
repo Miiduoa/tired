@@ -1,4 +1,5 @@
 import Foundation
+import FirebaseFirestoreSwift
 
 // MARK: - Task Conflict Models
 
@@ -44,18 +45,47 @@ struct TaskTimeRange {
     func overlaps(with other: TaskTimeRange) -> Bool {
         return !(endTime <= other.startTime || startTime >= other.endTime)
     }
+
+    /// 检查与课程时间是否重叠
+    func overlaps(with courseRange: CourseTimeRange) -> Bool {
+        return !(endTime <= courseRange.startTime || startTime >= courseRange.endTime)
+    }
+}
+
+/// 课程时间范围
+struct CourseTimeRange {
+    let schedule: CourseSchedule
+    let startTime: Date
+    let endTime: Date
+
+    /// 检查与任务时间是否重叠
+    func overlaps(with taskRange: TaskTimeRange) -> Bool {
+        return !(endTime <= taskRange.startTime || startTime >= taskRange.endTime)
+    }
 }
 
 /// 检测到的任务冲突
 struct TaskConflict: Identifiable {
-    var id: String { conflictingTaskIds.joined(separator: "-") }
+    var id: String {
+        let taskIds = conflictingTaskIds.joined(separator: "-")
+        let courseIds = conflictingCourseIds.joined(separator: "-")
+        return taskIds + (courseIds.isEmpty ? "" : "-course-\(courseIds)")
+    }
 
     /// 冲突涉及的任务
     let conflictingTasks: [Task]
 
+    /// 冲突涉及的课程（新增）
+    let conflictingCourses: [CourseSchedule]
+
     /// 冲突的任务 ID
     var conflictingTaskIds: [String] {
         conflictingTasks.compactMap { $0.id }
+    }
+
+    /// 冲突的课程 ID（新增）
+    var conflictingCourseIds: [String] {
+        conflictingCourses.compactMap { $0.id }
     }
 
     /// 冲突发生的时间范围
@@ -72,14 +102,44 @@ struct TaskConflict: Identifiable {
 
     /// 涉及的组织
     var involvedOrganizations: [String] {
-        conflictingTasks.compactMap { $0.sourceOrgId }
+        var orgs = conflictingTasks.compactMap { $0.sourceOrgId }
+        orgs.append(contentsOf: conflictingCourses.map { $0.organizationId })
+        return Array(Set(orgs))
+    }
+
+    /// 是否包含课程冲突
+    var hasCourseConflict: Bool {
+        !conflictingCourses.isEmpty
     }
 
     /// 用户友好的描述
     var description: String {
-        let taskTitles = conflictingTasks.map { $0.title }.joined(separator: "、")
+        var items: [String] = conflictingTasks.map { $0.title }
+
+        if !conflictingCourses.isEmpty {
+            items.append(contentsOf: conflictingCourses.map { course in
+                "课程时间 (\(course.startTime)-\(course.endTime))"
+            })
+        }
+
+        let itemsStr = items.joined(separator: "、")
         let timeStr = startTime.formatted(date: .omitted, time: .shortened)
-        return "\(severity.emoji) \(taskTitles) 在 \(timeStr) 冲突"
+        return "\(severity.emoji) \(itemsStr) 在 \(timeStr) 冲突"
+    }
+
+    // 便利初始化器（保持向后兼容）
+    init(
+        conflictingTasks: [Task],
+        conflictingCourses: [CourseSchedule] = [],
+        startTime: Date,
+        endTime: Date,
+        severity: ConflictSeverity
+    ) {
+        self.conflictingTasks = conflictingTasks
+        self.conflictingCourses = conflictingCourses
+        self.startTime = startTime
+        self.endTime = endTime
+        self.severity = severity
     }
 }
 
@@ -243,13 +303,162 @@ class TaskConflictDetector {
         return summary.trimmingCharacters(in: .whitespaces)
     }
 
+    // MARK: - Course Schedule Conflict Detection
+
+    /// 检测任务与课程时间表的冲突
+    /// - Parameters:
+    ///   - tasks: 任务列表
+    ///   - courseSchedules: 课程时间表列表
+    ///   - startDate: 检查的开始日期
+    ///   - endDate: 检查的结束日期
+    /// - Returns: 检测到的所有冲突
+    func detectConflictsWithCourses(
+        tasks: [Task],
+        courseSchedules: [CourseSchedule],
+        startDate: Date,
+        endDate: Date
+    ) -> [TaskConflict] {
+        // 构建任务时间范围列表
+        let taskRanges = tasks
+            .filter { task in
+                !task.isDone &&
+                task.estimatedMinutes != nil &&
+                (task.estimatedMinutes ?? 0) > 0
+            }
+            .compactMap { task -> TaskTimeRange? in
+                let taskDate = task.plannedDate ?? task.deadlineAt
+                guard let taskDate = taskDate else { return nil }
+                guard taskDate >= startDate && taskDate < endDate else { return nil }
+
+                let endTime = taskDate.addingTimeInterval(TimeInterval((task.estimatedMinutes ?? 60) * 60))
+                return TaskTimeRange(task: task, startTime: taskDate, endTime: endTime)
+            }
+
+        // 构建课程时间范围列表（针对检查期间的每一周）
+        var courseRanges: [CourseTimeRange] = []
+        let calendar = Calendar.current
+
+        var currentDate = startDate
+        while currentDate < endDate {
+            let weekday = calendar.component(.weekday, from: currentDate)
+
+            // 查找当天的课程
+            let todayCourses = courseSchedules.filter { $0.dayOfWeek == weekday }
+
+            for course in todayCourses {
+                if let courseStart = parseTimeString(course.startTime, on: currentDate),
+                   let courseEnd = parseTimeString(course.endTime, on: currentDate) {
+                    let courseRange = CourseTimeRange(
+                        schedule: course,
+                        startTime: courseStart,
+                        endTime: courseEnd
+                    )
+                    courseRanges.append(courseRange)
+                }
+            }
+
+            currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate) ?? endDate
+        }
+
+        // 检测任务与课程的冲突
+        var conflicts: [TaskConflict] = []
+
+        for taskRange in taskRanges {
+            var conflictingCourses: [CourseSchedule] = []
+
+            for courseRange in courseRanges {
+                if taskRange.overlaps(with: courseRange) {
+                    conflictingCourses.append(courseRange.schedule)
+                }
+            }
+
+            // 如果有冲突，创建冲突记录
+            if !conflictingCourses.isEmpty {
+                // 课程冲突通常是严重的，因为课程时间是固定的
+                let severity: ConflictSeverity = taskRange.task.priority == .high ? .critical : .severe
+
+                let conflict = TaskConflict(
+                    conflictingTasks: [taskRange.task],
+                    conflictingCourses: conflictingCourses,
+                    startTime: taskRange.startTime,
+                    endTime: taskRange.endTime,
+                    severity: severity
+                )
+
+                conflicts.append(conflict)
+            }
+        }
+
+        return conflicts.sorted { $0.severity > $1.severity }
+    }
+
+    /// 检查新任务是否与课程时间表冲突
+    /// - Parameters:
+    ///   - newTask: 新任务
+    ///   - courseSchedules: 课程时间表列表
+    /// - Returns: 如果有冲突返回冲突信息
+    func checkTaskCourseConflicts(
+        newTask: Task,
+        courseSchedules: [CourseSchedule]
+    ) -> [TaskConflict] {
+        guard let taskDate = newTask.plannedDate ?? newTask.deadlineAt else {
+            return []
+        }
+
+        let taskEnd = taskDate.addingTimeInterval(TimeInterval((newTask.estimatedMinutes ?? 60) * 60))
+
+        return detectConflictsWithCourses(
+            tasks: [newTask],
+            courseSchedules: courseSchedules,
+            startDate: taskDate,
+            endDate: taskEnd
+        )
+    }
+
+    /// 解析时间字符串（"HH:mm"）为特定日期的Date对象
+    private func parseTimeString(_ timeString: String, on date: Date) -> Date? {
+        let components = timeString.split(separator: ":")
+        guard components.count == 2,
+              let hour = Int(components[0]),
+              let minute = Int(components[1]) else {
+            return nil
+        }
+
+        let calendar = Calendar.current
+        var dateComponents = calendar.dateComponents([.year, .month, .day], from: date)
+        dateComponents.hour = hour
+        dateComponents.minute = minute
+        dateComponents.second = 0
+
+        return calendar.date(from: dateComponents)
+    }
+
     /// 为冲突任务提供解决建议
     /// - Parameter conflict: 冲突信息
     /// - Returns: 解决建议列表
     func getSuggestions(for conflict: TaskConflict) -> [String] {
         var suggestions: [String] = []
 
-        // 按优先级排序任务
+        // 如果与课程冲突，优先提示调整任务时间
+        if conflict.hasCourseConflict {
+            suggestions.append("📚 任务与课程时间冲突，课程时间通常是固定的，建议调整任务的计划时间")
+
+            if !conflict.conflictingCourses.isEmpty {
+                let courseInfo = conflict.conflictingCourses.map { course in
+                    "\(course.startTime)-\(course.endTime)"
+                }.joined(separator: "、")
+                suggestions.append("🕐 课程时间: \(courseInfo)")
+            }
+
+            // 如果只有任务，不涉及其他任务冲突
+            if conflict.conflictingTasks.count == 1, let task = conflict.conflictingTasks.first {
+                suggestions.append("💡 建议将\"\(task.title)\"移到课程之前或之后的时段")
+            }
+
+            return suggestions
+        }
+
+        // 按优先级排序任务（原有的任务冲突逻辑）
         let sortedTasks = conflict.conflictingTasks.sorted { t1, t2 in
             if t1.priority.hierarchyValue != t2.priority.hierarchyValue {
                 return t1.priority.hierarchyValue > t2.priority.hierarchyValue

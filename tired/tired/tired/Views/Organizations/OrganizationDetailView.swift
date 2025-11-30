@@ -32,7 +32,11 @@ struct OrganizationDetailView: View {
     @State private var isGeneratingInvite = false
 
     enum DetailTab: String, CaseIterable {
-        case overview = "簡介", posts = "動態", apps = "小應用"
+        case overview = "簡介"
+        case posts = "動態"
+        case schedule = "課表"
+        case grades = "成績"
+        case apps = "小應用"
     }
 
     init(organizationId: String) {
@@ -468,6 +472,10 @@ struct OrganizationDetailView: View {
                     onCreatePost: viewModel.canCreatePosts ? { startCreatePost(asAnnouncement: false) } : nil,
                     onCreateAnnouncement: viewModel.canCreateAnnouncements ? { startCreatePost(asAnnouncement: true) } : nil
                 )
+            case .schedule:
+                CourseScheduleTab(organizationId: viewModel.organizationId, organizationName: organization.name)
+            case .grades:
+                GradesTab(organizationId: viewModel.organizationId, organizationName: organization.name, viewModel: viewModel)
             case .apps:
                 OrganizationAppsTab(
                     viewModel: viewModel,
@@ -790,5 +798,41 @@ struct OrganizationAppsTab: View {
         .padding()
         .background(Color.appSecondaryBackground)
         .cornerRadius(12)
+    }
+}
+
+// MARK: - Course Schedule Tab
+@available(iOS 17.0, *)
+struct CourseScheduleTab: View {
+    let organizationId: String
+    let organizationName: String
+
+    var body: some View {
+        CourseScheduleView(
+            organizationId: organizationId,
+            organizationName: organizationName
+        )
+    }
+}
+
+// MARK: - Grades Tab
+@available(iOS 17.0, *)
+struct GradesTab: View {
+    let organizationId: String
+    let organizationName: String
+    @ObservedObject var viewModel: OrganizationDetailViewModel
+
+    var body: some View {
+        GradeListView(
+            organizationId: organizationId,
+            organizationName: organizationName,
+            isStudentView: !isTeacherView
+        )
+    }
+
+    // Determine if user should see teacher view based on permissions
+    private var isTeacherView: Bool {
+        // If user has management permissions, show teacher view
+        viewModel.canManageApps || viewModel.canChangeRoles || viewModel.canManageMembers
     }
 }
