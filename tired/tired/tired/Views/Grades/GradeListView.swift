@@ -13,6 +13,7 @@ struct GradeListView: View {
     @State private var showingGradeDetail = false
     @State private var showingStatistics = false
     @State private var showingGradeSummary = false
+    @State private var showingGradeItemManagement = false
     
     var body: some View {
         ZStack {
@@ -67,7 +68,7 @@ struct GradeListView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                HStack {
+                HStack(spacing: 16) {
                     if isStudentView {
                         Button(action: {
                             showingGradeSummary = true
@@ -75,6 +76,13 @@ struct GradeListView: View {
                             Image(systemName: "chart.bar.fill")
                         }
                     } else {
+                        // 成績項目管理（Moodle-like 功能）
+                        Button(action: {
+                            showingGradeItemManagement = true
+                        }) {
+                            Image(systemName: "list.bullet.rectangle.fill")
+                        }
+
                         Button(action: {
                             showingStatistics = true
                         }) {
@@ -117,6 +125,14 @@ struct GradeListView: View {
         .sheet(isPresented: $showingGradeSummary) {
             if let summary = viewModel.gradeSummary {
                 GradeSummaryView(summary: summary, organizationName: organizationName)
+            }
+        }
+        .sheet(isPresented: $showingGradeItemManagement) {
+            NavigationView {
+                GradeItemManagementView(
+                    organizationId: organizationId,
+                    organizationName: organizationName
+                )
             }
         }
     }
