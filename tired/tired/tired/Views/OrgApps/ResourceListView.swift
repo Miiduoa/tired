@@ -288,6 +288,10 @@ struct CreateResourceView: View {
     @State private var category = ""
     @State private var tagsText = ""
     @State private var isCreating = false
+    @State private var showingFilePicker = false
+    @State private var selectedFileData: Data?
+    @State private var selectedFileName: String?
+    @State private var uploadProgress: Double = 0.0
 
     var body: some View {
         NavigationStack {
@@ -313,10 +317,56 @@ struct CreateResourceView: View {
                     .pickerStyle(.menu)
                 }
 
-                SwiftUI.Section("連結") {
-                    TextField("資源連結 URL", text: $url)
-                        .keyboardType(.URL)
-                        .autocapitalization(.none)
+                // Moodle-like 文件上傳
+                if resourceType == .link {
+                    SwiftUI.Section("連結") {
+                        TextField("資源連結 URL", text: $url)
+                            .keyboardType(.URL)
+                            .autocapitalization(.none)
+                    }
+                } else {
+                    SwiftUI.Section("檔案上傳") {
+                        if let fileName = selectedFileName {
+                            HStack {
+                                Image(systemName: "doc.fill")
+                                    .foregroundColor(.blue)
+                                Text(fileName)
+                                    .lineLimit(1)
+                                Spacer()
+                                Button(action: {
+                                    selectedFileData = nil
+                                    selectedFileName = nil
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        } else {
+                            Button(action: {
+                                showingFilePicker = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "doc.badge.plus")
+                                    Text("選擇檔案")
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+
+                        // 上傳進度
+                        if isCreating && uploadProgress > 0 {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("上傳進度: \(Int(uploadProgress * 100))%")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+
+                                ProgressView(value: uploadProgress)
+                                    .progressViewStyle(.linear)
+                            }
+                        }
+                    }
                 }
 
                 SwiftUI.Section("分類") {
@@ -344,9 +394,55 @@ struct CreateResourceView: View {
                     Button("新增") {
                         createResource()
                     }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isCreating)
+                    .disabled(isFormInvalid || isCreating)
                 }
             }
+            .fileImporter(
+                isPresented: $showingFilePicker,
+                allowedContentTypes: [.item],
+                allowsMultipleSelection: false
+            ) { result in
+                handleFileSelection(result)
+            }
+        }
+    }
+
+    private var isFormInvalid: Bool {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedTitle.isEmpty {
+            return true
+        }
+
+        if resourceType == .link {
+            return url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        } else {
+            return selectedFileData == nil
+        }
+    }
+
+    private func handleFileSelection(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let fileURL = urls.first else { return }
+
+            // 讀取文件數據
+            do {
+                let fileData = try Data(contentsOf: fileURL)
+                selectedFileData = fileData
+                selectedFileName = fileURL.lastPathComponent
+
+                // 如果標題為空，使用文件名作為標題
+                if title.isEmpty {
+                    title = fileURL.deletingPathExtension().lastPathComponent
+                }
+            } catch {
+                print("❌ Error reading file: \(error)")
+                AlertHelper.shared.showError("無法讀取檔案：\(error.localizedDescription)")
+            }
+
+        case .failure(let error):
+            print("❌ Error selecting file: \(error)")
+            AlertHelper.shared.showError("選擇檔案失敗：\(error.localizedDescription)")
         }
     }
 
@@ -360,15 +456,46 @@ struct CreateResourceView: View {
 
         _Concurrency.Task {
             do {
+                var finalURL = url
+
+                // Moodle-like 文件上傳功能
+                if resourceType != .link, let fileData = selectedFileData, let fileName = selectedFileName {
+                    await MainActor.run {
+                        uploadProgress = 0.1
+                    }
+
+                    // 使用 StorageService.uploadResourceFile 上傳
+                    let storageService = StorageService()
+                    let mimeType = getMimeType(for: fileName)
+
+                    await MainActor.run {
+                        uploadProgress = 0.3
+                    }
+
+                    finalURL = try await storageService.uploadResourceFile(
+                        organizationId: viewModel.organizationId,
+                        fileData: fileData,
+                        fileName: fileName,
+                        mimeType: mimeType
+                    )
+
+                    await MainActor.run {
+                        uploadProgress = 0.8
+                    }
+                }
+
+                // 創建資源記錄
                 try await viewModel.createResource(
                     title: title,
                     description: description.isEmpty ? nil : description,
                     type: resourceType,
-                    url: url,
+                    url: finalURL,
                     category: category.isEmpty ? nil : category,
                     tags: tags
                 )
+
                 await MainActor.run {
+                    uploadProgress = 1.0
                     isCreating = false
                     AlertHelper.shared.showSuccess("資源新增成功")
                     dismiss()
@@ -377,9 +504,52 @@ struct CreateResourceView: View {
                 print("❌ Error creating resource: \(error)")
                 await MainActor.run {
                     isCreating = false
+                    uploadProgress = 0.0
                     AlertHelper.shared.showError("新增資源失敗：\(error.localizedDescription)")
                 }
             }
+        }
+    }
+
+    private func getMimeType(for fileName: String) -> String {
+        let fileExtension = (fileName as NSString).pathExtension.lowercased()
+
+        switch fileExtension {
+        // 文檔
+        case "pdf": return "application/pdf"
+        case "doc": return "application/msword"
+        case "docx": return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        case "xls": return "application/vnd.ms-excel"
+        case "xlsx": return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        case "ppt": return "application/vnd.ms-powerpoint"
+        case "pptx": return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+
+        // 圖片
+        case "jpg", "jpeg": return "image/jpeg"
+        case "png": return "image/png"
+        case "gif": return "image/gif"
+        case "svg": return "image/svg+xml"
+
+        // 影片
+        case "mp4": return "video/mp4"
+        case "mov": return "video/quicktime"
+        case "avi": return "video/x-msvideo"
+
+        // 音訊
+        case "mp3": return "audio/mpeg"
+        case "wav": return "audio/wav"
+
+        // 壓縮檔
+        case "zip": return "application/zip"
+        case "rar": return "application/x-rar-compressed"
+
+        // 文本
+        case "txt": return "text/plain"
+        case "html": return "text/html"
+        case "css": return "text/css"
+        case "js": return "text/javascript"
+
+        default: return "application/octet-stream"
         }
     }
 }
