@@ -60,6 +60,22 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
+    // Courses (新增)
+    match /courses/{courseId} {
+      allow read: if isAuthenticated(); // 允許所有登入用戶讀取公開課程
+      allow create: if isAuthenticated(); // 允許建立課程
+      allow update: if isAuthenticated(); // 實際應檢查是否為課程教師
+      allow delete: if isAuthenticated(); // 實際應檢查是否為課程建立者
+    }
+
+    // Enrollments (新增)
+    match /enrollments/{enrollmentId} {
+      allow read: if isAuthenticated(); // 允許讀取選課記錄
+      allow create: if isAuthenticated(); // 允許選課
+      allow update: if isAuthenticated(); // 實際應檢查是否為本人或教師
+      allow delete: if isAuthenticated(); // 實際應檢查權限
+    }
+
     // Posts
     match /posts/{postId} {
       allow read, write: if isAuthenticated();
