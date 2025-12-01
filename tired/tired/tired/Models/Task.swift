@@ -25,7 +25,8 @@ struct Task: Codable, Identifiable, Hashable {
     var userId: String
 
     // 任務來源
-    var sourceOrgId: String?
+    var sourceOrgId: String?            // 來自組織（社團、公司等）
+    var sourceCourseId: String?         // 來自課程（新增）
     var sourceAppInstanceId: String?
     var sourceType: TaskSourceType
     
@@ -94,7 +95,7 @@ struct Task: Codable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, userId
-        case sourceOrgId, sourceAppInstanceId, sourceType
+        case sourceOrgId, sourceCourseId, sourceAppInstanceId, sourceType
         case taskType // NEW
         case title, description, assigneeUserIds // REPLACED: assigneeUserId
         case category, priority, tags
@@ -115,6 +116,7 @@ struct Task: Codable, Identifiable, Hashable {
         id: String? = nil,
         userId: String,
         sourceOrgId: String? = nil,
+        sourceCourseId: String? = nil,
         sourceAppInstanceId: String? = nil,
         sourceType: TaskSourceType = .manual,
         taskType: TaskType = .generic, // NEW
@@ -155,6 +157,7 @@ struct Task: Codable, Identifiable, Hashable {
         self.id = id
         self.userId = userId
         self.sourceOrgId = sourceOrgId
+        self.sourceCourseId = sourceCourseId
         self.sourceAppInstanceId = sourceAppInstanceId
         self.sourceType = sourceType
         self.taskType = taskType // NEW
