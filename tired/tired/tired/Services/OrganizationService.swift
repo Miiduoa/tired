@@ -106,69 +106,157 @@ class OrganizationService: ObservableObject {
         
         // 更新快取
         organizationCache[id] = organization
-        
+
         return organization
     }
 
-    /// 创建组织 (包含預設角色)
+    /// 獲取子組織列表
+    func fetchChildOrganizations(parentId: String) async throws -> [Organization] {
+        let snapshot = try await db.collection("organizations")
+            .whereField("parentOrganizationId", isEqualTo: parentId)
+            .getDocuments()
+
+        var organizations: [Organization] = []
+        for doc in snapshot.documents {
+            var org = try doc.data(as: Organization.self)
+            org.id = doc.documentID
+
+            // 獲取該組織的角色
+            let rolesSnapshot = try await doc.reference.collection("roles").getDocuments()
+            let roles = rolesSnapshot.documents.compactMap { roleDoc -> Role? in
+                var role = try? roleDoc.data(as: Role.self)
+                role?.id = roleDoc.documentID
+                return role
+            }
+            org.roles = roles
+
+            organizations.append(org)
+        }
+
+        return organizations
+    }
+
+    /// 獲取組織的完整層級結構
+    func fetchOrganizationHierarchy(rootId: String) async throws -> [Organization] {
+        var allOrgs: [Organization] = []
+
+        // 獲取根組織
+        let rootOrg = try await fetchOrganization(id: rootId)
+        allOrgs.append(rootOrg)
+
+        // 遞迴獲取所有子組織
+        func fetchRecursive(parentId: String) async throws {
+            let children = try await fetchChildOrganizations(parentId: parentId)
+            allOrgs.append(contentsOf: children)
+
+            for child in children {
+                if let childId = child.id, child.type.canHaveChildren {
+                    try await fetchRecursive(parentId: childId)
+                }
+            }
+        }
+
+        try await fetchRecursive(parentId: rootId)
+
+        return allOrgs
+    }
+
+    /// 创建组织 (包含預設角色和層級結構)
     func createOrganization(_ org: Organization) async throws -> String {
         print("🚀 Starting createOrganization...")
         var newOrg = org
         newOrg.createdAt = Date()
         newOrg.updatedAt = Date()
-        
-        // 1. 生成文檔引用 (不立即寫入)
+
+        // 1. 驗證層級結構
+        if let parentId = newOrg.parentOrganizationId {
+            // 驗證父組織存在
+            let parentOrg = try await fetchOrganization(id: parentId)
+
+            // 驗證父組織是否允許子組織
+            guard parentOrg.type.canHaveChildren else {
+                throw NSError(domain: "OrganizationService", code: -100,
+                             userInfo: [NSLocalizedDescriptionKey: "父組織類型 '\(parentOrg.type.displayName)' 不支援子組織。"])
+            }
+
+            // 驗證子組織類型是否被允許
+            guard parentOrg.type.allowedChildTypes.contains(newOrg.type) else {
+                throw NSError(domain: "OrganizationService", code: -101,
+                             userInfo: [NSLocalizedDescriptionKey: "'\(parentOrg.type.displayName)' 不允許創建 '\(newOrg.type.displayName)' 類型的子組織。"])
+            }
+
+            // 自動設置層級資訊
+            let parentLevel = parentOrg.level ?? 0
+            newOrg.level = parentLevel + 1
+            newOrg.rootOrganizationId = parentOrg.rootOrganizationId ?? parentId
+            var path = parentOrg.organizationPath ?? []
+            path.append(parentId)
+            newOrg.organizationPath = path
+        } else {
+            // 根組織
+            newOrg.level = 0
+            newOrg.rootOrganizationId = nil
+            newOrg.organizationPath = nil
+        }
+
+        // 2. 生成文檔引用
         let orgRef = db.collection("organizations").document()
         let orgId = orgRef.documentID
-        
+
         let membershipRef = db.collection("memberships").document()
-        let membershipId = membershipRef.documentID
-        
-        let rolesCollection = orgRef.collection("roles")
-        let ownerRoleRef = rolesCollection.document()
-        let adminRoleRef = rolesCollection.document()
-        let memberRoleRef = rolesCollection.document()
-        
-        // 2. 準備數據
-        // 注意：初始化時 id 傳入 nil，因為使用 batch.setData 指定了 document reference，
-        // Firestore 會自動關聯 ID。傳入非 nil 的 @DocumentID 屬性會導致警告。
-        let ownerPermissions = OrgPermission.allCases.map { $0.permissionString }
-        let ownerRole = Role(id: nil, name: "擁有者", permissions: ownerPermissions, isDefault: true)
-        
-        let adminPermissions = OrgPermission.allCases.filter {
-            switch $0 {
-            case .deleteOrganization, .transferOwnership: return false
-            default: return true
-            }
-        }.map { $0.permissionString }
-        let adminRole = Role(id: nil, name: "管理員", permissions: adminPermissions, isDefault: true)
-        
-        let memberPermissions: [OrgPermission] = [.viewContent, .comment, .joinEvents, .react]
-        let memberRole = Role(id: nil, name: "成員", permissions: memberPermissions.map { $0.permissionString }, isDefault: true)
-        
+
+        // 3. 根據組織類型創建標準角色
+        let roleTemplate = StandardRoleTemplate.from(newOrg.type)
+        let standardRoles = roleTemplate.roles
+        var roleRefs: [String: DocumentReference] = [:]
+        var roleObjects: [Role] = []
+
+        for (roleName, permissions, isDefault) in standardRoles {
+            let roleRef = orgRef.collection("roles").document()
+            roleRefs[roleName] = roleRef
+            let role = Role(
+                id: nil,
+                name: roleName,
+                permissions: permissions.map { $0.permissionString },
+                isDefault: isDefault
+            )
+            roleObjects.append(role)
+        }
+
+        // 4. 創建初始成員資格（賦予擁有者角色）
+        guard let ownerRoleRef = roleRefs["擁有者"] else {
+            throw NSError(domain: "OrganizationService", code: -102,
+                         userInfo: [NSLocalizedDescriptionKey: "找不到擁有者角色。"])
+        }
+
         let initialMembership = Membership(
             id: nil,
             userId: org.createdByUserId,
             organizationId: orgId,
-            roleIds: [ownerRoleRef.documentID], // 直接賦予 Owner 角色
+            roleIds: [ownerRoleRef.documentID],
             isPrimaryForType: true,
             createdAt: Date(),
             updatedAt: Date()
         )
-        
+
         // 確保 newOrg 的 id 為 nil
         var cleanOrg = newOrg
         cleanOrg.id = nil
-        
-        // 3. 執行批次寫入 (原子性)
+
+        // 5. 執行批次寫入 (原子性)
         let batch = db.batch()
-        
+
         try batch.setData(from: cleanOrg, forDocument: orgRef)
         try batch.setData(from: initialMembership, forDocument: membershipRef)
-        try batch.setData(from: ownerRole, forDocument: ownerRoleRef)
-        try batch.setData(from: adminRole, forDocument: adminRoleRef)
-        try batch.setData(from: memberRole, forDocument: memberRoleRef)
-        
+
+        // 寫入所有標準角色
+        for (roleName, _) in roleRefs {
+            if let roleRef = roleRefs[roleName],
+               let role = roleObjects.first(where: { $0.name == roleName }) {
+                try batch.setData(from: role, forDocument: roleRef)
+            }
+        }
+
         do {
             print("⏳ Committing batch...")
             try await batch.commit()
@@ -590,26 +678,67 @@ class OrganizationService: ObservableObject {
     }
 
 
-    /// 檢查用戶在組織中的權限
+    /// 檢查用戶在組織中的權限（支援層級繼承）
     func checkPermission(userId: String, organizationId: String, permission: OrgPermission) async throws -> Bool {
         // 1. 獲取組織 (它會包含所有角色)
         let organization = try await fetchOrganization(id: organizationId)
-        
-        // 2. 獲取用戶在該組織的成員資格
+
+        // 2. 檢查用戶在該組織的直接權限
         let snapshot = try await db.collection("memberships")
             .whereField("userId", isEqualTo: userId)
             .whereField("organizationId", isEqualTo: organizationId)
             .limit(to: 1)
             .getDocuments()
 
-        guard let doc = snapshot.documents.first,
-              let membership = try? doc.data(as: Membership.self) else {
-            // 如果找不到成員資格，代表沒有權限
-            return false
+        if let doc = snapshot.documents.first,
+           let membership = try? doc.data(as: Membership.self),
+           membership.hasPermission(permission, in: organization) {
+            return true
         }
 
-        // 3. 使用新的 hasPermission 方法進行檢查
-        return membership.hasPermission(permission, in: organization)
+        // 3. 如果沒有直接權限，檢查層級繼承權限
+        // 檢查父組織的 manageChildOrgs 權限
+        if let parentId = organization.parentOrganizationId {
+            let hasParentPermission = try await checkPermission(
+                userId: userId,
+                organizationId: parentId,
+                permission: .manageChildOrgs
+            )
+            if hasParentPermission {
+                return true
+            }
+        }
+
+        // 4. 檢查根組織的 manageChildOrgs 權限
+        if let rootId = organization.rootOrganizationId,
+           rootId != organization.parentOrganizationId {
+            let hasRootPermission = try await checkPermission(
+                userId: userId,
+                organizationId: rootId,
+                permission: .manageChildOrgs
+            )
+            if hasRootPermission {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    /// 檢查用戶是否可以管理指定的子組織
+    func checkPermissionForChildOrg(userId: String, childOrgId: String, permission: OrgPermission) async throws -> Bool {
+        // 先檢查子組織的直接權限
+        if try await checkPermission(userId: userId, organizationId: childOrgId, permission: permission) {
+            return true
+        }
+
+        // 檢查是否有父組織的管理權限
+        let childOrg = try await fetchOrganization(id: childOrgId)
+        if let parentId = childOrg.parentOrganizationId {
+            return try await checkPermission(userId: userId, organizationId: parentId, permission: .manageChildOrgs)
+        }
+
+        return false
     }
 
     /// 按类别获取身份（例如：所有学校身份）

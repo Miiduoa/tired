@@ -18,27 +18,29 @@ struct Organization: Codable, Identifiable, Hashable {
 
     var createdAt: Date
     var updatedAt: Date
-    
+
     // Non-Codable property to hold fetched roles
     var roles: [Role] = []
-    
+
+    // MARK: - Hierarchy (組織層級結構)
+
+    var parentOrganizationId: String?    // 父組織 ID
+    var rootOrganizationId: String?      // 根組織 ID（例如：學校）
+    var organizationPath: [String]?      // 組織路徑 [schoolId, deptId, courseId]
+    var level: Int?                      // 組織層級 (0=根組織/學校, 1=系所, 2=課程)
+
     // MARK: - Course/Organization Enhancement (Moodle-like features)
-    
-    // 課程相關屬性（僅當 type 為 school 或 department 時使用）
-    var courseCode: String?              // 課程代碼（例如："CS101"）
-    var semester: String?                // 學期（例如："2024-1" 表示 2024 學年第一學期）
-    var credits: Int?                    // 學分數
-    var syllabus: String?                // 課程大綱（Markdown 格式）
-    var schedule: [CourseSchedule]?       // 課程時間表（不直接存儲，通過子集合獲取）
-    var academicYear: String?            // 學年（例如："2024"）
-    var courseLevel: String?              // 課程級別（例如："大學部", "研究所"）
-    var prerequisites: [String]?          // 先修課程 ID 列表
-    var maxEnrollment: Int?              // 最大選課人數
-    var currentEnrollment: Int?          // 目前選課人數
+
+    // 課程專屬資訊（僅當 type == .course 時使用）
+    var courseInfo: CourseInfo?
+
+    // 課程時間表（不直接存儲，通過子集合獲取）
+    var schedule: [CourseSchedule]?
 
     enum CodingKeys: String, CodingKey {
         case id, name, type, description, avatarUrl, coverUrl, isVerified, createdByUserId, createdAt, updatedAt
-        case courseCode, semester, credits, syllabus, academicYear, courseLevel, prerequisites, maxEnrollment, currentEnrollment
+        case parentOrganizationId, rootOrganizationId, organizationPath, level
+        case courseInfo
     }
     
     // Hashable conformance
@@ -62,16 +64,12 @@ struct Organization: Codable, Identifiable, Hashable {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         roles: [Role] = [],
-        courseCode: String? = nil,
-        semester: String? = nil,
-        credits: Int? = nil,
-        syllabus: String? = nil,
-        schedule: [CourseSchedule]? = nil,
-        academicYear: String? = nil,
-        courseLevel: String? = nil,
-        prerequisites: [String]? = nil,
-        maxEnrollment: Int? = nil,
-        currentEnrollment: Int? = nil
+        parentOrganizationId: String? = nil,
+        rootOrganizationId: String? = nil,
+        organizationPath: [String]? = nil,
+        level: Int? = nil,
+        courseInfo: CourseInfo? = nil,
+        schedule: [CourseSchedule]? = nil
     ) {
         self.id = id
         self.name = name
@@ -84,16 +82,12 @@ struct Organization: Codable, Identifiable, Hashable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.roles = roles
-        self.courseCode = courseCode
-        self.semester = semester
-        self.credits = credits
-        self.syllabus = syllabus
+        self.parentOrganizationId = parentOrganizationId
+        self.rootOrganizationId = rootOrganizationId
+        self.organizationPath = organizationPath
+        self.level = level
+        self.courseInfo = courseInfo
         self.schedule = schedule
-        self.academicYear = academicYear
-        self.courseLevel = courseLevel
-        self.prerequisites = prerequisites
-        self.maxEnrollment = maxEnrollment
-        self.currentEnrollment = currentEnrollment
     }
 }
 
