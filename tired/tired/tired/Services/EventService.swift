@@ -1,5 +1,6 @@
 import Foundation
 import FirebaseFirestore
+import FirebaseAuth
 import Combine
 
 /// 活動服務
@@ -102,6 +103,12 @@ class EventService: ObservableObject {
 
     /// 為活動創建置頂公告
     private func createAnnouncementForEvent(_ event: Event) async {
+        // 獲取當前登入用戶ID作為公告作者
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            print("❌ No current user for creating event announcement")
+            return
+        }
+        
         // 建立活動公告內容
         let announcementText = """
         📅 新活動發布：\(event.title)
@@ -115,7 +122,7 @@ class EventService: ObservableObject {
         """
 
         let post = Post(
-            authorUserId: event.createdByUserId,
+            authorUserId: currentUserId,
             organizationId: event.organizationId,
             contentText: announcementText,
             visibility: .orgMembers,

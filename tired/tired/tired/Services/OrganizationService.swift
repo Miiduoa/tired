@@ -370,6 +370,21 @@ class OrganizationService: ObservableObject {
             try? doc.data(as: Membership.self)
         }
     }
+    
+    /// 獲取用戶在特定組織的成員資格
+    func fetchMembership(userId: String, organizationId: String) async throws -> Membership? {
+        let snapshot = try await db.collection("memberships")
+            .whereField("userId", isEqualTo: userId)
+            .whereField("organizationId", isEqualTo: organizationId)
+            .limit(to: 1)
+            .getDocuments()
+        
+        guard let doc = snapshot.documents.first else {
+            return nil
+        }
+        
+        return try? doc.data(as: Membership.self)
+    }
 
     /// 變更成員的角色
     func changeMemberRoles(membershipId: String, newRoleIds: [String]) async throws {

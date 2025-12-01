@@ -624,9 +624,8 @@ struct TaskDetailView: View {
         var loadedTasks: [Task] = []
         for depId in task.dependsOnTaskIds {
             do {
-                if let depTask: Task = try await taskService.fetchTask(id: depId) {
-                    loadedTasks.append(depTask)
-                }
+                let depTask = try await taskService.fetchTask(id: depId)
+                loadedTasks.append(depTask)
             } catch {
                 print("❌ Error loading dependency task \(depId): \(error)")
             }

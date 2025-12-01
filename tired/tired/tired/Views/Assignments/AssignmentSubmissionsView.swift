@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import FirebaseAuth
 import FirebaseFirestore
 
@@ -393,14 +394,14 @@ struct StudentSubmissionRow: View {
                         .fill(Color.blue.opacity(0.3))
                         .frame(width: 40, height: 40)
                         .overlay(
-                            Text(submission.student?.displayName.prefix(1).uppercased() ?? "?")
+                            Text(submission.student?.name.prefix(1).uppercased() ?? "?")
                                 .font(.headline)
                                 .foregroundColor(.white)
                         )
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(submission.student?.displayName ?? "未知學員")
+                    Text(submission.student?.name ?? "未知學員")
                         .font(AppDesignSystem.bodyFont.weight(.semibold))
 
                     if submission.isSubmitted {
@@ -429,11 +430,11 @@ struct StudentSubmissionRow: View {
                         .font(AppDesignSystem.captionFont)
                         .foregroundColor(.secondary)
 
-                    ForEach(submission.fileAttachments, id: \.url) { file in
+                    ForEach(submission.fileAttachments) { file in
                         HStack {
                             Image(systemName: "doc.fill")
                                 .foregroundColor(.blue)
-                            Text(file.fileName ?? "文件")
+                            Text(file.fileName)
                                 .font(AppDesignSystem.captionFont)
                             Spacer()
                         }
@@ -621,12 +622,12 @@ class AssignmentSubmissionDetailViewModel: ObservableObject {
             }
 
             // Sort: submitted first, then by name
-            submissions.sort { sub1, sub2 in
+            submissions.sort(by: { sub1, sub2 in
                 if sub1.isSubmitted != sub2.isSubmitted {
                     return sub1.isSubmitted
                 }
-                return (sub1.student?.displayName ?? "") < (sub2.student?.displayName ?? "")
-            }
+                return (sub1.student?.name ?? "") < (sub2.student?.name ?? "")
+            })
 
             studentSubmissions = submissions
         } catch {

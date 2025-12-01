@@ -34,7 +34,7 @@ class ResourceListViewModel: ObservableObject {
 
         _Concurrency.Task {
             let organizationService = OrganizationService()
-            if let membership = try? await organizationService.getMembership(userId: userId, organizationId: organizationId) {
+            if let membership = try? await organizationService.fetchMembership(userId: userId, organizationId: organizationId) {
                 await MainActor.run {
                     self.currentMembership = membership
                 }
