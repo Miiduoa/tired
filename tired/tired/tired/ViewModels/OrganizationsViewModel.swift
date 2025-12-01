@@ -45,8 +45,14 @@ class OrganizationsViewModel: ObservableObject {
 
     // MARK: - Actions
 
-    /// 創建新組織
-    func createOrganization(name: String, type: OrgType, description: String?) async throws -> String {
+    /// 創建新組織（支援層級結構和課程資訊）
+    func createOrganization(
+        name: String,
+        type: OrgType,
+        description: String?,
+        parentOrganizationId: String? = nil,
+        courseInfo: CourseInfo? = nil
+    ) async throws -> String {
         guard let userId = userId else {
             throw NSError(domain: "OrganizationsViewModel", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])
         }
@@ -56,18 +62,21 @@ class OrganizationsViewModel: ObservableObject {
             type: type,
             description: description,
             isVerified: false,
-            createdByUserId: userId
+            createdByUserId: userId,
+            parentOrganizationId: parentOrganizationId,
+            courseInfo: courseInfo
         )
 
         await MainActor.run { isLoading = true }
         // Use explicit main actor updates instead of defer/dispatch to ensure order
-        
+
         do {
             let orgId = try await organizationService.createOrganization(org)
-            
+
             await MainActor.run {
                 isLoading = false
-                ToastManager.shared.showToast(message: "組織創建成功！", type: .success)
+                let orgTypeName = type.displayName
+                ToastManager.shared.showToast(message: "\(orgTypeName)創建成功！", type: .success)
             }
             return orgId
         } catch {

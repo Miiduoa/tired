@@ -212,9 +212,10 @@ struct OrganizationCard: View {
         switch type {
         case .school: return .blue
         case .department: return .cyan
+        case .course: return .green
         case .club: return .purple
         case .company: return .orange
-        case .project: return .green
+        case .project: return .mint
         case .other: return .gray
         }
     }
@@ -233,6 +234,31 @@ struct CreateOrganizationView: View {
     @State private var description = ""
     @State private var isCreating = false
 
+    // 層級相關
+    @State private var selectedParentOrg: Organization?
+    @State private var showingParentOrgPicker = false
+
+    // 課程資訊
+    @State private var courseCode = ""
+    @State private var semester = ""
+    @State private var academicYear = ""
+    @State private var credits = "3"
+    @State private var maxEnrollment = ""
+
+    // 可選的組織類型（根據父組織類型動態變化）
+    private var availableOrgTypes: [OrgType] {
+        if let parent = selectedParentOrg {
+            return parent.type.allowedChildTypes
+        }
+        // 沒有父組織時，只能創建根組織類型
+        return [.school, .company, .club, .project, .other]
+    }
+
+    // 是否顯示課程資訊表單
+    private var shouldShowCourseInfo: Bool {
+        type == .course
+    }
+
     var body: some View {
         NavigationView {
             ZStack {
@@ -240,12 +266,63 @@ struct CreateOrganizationView: View {
                 
                 ScrollView {
                     VStack(spacing: 24) {
+                        // 層級結構區塊
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("組織層級")
+                                .font(.headline)
+                                .foregroundColor(.secondary)
+
+                            Button {
+                                showingParentOrgPicker = true
+                            } label: {
+                                HStack {
+                                    if let parent = selectedParentOrg {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("父組織")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                            Label(parent.name, systemImage: iconForOrgType(parent.type))
+                                                .foregroundColor(.primary)
+                                        }
+                                    } else {
+                                        Label("選擇父組織（可選）", systemImage: "arrow.up.square")
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    if selectedParentOrg != nil {
+                                        Button {
+                                            selectedParentOrg = nil
+                                            // 重置為根組織類型
+                                            if !availableOrgTypes.contains(type) {
+                                                type = .school
+                                            }
+                                        } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding()
+                                .background(Color.white.opacity(0.1))
+                                .cornerRadius(12)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                )
+                            }
+                            .padding()
+                            .glassmorphicCard()
+                        }
+
                         // 基本信息區塊
                         VStack(alignment: .leading, spacing: 16) {
                             Text("基本信息")
                                 .font(.headline)
                                 .foregroundColor(.secondary)
-                            
+
                             VStack(spacing: 12) {
                                 // 組織名稱輸入
                                 TextField("組織名稱", text: $name)
@@ -262,7 +339,7 @@ struct CreateOrganizationView: View {
                                 // 類型選擇
                                 Menu {
                                     Picker("類型", selection: $type) {
-                                        ForEach(OrgType.allCases, id: \.self) { orgType in
+                                        ForEach(availableOrgTypes, id: \.self) { orgType in
                                             Label(orgType.displayName, systemImage: iconForOrgType(orgType))
                                                 .tag(orgType)
                                         }
@@ -294,11 +371,11 @@ struct CreateOrganizationView: View {
                             Text("描述（選填）")
                                 .font(.headline)
                                 .foregroundColor(.secondary)
-                            
+
                             TextEditor(text: $description)
                                 .frame(height: 120)
                                 .padding(8)
-                                .scrollContentBackground(.hidden) // 重要：移除預設背景
+                                .scrollContentBackground(.hidden)
                                 .background(Color.white.opacity(0.1))
                                 .cornerRadius(12)
                                 .overlay(
@@ -308,6 +385,87 @@ struct CreateOrganizationView: View {
                                 .foregroundColor(.primary)
                                 .padding()
                                 .glassmorphicCard()
+                        }
+
+                        // 課程資訊區塊（僅課程類型顯示）
+                        if shouldShowCourseInfo {
+                            VStack(alignment: .leading, spacing: 16) {
+                                Text("課程資訊")
+                                    .font(.headline)
+                                    .foregroundColor(.secondary)
+
+                                VStack(spacing: 12) {
+                                    // 課程代碼
+                                    TextField("課程代碼（例如：CS101）", text: $courseCode)
+                                        .textFieldStyle(.plain)
+                                        .padding()
+                                        .background(Color.white.opacity(0.1))
+                                        .cornerRadius(12)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                        )
+                                        .foregroundColor(.primary)
+
+                                    HStack(spacing: 12) {
+                                        // 學年
+                                        TextField("學年（例如：2024）", text: $academicYear)
+                                            .textFieldStyle(.plain)
+                                            .padding()
+                                            .background(Color.white.opacity(0.1))
+                                            .cornerRadius(12)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                            )
+                                            .foregroundColor(.primary)
+                                            .keyboardType(.numberPad)
+
+                                        // 學期
+                                        TextField("學期（例如：1）", text: $semester)
+                                            .textFieldStyle(.plain)
+                                            .padding()
+                                            .background(Color.white.opacity(0.1))
+                                            .cornerRadius(12)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                            )
+                                            .foregroundColor(.primary)
+                                            .keyboardType(.numberPad)
+                                    }
+
+                                    HStack(spacing: 12) {
+                                        // 學分數
+                                        TextField("學分", text: $credits)
+                                            .textFieldStyle(.plain)
+                                            .padding()
+                                            .background(Color.white.opacity(0.1))
+                                            .cornerRadius(12)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                            )
+                                            .foregroundColor(.primary)
+                                            .keyboardType(.numberPad)
+
+                                        // 最大選課人數
+                                        TextField("最大人數（選填）", text: $maxEnrollment)
+                                            .textFieldStyle(.plain)
+                                            .padding()
+                                            .background(Color.white.opacity(0.1))
+                                            .cornerRadius(12)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                            )
+                                            .foregroundColor(.primary)
+                                            .keyboardType(.numberPad)
+                                    }
+                                }
+                                .padding()
+                                .glassmorphicCard()
+                            }
                         }
                     }
                     .padding()
@@ -332,18 +490,40 @@ struct CreateOrganizationView: View {
                                 .fontWeight(.bold)
                         }
                     }
-                    .disabled(name.isEmpty || isCreating)
+                    .disabled(name.isEmpty || isCreating || !isFormValid)
                 }
+            }
+            .sheet(isPresented: $showingParentOrgPicker) {
+                ParentOrganizationPickerView(
+                    memberships: viewModel.myMemberships,
+                    selectedOrganization: $selectedParentOrg,
+                    onSelect: { org in
+                        selectedParentOrg = org
+                        // 自動調整類型為第一個允許的子組織類型
+                        if let firstAllowed = org.type.allowedChildTypes.first {
+                            type = firstAllowed
+                        }
+                        showingParentOrgPicker = false
+                    }
+                )
             }
         }
     }
 
+    // 驗證表單是否有效
+    private var isFormValid: Bool {
+        if shouldShowCourseInfo {
+            return !courseCode.isEmpty && !semester.isEmpty && !academicYear.isEmpty && !credits.isEmpty
+        }
+        return true
+    }
+
     private func createOrganization() {
         guard !name.isEmpty else { return }
-        
+
         // Dismiss keyboard
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-        
+
         withAnimation {
             isCreating = true
         }
@@ -352,16 +532,33 @@ struct CreateOrganizationView: View {
         _Concurrency.Task {
             do {
                 let desc = description.isEmpty ? nil : description
+
+                // 準備課程資訊（如果是課程類型）
+                var courseInfo: CourseInfo? = nil
+                if shouldShowCourseInfo {
+                    let creditsInt = Int(credits) ?? 3
+                    let maxEnrollmentInt = maxEnrollment.isEmpty ? nil : Int(maxEnrollment)
+                    courseInfo = CourseInfo(
+                        courseCode: courseCode,
+                        semester: "\(academicYear)-\(semester)",
+                        academicYear: academicYear,
+                        credits: creditsInt,
+                        maxEnrollment: maxEnrollmentInt
+                    )
+                }
+
                 print("Calling viewModel.createOrganization...")
-                
+
                 // 執行創建邏輯
                 _ = try await viewModel.createOrganization(
                     name: name,
                     type: type,
-                    description: desc
+                    description: desc,
+                    parentOrganizationId: selectedParentOrg?.id,
+                    courseInfo: courseInfo
                 )
                 print("✅ viewModel.createOrganization returned successfully.")
-                
+
                 // 強制在主線程執行 UI 更新和關閉操作
                 DispatchQueue.main.async {
                     print("📲 Updating UI on Main Queue...")
@@ -384,10 +581,137 @@ struct CreateOrganizationView: View {
         switch type {
         case .school: return "building.columns"
         case .department: return "building.2"
+        case .course: return "book.closed"
         case .club: return "music.note.house"
         case .company: return "briefcase"
         case .project: return "folder"
         case .other: return "square.grid.2x2"
+        }
+    }
+}
+
+// MARK: - Parent Organization Picker View
+
+@available(iOS 17.0, *)
+struct ParentOrganizationPickerView: View {
+    let memberships: [MembershipWithOrg]
+    @Binding var selectedOrganization: Organization?
+    let onSelect: (Organization) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    // 過濾出可以創建子組織的組織
+    private var selectableOrganizations: [Organization] {
+        memberships.compactMap { membership in
+            guard let org = membership.organization else { return nil }
+            // 只顯示能創建子組織的類型
+            return org.type.canHaveChildren ? org : nil
+        }
+    }
+
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.appPrimaryBackground.edgesIgnoringSafeArea(.all)
+
+                if selectableOrganizations.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "building.2.crop.circle")
+                            .font(.system(size: 60))
+                            .foregroundColor(.secondary)
+                        Text("沒有可用的父組織")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        Text("您需要先加入或創建一個學校、公司或系所類型的組織")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding()
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(selectableOrganizations, id: \.id) { org in
+                                Button {
+                                    onSelect(org)
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        // Icon
+                                        Image(systemName: iconForOrgType(org.type))
+                                            .font(.title2)
+                                            .foregroundColor(colorForOrgType(org.type))
+                                            .frame(width: 40, height: 40)
+                                            .background(colorForOrgType(org.type).opacity(0.2))
+                                            .cornerRadius(8)
+
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(org.name)
+                                                .font(.body.weight(.medium))
+                                                .foregroundColor(.primary)
+
+                                            HStack(spacing: 4) {
+                                                Text(org.type.displayName)
+                                                    .font(.caption)
+                                                    .foregroundColor(.secondary)
+
+                                                if org.type.canHaveChildren {
+                                                    Text("·")
+                                                        .foregroundColor(.secondary)
+                                                    Text("可創建：\(org.type.allowedChildTypes.map { $0.displayName }.joined(separator: ", "))")
+                                                        .font(.caption)
+                                                        .foregroundColor(.secondary)
+                                                }
+                                            }
+                                        }
+
+                                        Spacer()
+
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .padding()
+                                    .glassmorphicCard()
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding()
+                    }
+                }
+            }
+            .navigationTitle("選擇父組織")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private func iconForOrgType(_ type: OrgType) -> String {
+        switch type {
+        case .school: return "building.columns"
+        case .department: return "building.2"
+        case .course: return "book.closed"
+        case .club: return "music.note.house"
+        case .company: return "briefcase"
+        case .project: return "folder"
+        case .other: return "square.grid.2x2"
+        }
+    }
+
+    private func colorForOrgType(_ type: OrgType) -> Color {
+        switch type {
+        case .school: return .blue
+        case .department: return .cyan
+        case .course: return .green
+        case .club: return .purple
+        case .company: return .orange
+        case .project: return .green
+        case .other: return .gray
         }
     }
 }
@@ -641,9 +965,10 @@ struct SearchResultCard: View {
         switch type {
         case .school: return .blue
         case .department: return .cyan
+        case .course: return .green
         case .club: return .purple
         case .company: return .orange
-        case .project: return .green
+        case .project: return .mint
         case .other: return .gray
         }
     }
