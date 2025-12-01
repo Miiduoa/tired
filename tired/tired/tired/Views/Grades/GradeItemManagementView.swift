@@ -54,7 +54,7 @@ struct GradeItemManagementView: View {
             GradeItemEditSheet(
                 organizationId: organizationId,
                 onSave: { newItem in
-                    Task {
+                    _Concurrency.Task {
                         await viewModel.createGradeItem(newItem)
                     }
                 }
@@ -65,7 +65,7 @@ struct GradeItemManagementView: View {
                 organizationId: organizationId,
                 existingItem: item,
                 onSave: { updatedItem in
-                    Task {
+                    _Concurrency.Task {
                         await viewModel.updateGradeItem(updatedItem)
                     }
                 }
@@ -75,7 +75,7 @@ struct GradeItemManagementView: View {
             Button("取消", role: .cancel) { }
             Button("刪除", role: .destructive) {
                 if let item = itemToDelete {
-                    Task {
+                    _Concurrency.Task {
                         await viewModel.deleteGradeItem(item)
                         itemToDelete = nil
                     }

@@ -1,21 +1,6 @@
 import SwiftUI
 
 @available(iOS 17.0, *)
-struct CourseScheduleView: View {
-    let appInstance: OrgAppInstance
-    
-    var body: some View {
-        VStack {
-            Text("課程表")
-                .font(.title)
-            Text("此功能正在開發中")
-                .foregroundColor(.secondary)
-        }
-        .navigationTitle(appInstance.name ?? "課程表")
-    }
-}
-
-@available(iOS 17.0, *)
 struct AssignmentBoardView: View {
     let appInstance: OrgAppInstance
     let organizationId: String

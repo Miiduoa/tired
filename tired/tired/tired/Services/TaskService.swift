@@ -298,12 +298,6 @@ class TaskService: ObservableObject {
 
         return (tasks, snapshot.documents.last)
     }
-
-    /// 根據ID獲取單個任務
-    func fetchTask(id: String) async throws -> Task? {
-        let document = try await db.collection("tasks").document(id).getDocument()
-        return try? document.data(as: Task.self)
-    }
     
     /// 獲取所有活躍任務（非分頁，用於 client-side 過濾 Today/Week）
     func fetchActiveTasks(userId: String) -> AnyPublisher<[Task], Error> {
@@ -424,8 +418,8 @@ class TaskService: ObservableObject {
 
         // Moodle-like 功能：作業提交後通知教師
         if isDone {
-            let task = try await getTask(id: id)
-            if task.taskType == .homework {
+            let task = try await fetchTask(id: id)
+            if task.taskType == TaskType.homework {
                 await sendHomeworkSubmissionNotification(task: task)
             }
         }
@@ -604,7 +598,7 @@ class TaskService: ObservableObject {
     private func sendHomeworkSubmissionNotification(task: Task) async {
         do {
             // 獲取學生姓名
-            guard let studentId = task.userId else { return }
+            let studentId = task.userId
             let userDoc = try await db.collection("users")
                 .document(studentId)
                 .getDocument()
@@ -612,7 +606,7 @@ class TaskService: ObservableObject {
 
             // 獲取組織名稱（如果有）
             var organizationName = "課程"
-            if let orgId = task.organizationId {
+            if let orgId = task.sourceOrgId {
                 let orgDoc = try await db.collection("organizations")
                     .document(orgId)
                     .getDocument()

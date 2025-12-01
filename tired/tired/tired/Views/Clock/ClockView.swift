@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import FirebaseAuth
 
 /// 打卡視圖 - Moodle 風格的時間追蹤
@@ -45,7 +46,7 @@ struct ClockView: View {
                 ClockInSheet(viewModel: viewModel)
             }
             .sheet(isPresented: $showingStatistics) {
-                ClockStatisticsView(viewModel: viewModel)
+                ClockStatisticsSheet(viewModel: viewModel)
             }
             .onAppear {
                 viewModel.loadClockRecords()
@@ -110,7 +111,7 @@ struct ClockView: View {
                     }
 
                     Button(action: {
-                        Task {
+                        _Concurrency.Task {
                             await viewModel.clockOut()
                         }
                     }) {
@@ -245,7 +246,7 @@ struct ClockRecordRow: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.primary)
 
-                Text(record.clockInTime.formatDate())
+                Text(record.clockInTime.formatShort())
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
             }
@@ -346,7 +347,7 @@ struct ClockInSheet: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("打卡") {
-                        Task {
+                        _Concurrency.Task {
                             await viewModel.clockIn(
                                 workDescription: workDescription.isEmpty ? nil : workDescription,
                                 location: location.isEmpty ? nil : location,
@@ -420,7 +421,7 @@ class ClockViewModel: ObservableObject {
     func checkActiveRecord() {
         guard let userId = userId else { return }
 
-        Task {
+        _Concurrency.Task {
             do {
                 activeRecord = try await clockService.getActiveClockRecord(userId: userId)
                 if activeRecord != nil {
@@ -507,6 +508,74 @@ class ClockViewModel: ObservableObject {
 
     deinit {
         timer?.invalidate()
+    }
+}
+
+// MARK: - Clock Statistics Sheet
+
+@available(iOS 17.0, *)
+struct ClockStatisticsSheet: View {
+    @ObservedObject var viewModel: ClockViewModel
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 20) {
+                    // 今日統計
+                    ClockStatCard(
+                        title: "今日總時數",
+                        value: String(format: "%.1f 小時", viewModel.todayTotalHours),
+                        icon: "clock.fill"
+                    )
+                    
+                    // 今日打卡次數
+                    ClockStatCard(
+                        title: "今日打卡次數",
+                        value: "\(viewModel.todayRecordCount) 次",
+                        icon: "checkmark.circle.fill"
+                    )
+                }
+                .padding()
+            }
+            .navigationTitle("打卡統計")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("關閉") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct ClockStatCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    
+    var body: some View {
+        HStack {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundColor(.blue)
+            
+            VStack(alignment: .leading) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text(value)
+                    .font(.title2)
+                    .fontWeight(.bold)
+            }
+            
+            Spacer()
+        }
+        .padding()
+        .background(Color.appSecondaryBackground)
+        .cornerRadius(12)
     }
 }
 

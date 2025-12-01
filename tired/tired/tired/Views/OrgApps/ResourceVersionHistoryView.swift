@@ -1,5 +1,8 @@
 import SwiftUI
+import Combine
 import FirebaseAuth
+import FirebaseFirestore
+import FirebaseFirestoreSwift
 
 /// 資源版本歷史視圖 - Moodle 風格的版本管理
 @available(iOS 17.0, *)
@@ -156,7 +159,7 @@ struct ResourceVersionHistoryView: View {
     // MARK: - Actions
 
     private func restoreVersion(_ version: Resource) {
-        Task {
+        _Concurrency.Task {
             await viewModel.restoreVersion(version, currentResource: resource, organizationId: organizationId)
         }
     }
@@ -285,7 +288,7 @@ class ResourceVersionHistoryViewModel: ObservableObject {
     func loadVersionHistory(resourceId: String, organizationId: String) {
         isLoading = true
 
-        Task {
+        _Concurrency.Task {
             do {
                 // 獲取當前資源及其所有歷史版本
                 var allVersions: [Resource] = []

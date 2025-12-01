@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import UniformTypeIdentifiers
 import FirebaseAuth
 import FirebaseFirestore
 import FirebaseFirestoreSwift

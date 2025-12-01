@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import FirebaseAuth
 
 /// 課程時間表視圖 - Moodle-like 課表顯示
@@ -358,7 +359,7 @@ class CourseScheduleViewModel: ObservableObject {
     func loadSchedules(organizationId: String) {
         isLoading = true
 
-        Task {
+        _Concurrency.Task {
             do {
                 let fetchedSchedules = try await courseService.getCourseSchedules(organizationId: organizationId)
                 self.schedules = fetchedSchedules
