@@ -5,6 +5,7 @@ import Foundation
 enum OrgType: String, Codable, CaseIterable {
     case school
     case department
+    case course      // 新增：課程類型
     case club
     case company
     case project
@@ -14,10 +15,49 @@ enum OrgType: String, Codable, CaseIterable {
         switch self {
         case .school: return "学校"
         case .department: return "系所"
+        case .course: return "课程"
         case .club: return "社团"
         case .company: return "公司"
         case .project: return "专案"
         case .other: return "其他"
+        }
+    }
+
+    // MARK: - Hierarchy Support (層級結構支援)
+
+    /// 是否支援子組織
+    var canHaveChildren: Bool {
+        switch self {
+        case .school: return true       // 學校可包含系所
+        case .department: return true   // 系所可包含課程
+        case .course: return false      // 課程不能再包含子組織
+        case .club: return false
+        case .company: return true      // 公司可包含部門
+        case .project: return false
+        case .other: return false
+        }
+    }
+
+    /// 允許的子組織類型
+    var allowedChildTypes: [OrgType] {
+        switch self {
+        case .school: return [.department, .club]
+        case .department: return [.course]
+        case .company: return [.department, .project]
+        default: return []
+        }
+    }
+
+    /// 預設層級深度（用於建議，實際層級由 parentOrganizationId 決定）
+    var defaultLevel: Int {
+        switch self {
+        case .school: return 0
+        case .department: return 1
+        case .course: return 2
+        case .company: return 0
+        case .club: return 1
+        case .project: return 1
+        case .other: return 0
         }
     }
 }
@@ -49,6 +89,19 @@ enum OrgPermission: CaseIterable {
     case comment              // 評論
     case joinEvents           // 參加活動
     case react                // 按讚互動
+
+    // MARK: - 課程相關權限
+    case submitAssignments     // 繳交作業
+    case gradeAssignments      // 批改作業
+    case viewGrades           // 查看成績
+    case manageGrades         // 管理成績
+    case takeAttendance       // 點名
+    case viewAttendance       // 查看出席紀錄
+
+    // MARK: - 層級管理權限
+    case manageChildOrgs      // 管理子組織
+    case viewChildOrgs        // 查看子組織
+    case createChildOrgs      // 創建子組織
     
     /// 將權限轉換為字符串（用於與 Role.permissions 比較）
     var permissionString: String {
@@ -56,13 +109,13 @@ enum OrgPermission: CaseIterable {
         case .deleteOrganization:
             return AppPermissions.deleteOrganization
         case .transferOwnership:
-            return "transfer_ownership" // 特殊權限，通常不存儲在 Role 中
+            return "transfer_ownership"
         case .manageMembers:
             return AppPermissions.manageOrgMembers
         case .changeRoles:
             return AppPermissions.manageOrgRoles
         case .removeMembers:
-            return AppPermissions.manageOrgMembers // 移除成員是管理成員的一部分
+            return AppPermissions.manageOrgMembers
         case .manageApps:
             return AppPermissions.manageOrgApps
         case .editOrgInfo:
@@ -76,15 +129,35 @@ enum OrgPermission: CaseIterable {
         case .createTasks:
             return AppPermissions.createTaskInOrg
         case .editOwnPosts:
-            return AppPermissions.deleteOwnPost // 編輯自己的貼文通常等同於刪除自己的貼文權限
+            return AppPermissions.deleteOwnPost
         case .viewContent:
-            return "view_content" // 所有成員默認擁有
+            return "view_content"
         case .comment:
-            return AppPermissions.createTaskCommentInOrg // 評論權限
+            return AppPermissions.createTaskCommentInOrg
         case .joinEvents:
-            return "join_events" // 所有成員默認擁有
+            return "join_events"
         case .react:
-            return "react" // 所有成員默認擁有
+            return "react"
+        // 課程相關權限
+        case .submitAssignments:
+            return "submit_assignments"
+        case .gradeAssignments:
+            return "grade_assignments"
+        case .viewGrades:
+            return "view_grades"
+        case .manageGrades:
+            return "manage_grades"
+        case .takeAttendance:
+            return "take_attendance"
+        case .viewAttendance:
+            return "view_attendance"
+        // 層級管理權限
+        case .manageChildOrgs:
+            return "manage_child_orgs"
+        case .viewChildOrgs:
+            return "view_child_orgs"
+        case .createChildOrgs:
+            return "create_child_orgs"
         }
     }
     
@@ -123,6 +196,26 @@ enum OrgPermission: CaseIterable {
             return "參加活動"
         case .react:
             return "按讚互動"
+        // 課程相關權限
+        case .submitAssignments:
+            return "繳交作業"
+        case .gradeAssignments:
+            return "批改作業"
+        case .viewGrades:
+            return "查看成績"
+        case .manageGrades:
+            return "管理成績"
+        case .takeAttendance:
+            return "點名"
+        case .viewAttendance:
+            return "查看出席紀錄"
+        // 層級管理權限
+        case .manageChildOrgs:
+            return "管理子組織"
+        case .viewChildOrgs:
+            return "查看子組織"
+        case .createChildOrgs:
+            return "創建子組織"
         }
     }
 }
