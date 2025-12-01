@@ -72,12 +72,14 @@ struct ResourceListView: View {
                 resource: resource,
                 onDelete: { () async -> Bool in
                     return await viewModel.deleteResourceAsync(resource)
-                }
+                },
+                organizationId: organizationId
             )
         } else {
             ResourceCard(
                 resource: resource,
-                onDelete: nil
+                onDelete: nil,
+                organizationId: organizationId
             )
         }
     }
@@ -160,8 +162,10 @@ struct FilterChip: View {
 struct ResourceCard: View {
     let resource: Resource
     let onDelete: (() async -> Bool)?
+    var organizationId: String? = nil
 
     @State private var isDeleting = false
+    @State private var showingVersionHistory = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -238,7 +242,29 @@ struct ResourceCard: View {
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
 
+                // Moodle-like 版本資訊（P2-1）
+                if resource.version > 1 {
+                    Text("v\(resource.version)")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(AppDesignSystem.accentColor)
+                        .cornerRadius(4)
+                }
+
                 Spacer()
+
+                // Moodle-like 版本歷史按鈕（P2-1）
+                if let orgId = organizationId, resource.version > 1 || resource.previousVersionId != nil {
+                    Button(action: {
+                        showingVersionHistory = true
+                    }) {
+                        Label("歷史", systemImage: "clock.arrow.circlepath")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.blue)
+                    }
+                }
 
                 if let onDelete = onDelete {
                     Button(role: .destructive) {
@@ -271,6 +297,11 @@ struct ResourceCard: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.appCardBorder, lineWidth: 1)
         )
+        .sheet(isPresented: $showingVersionHistory) {
+            if let orgId = organizationId {
+                ResourceVersionHistoryView(resource: resource, organizationId: orgId)
+            }
+        }
     }
 }
 
