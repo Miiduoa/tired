@@ -27,7 +27,7 @@ class CourseService: ObservableObject {
     /// 獲取組織的課程時間表（實時監聽）
     func getCourseSchedules(organizationId: String) -> AnyPublisher<[CourseSchedule], Error> {
         let subject = PassthroughSubject<[CourseSchedule], Error>()
-        
+
         db.collection("organizations")
             .document(organizationId)
             .collection("schedules")
@@ -38,20 +38,34 @@ class CourseService: ObservableObject {
                     subject.send(completion: .failure(error))
                     return
                 }
-                
+
                 guard let documents = snapshot?.documents else {
                     subject.send([])
                     return
                 }
-                
+
                 let schedules = documents.compactMap { doc -> CourseSchedule? in
                     try? doc.data(as: CourseSchedule.self)
                 }
-                
+
                 subject.send(schedules)
             }
-        
+
         return subject.eraseToAnyPublisher()
+    }
+
+    /// 獲取組織的課程時間表（async 版本）
+    func getCourseSchedules(organizationId: String) async throws -> [CourseSchedule] {
+        let snapshot = try await db.collection("organizations")
+            .document(organizationId)
+            .collection("schedules")
+            .order(by: "dayOfWeek", descending: false)
+            .order(by: "startTime", descending: false)
+            .getDocuments()
+
+        return try snapshot.documents.compactMap { doc -> CourseSchedule? in
+            try? doc.data(as: CourseSchedule.self)
+        }
     }
     
     /// 更新課程時間表

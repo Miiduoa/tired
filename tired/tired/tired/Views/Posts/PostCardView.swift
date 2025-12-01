@@ -168,6 +168,20 @@ struct PostCardView: View {
     private func loadCounts() async {
         guard let postId = post.id else { return }
 
+        // 自動標記公告為已讀（Moodle-like 功能）
+        if post.postType == .announcement, let userId = userId {
+            // 檢查是否已讀，避免重複標記
+            let isRead = post.isReadBy(userId: userId)
+            if !isRead {
+                do {
+                    try await postService.markAsRead(postId: postId, userId: userId)
+                } catch {
+                    print("❌ Error marking post as read: \(error)")
+                    // 不影響主要功能，只記錄錯誤
+                }
+            }
+        }
+
         do {
             let reactionCount = try await postService.getReactionCount(postId: postId)
             var userReacted = false

@@ -95,6 +95,16 @@ struct Resource: Codable, Identifiable {
     var category: String?
     var tags: [String]?
 
+    // Moodle-like features
+    var fileName: String?                   // 原始檔案名稱
+    var fileSize: Int64?                    // 檔案大小（bytes）
+    var mimeType: String?                   // MIME 類型
+    var version: Int = 1                    // 版本號
+    var previousVersionId: String?          // 前一版本 ID
+    var downloadCount: Int = 0              // 下載次數
+    var isPublic: Bool = false              // 是否公開（不需登入即可下載）
+    var accessibleRoleIds: [String]?        // 可存取的角色 ID 列表（權限控制）
+
     var createdByUserId: String
     var createdAt: Date
     var updatedAt: Date
@@ -110,6 +120,14 @@ struct Resource: Codable, Identifiable {
         case fileUrl
         case category
         case tags
+        case fileName
+        case fileSize
+        case mimeType
+        case version
+        case previousVersionId
+        case downloadCount
+        case isPublic
+        case accessibleRoleIds
         case createdByUserId
         case createdAt
         case updatedAt
@@ -126,6 +144,14 @@ struct Resource: Codable, Identifiable {
         fileUrl: String? = nil,
         category: String? = nil,
         tags: [String]? = nil,
+        fileName: String? = nil,
+        fileSize: Int64? = nil,
+        mimeType: String? = nil,
+        version: Int = 1,
+        previousVersionId: String? = nil,
+        downloadCount: Int = 0,
+        isPublic: Bool = false,
+        accessibleRoleIds: [String]? = nil,
         createdByUserId: String,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
@@ -140,8 +166,33 @@ struct Resource: Codable, Identifiable {
         self.fileUrl = fileUrl
         self.category = category
         self.tags = tags
+        self.fileName = fileName
+        self.fileSize = fileSize
+        self.mimeType = mimeType
+        self.version = version
+        self.previousVersionId = previousVersionId
+        self.downloadCount = downloadCount
+        self.isPublic = isPublic
+        self.accessibleRoleIds = accessibleRoleIds
         self.createdByUserId = createdByUserId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    // MARK: - Helper Methods
+
+    /// 格式化檔案大小
+    var fileSizeFormatted: String {
+        guard let size = fileSize else { return "未知" }
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: size)
+    }
+
+    /// 檢查用戶角色是否有權限存取
+    func canAccess(userRoleIds: [String]) -> Bool {
+        if isPublic { return true }
+        guard let accessibleRoleIds = accessibleRoleIds else { return true } // 無限制
+        return userRoleIds.contains(where: { accessibleRoleIds.contains($0) })
     }
 }

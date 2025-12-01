@@ -55,6 +55,24 @@ class StorageService {
         return try await uploadImage(data: imageData, path: path)
     }
 
+    // MARK: - Upload Files (Moodle-like Resource Management)
+
+    /// 上傳組織資源文件
+    func uploadResourceFile(organizationId: String, fileData: Data, fileName: String, mimeType: String) async throws -> String {
+        let fileExtension = (fileName as NSString).pathExtension
+        let uniqueFileName = "\(UUID().uuidString).\(fileExtension)"
+        let path = "resources/\(organizationId)/\(uniqueFileName)"
+        return try await uploadFile(data: fileData, path: path, mimeType: mimeType)
+    }
+
+    /// 上傳作業附件
+    func uploadAssignmentFile(userId: String, taskId: String, fileData: Data, fileName: String, mimeType: String) async throws -> String {
+        let fileExtension = (fileName as NSString).pathExtension
+        let uniqueFileName = "\(UUID().uuidString).\(fileExtension)"
+        let path = "assignments/\(userId)/\(taskId)/\(uniqueFileName)"
+        return try await uploadFile(data: fileData, path: path, mimeType: mimeType)
+    }
+
     // MARK: - Core Upload Function
 
     /// 核心圖片上傳功能
@@ -75,12 +93,86 @@ class StorageService {
         }
     }
 
+    /// 核心文件上傳功能（支援所有類型文件）
+    private func uploadFile(data: Data, path: String, mimeType: String) async throws -> String {
+        let storageRef = storage.reference().child(path)
+        let metadata = StorageMetadata()
+        metadata.contentType = mimeType
+
+        do {
+            // 上傳文件
+            _ = try await storageRef.putDataAsync(data, metadata: metadata)
+
+            // 獲取下載 URL
+            let downloadURL = try await storageRef.downloadURL()
+            return downloadURL.absoluteString
+        } catch {
+            throw StorageError.uploadFailed(error)
+        }
+    }
+
     // MARK: - Delete Images
 
-    /// 刪除圖片
+    /// 刪除圖片或文件
     func deleteImage(url: String) async throws {
         let storageRef = storage.reference(forURL: url)
         try await storageRef.delete()
+    }
+
+    /// 刪除文件（別名，語意更清晰）
+    func deleteFile(url: String) async throws {
+        try await deleteImage(url: url)
+    }
+
+    // MARK: - Download Files
+
+    /// 下載文件資料
+    func downloadFile(url: String) async throws -> Data {
+        let storageRef = storage.reference(forURL: url)
+        let data = try await storageRef.data(maxSize: 50 * 1024 * 1024) // 最大 50MB
+        return data
+    }
+
+    // MARK: - Helper Methods
+
+    /// 根據檔案副檔名獲取 MIME 類型
+    func getMimeType(for fileName: String) -> String {
+        let fileExtension = (fileName as NSString).pathExtension.lowercased()
+
+        switch fileExtension {
+        // 文件
+        case "pdf": return "application/pdf"
+        case "doc": return "application/msword"
+        case "docx": return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        case "xls": return "application/vnd.ms-excel"
+        case "xlsx": return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        case "ppt": return "application/vnd.ms-powerpoint"
+        case "pptx": return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        case "txt": return "text/plain"
+        case "csv": return "text/csv"
+
+        // 圖片
+        case "jpg", "jpeg": return "image/jpeg"
+        case "png": return "image/png"
+        case "gif": return "image/gif"
+        case "svg": return "image/svg+xml"
+
+        // 影片
+        case "mp4": return "video/mp4"
+        case "mov": return "video/quicktime"
+        case "avi": return "video/x-msvideo"
+
+        // 音訊
+        case "mp3": return "audio/mpeg"
+        case "wav": return "audio/wav"
+
+        // 壓縮檔
+        case "zip": return "application/zip"
+        case "rar": return "application/x-rar-compressed"
+        case "7z": return "application/x-7z-compressed"
+
+        default: return "application/octet-stream"
+        }
     }
 
     // MARK: - Helper Methods

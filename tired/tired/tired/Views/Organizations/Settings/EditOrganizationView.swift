@@ -10,20 +10,38 @@ struct EditOrganizationView: View {
     @State private var description: String
     @State private var type: OrgType
     @State private var isSaving = false
-    
+
     @State private var selectedAvatarImage: UIImage?
     @State private var selectedCoverImage: UIImage?
     @State private var showingAvatarPicker = false
     @State private var showingCoverPicker = false
     @State private var isUploadingImage = false
-    
+
+    // Moodle-like 課程資訊編輯（P2-2）
+    @State private var courseCode: String
+    @State private var semester: String
+    @State private var credits: String
+    @State private var syllabus: String
+    @State private var academicYear: String
+    @State private var courseLevel: String
+    @State private var maxEnrollment: String
+
     private let storageService = StorageService()
-    
+
     init(viewModel: OrganizationDetailViewModel) {
         self.viewModel = viewModel
         _name = State(initialValue: viewModel.organization?.name ?? "")
         _description = State(initialValue: viewModel.organization?.description ?? "")
         _type = State(initialValue: viewModel.organization?.type ?? .other)
+
+        // 初始化課程資訊
+        _courseCode = State(initialValue: viewModel.organization?.courseCode ?? "")
+        _semester = State(initialValue: viewModel.organization?.semester ?? "")
+        _credits = State(initialValue: viewModel.organization?.credits != nil ? "\(viewModel.organization!.credits!)" : "")
+        _syllabus = State(initialValue: viewModel.organization?.syllabus ?? "")
+        _academicYear = State(initialValue: viewModel.organization?.academicYear ?? "")
+        _courseLevel = State(initialValue: viewModel.organization?.courseLevel ?? "")
+        _maxEnrollment = State(initialValue: viewModel.organization?.maxEnrollment != nil ? "\(viewModel.organization!.maxEnrollment!)" : "")
     }
     
     var body: some View {
@@ -175,6 +193,82 @@ struct EditOrganizationView: View {
                     }
                     .glassmorphicCard(cornerRadius: AppDesignSystem.cornerRadiusMedium, material: .regularMaterial)
                     .listRowBackground(Color.clear)
+
+                    // Moodle-like 課程資訊編輯（P2-2）
+                    if type == .school || type == .department {
+                        Section {
+                            VStack(spacing: AppDesignSystem.paddingSmall) {
+                                TextField("課程代碼", text: $courseCode)
+                                    .textFieldStyle(StandardTextFieldStyle(icon: "number"))
+
+                                TextField("學年", text: $academicYear, prompt: Text("例如：2024"))
+                                    .textFieldStyle(StandardTextFieldStyle(icon: "calendar"))
+
+                                TextField("學期", text: $semester, prompt: Text("例如：2024-1"))
+                                    .textFieldStyle(StandardTextFieldStyle(icon: "calendar.badge.clock"))
+
+                                HStack(spacing: AppDesignSystem.paddingMedium) {
+                                    TextField("學分數", text: $credits, prompt: Text("例如：3"))
+                                        .textFieldStyle(StandardTextFieldStyle(icon: "star"))
+                                        .keyboardType(.numberPad)
+
+                                    TextField("最大選課人數", text: $maxEnrollment, prompt: Text("例如：50"))
+                                        .textFieldStyle(StandardTextFieldStyle(icon: "person.3"))
+                                        .keyboardType(.numberPad)
+                                }
+
+                                Menu {
+                                    Button("大學部") { courseLevel = "大學部" }
+                                    Button("研究所") { courseLevel = "研究所" }
+                                    Button("博士班") { courseLevel = "博士班" }
+                                    Button("通識課程") { courseLevel = "通識課程" }
+                                    Button("其他") { courseLevel = "其他" }
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "graduationcap")
+                                            .foregroundColor(.secondary)
+                                        Text(courseLevel.isEmpty ? "課程級別" : courseLevel)
+                                            .foregroundColor(courseLevel.isEmpty ? .secondary : .primary)
+                                        Spacer()
+                                        Image(systemName: "chevron.down")
+                                            .foregroundColor(.secondary)
+                                            .font(.caption)
+                                    }
+                                    .padding(AppDesignSystem.paddingSmall)
+                                    .glassmorphicCard(cornerRadius: AppDesignSystem.cornerRadiusSmall, material: .regularMaterial)
+                                }
+                            }
+                        } header: {
+                            Text("課程基本資訊")
+                                .font(AppDesignSystem.captionFont)
+                                .foregroundColor(.secondary)
+                        } footer: {
+                            Text("這些資訊幫助學生了解課程詳情")
+                                .font(AppDesignSystem.captionFont)
+                                .foregroundColor(.secondary)
+                        }
+                        .glassmorphicCard(cornerRadius: AppDesignSystem.cornerRadiusMedium, material: .regularMaterial)
+                        .listRowBackground(Color.clear)
+
+                        Section {
+                            TextEditor(text: $syllabus)
+                                .font(AppDesignSystem.bodyFont)
+                                .padding(AppDesignSystem.paddingSmall)
+                                .glassmorphicCard(cornerRadius: AppDesignSystem.cornerRadiusSmall, material: .regularMaterial)
+                                .frame(height: 150)
+                                .listRowBackground(Color.clear)
+                        } header: {
+                            Text("課程大綱")
+                                .font(AppDesignSystem.captionFont)
+                                .foregroundColor(.secondary)
+                        } footer: {
+                            Text("支援 Markdown 格式")
+                                .font(AppDesignSystem.captionFont)
+                                .foregroundColor(.secondary)
+                        }
+                        .glassmorphicCard(cornerRadius: AppDesignSystem.cornerRadiusMedium, material: .regularMaterial)
+                        .listRowBackground(Color.clear)
+                    }
                 }
                 .background(Color.clear)
             }
@@ -276,13 +370,25 @@ struct EditOrganizationView: View {
             
             isUploadingImage = false
             
-            // 更新組織信息（包含圖片URL）
+            // 更新組織信息（包含圖片URL和課程資訊）
             var updatedOrg = viewModel.organization!
             updatedOrg.name = name
             updatedOrg.description = description.isEmpty ? nil : description
             updatedOrg.type = type
             updatedOrg.avatarUrl = avatarUrl
             updatedOrg.coverUrl = coverUrl
+
+            // Moodle-like 課程資訊更新（P2-2）
+            if type == .school || type == .department {
+                updatedOrg.courseCode = courseCode.isEmpty ? nil : courseCode
+                updatedOrg.semester = semester.isEmpty ? nil : semester
+                updatedOrg.credits = Int(credits)
+                updatedOrg.syllabus = syllabus.isEmpty ? nil : syllabus
+                updatedOrg.academicYear = academicYear.isEmpty ? nil : academicYear
+                updatedOrg.courseLevel = courseLevel.isEmpty ? nil : courseLevel
+                updatedOrg.maxEnrollment = Int(maxEnrollment)
+            }
+
             updatedOrg.updatedAt = Date()
             
             do {

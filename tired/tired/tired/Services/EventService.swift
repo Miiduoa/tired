@@ -81,18 +81,55 @@ class EventService: ObservableObject {
     // MARK: - CRUD Operations
 
     /// 創建活動
-    func createEvent(_ event: Event) async throws -> Event {
+    func createEvent(_ event: Event, createAnnouncement: Bool = true) async throws -> Event {
         var newEvent = event
         newEvent.createdAt = Date()
         newEvent.updatedAt = Date()
 
         let ref = try db.collection("events").addDocument(from: newEvent)
         newEvent.id = ref.documentID
-        
+
         // Schedule notification
         NotificationService.shared.scheduleNotification(for: newEvent)
-        
+
+        // 自動創建置頂公告（Moodle-like 功能）
+        if createAnnouncement {
+            await createAnnouncementForEvent(newEvent)
+        }
+
         return newEvent
+    }
+
+    /// 為活動創建置頂公告
+    private func createAnnouncementForEvent(_ event: Event) async {
+        // 建立活動公告內容
+        let announcementText = """
+        📅 新活動發布：\(event.title)
+
+        \(event.description ?? "")
+
+        ⏰ 時間：\(event.startAt.formatted(date: .long, time: .shortened))
+        📍 地點：\(event.location ?? "待定")
+
+        請盡快報名參加！
+        """
+
+        let post = Post(
+            authorUserId: event.createdByUserId,
+            organizationId: event.organizationId,
+            contentText: announcementText,
+            visibility: .orgMembers,
+            postType: .announcement
+        )
+
+        // 使用 PostService 創建公告（會自動置頂）
+        let postService = PostService()
+        do {
+            try await postService.createPost(post)
+        } catch {
+            print("❌ Failed to create announcement for event: \(error)")
+            // 不影響活動創建，只記錄錯誤
+        }
     }
 
     /// 更新活動

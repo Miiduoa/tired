@@ -413,7 +413,7 @@ class TaskService: ObservableObject {
             // Cancel notification if task is being marked as done
             NotificationService.shared.cancelNotification(withIdentifier: "task-\(id)")
         }
-        
+
         let updates: [String: Any] = [
             "isDone": isDone,
             "doneAt": isDone ? Timestamp(date: Date()) : NSNull(),
@@ -421,6 +421,14 @@ class TaskService: ObservableObject {
         ]
 
         try await db.collection("tasks").document(id).updateData(updates)
+
+        // Moodle-like 功能：作業提交後通知教師
+        if isDone {
+            let task = try await getTask(id: id)
+            if task.taskType == .homework {
+                await sendHomeworkSubmissionNotification(task: task)
+            }
+        }
     }
 
     /// 更新任务排程日期
@@ -588,5 +596,39 @@ class TaskService: ObservableObject {
         
         // 重新排程通知
         NotificationService.shared.scheduleNotification(for: task)
+    }
+
+    // MARK: - Notification Integration (Moodle-like)
+
+    /// 發送作業提交通知給教師
+    private func sendHomeworkSubmissionNotification(task: Task) async {
+        do {
+            // 獲取學生姓名
+            guard let studentId = task.userId else { return }
+            let userDoc = try await db.collection("users")
+                .document(studentId)
+                .getDocument()
+            let studentName = userDoc.data()?["displayName"] as? String ?? "學生"
+
+            // 獲取組織名稱（如果有）
+            var organizationName = "課程"
+            if let orgId = task.organizationId {
+                let orgDoc = try await db.collection("organizations")
+                    .document(orgId)
+                    .getDocument()
+                organizationName = orgDoc.data()?["name"] as? String ?? "課程"
+            }
+
+            // 發送通知
+            NotificationService.shared.notifyTeacherOfSubmission(
+                studentName: studentName,
+                assignmentTitle: task.title,
+                organizationName: organizationName
+            )
+
+            print("✅ Homework submission notification sent for: \(task.title)")
+        } catch {
+            print("❌ Error sending submission notification: \(error)")
+        }
     }
 }

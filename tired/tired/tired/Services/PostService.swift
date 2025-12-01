@@ -100,12 +100,127 @@ class PostService: ObservableObject {
         newPost.createdAt = Date()
         newPost.updatedAt = Date()
 
+        // 如果是公告類型，自動置頂
+        if newPost.postType == .announcement {
+            newPost.isPinned = true
+        }
+
         _ = try db.collection("posts").addDocument(from: newPost)
     }
 
     /// 刪除貼文
     func deletePost(id: String) async throws {
         try await db.collection("posts").document(id).delete()
+    }
+
+    // MARK: - Moodle-like Discussion Features
+
+    /// 置頂貼文
+    func pinPost(postId: String) async throws {
+        try await db.collection("posts").document(postId).updateData([
+            "isPinned": true,
+            "updatedAt": Timestamp(date: Date())
+        ])
+    }
+
+    /// 取消置頂
+    func unpinPost(postId: String) async throws {
+        try await db.collection("posts").document(postId).updateData([
+            "isPinned": false,
+            "updatedAt": Timestamp(date: Date())
+        ])
+    }
+
+    /// 標記貼文為已讀
+    func markAsRead(postId: String, userId: String) async throws {
+        try await db.collection("posts").document(postId).updateData([
+            "readByUserIds": FieldValue.arrayUnion([userId]),
+            "updatedAt": Timestamp(date: Date())
+        ])
+    }
+
+    /// 設定貼文分類
+    func setCategory(postId: String, category: String) async throws {
+        try await db.collection("posts").document(postId).updateData([
+            "category": category,
+            "updatedAt": Timestamp(date: Date())
+        ])
+    }
+
+    /// 添加標籤
+    func addTags(postId: String, tags: [String]) async throws {
+        try await db.collection("posts").document(postId).updateData([
+            "tags": FieldValue.arrayUnion(tags),
+            "updatedAt": Timestamp(date: Date())
+        ])
+    }
+
+    /// 獲取組織貼文（按置頂和時間排序）
+    func fetchOrganizationPostsSorted(organizationId: String) -> AnyPublisher<[Post], Error> {
+        let subject = PassthroughSubject<[Post], Error>()
+
+        db.collection("posts")
+            .whereField("organizationId", isEqualTo: organizationId)
+            .order(by: "createdAt", descending: true)
+            .addSnapshotListener { snapshot, error in
+                if let error = error {
+                    subject.send(completion: .failure(error))
+                    return
+                }
+
+                guard let documents = snapshot?.documents else {
+                    subject.send([])
+                    return
+                }
+
+                var posts = documents.compactMap { doc -> Post? in
+                    try? doc.data(as: Post.self)
+                }
+
+                // 手動排序：置頂的在前面，然後按時間排序
+                posts.sort { post1, post2 in
+                    if post1.isPinned && !post2.isPinned {
+                        return true
+                    } else if !post1.isPinned && post2.isPinned {
+                        return false
+                    } else {
+                        return post1.createdAt > post2.createdAt
+                    }
+                }
+
+                subject.send(posts)
+            }
+
+        return subject.eraseToAnyPublisher()
+    }
+
+    /// 按分類獲取貼文
+    func fetchPostsByCategory(organizationId: String, category: String) -> AnyPublisher<[Post], Error> {
+        let subject = PassthroughSubject<[Post], Error>()
+
+        db.collection("posts")
+            .whereField("organizationId", isEqualTo: organizationId)
+            .whereField("category", isEqualTo: category)
+            .order(by: "createdAt", descending: true)
+            .addSnapshotListener { snapshot, error in
+                if let error = error {
+                    subject.send(completion: .failure(error))
+                    return
+                }
+
+                guard let documents = snapshot?.documents else {
+                    subject.send([])
+                    return
+                }
+
+                let posts = documents.compactMap { doc -> Post? in
+                    try? doc.data(as: Post.self)
+                }
+
+                subject.send(posts)
+            }
+
+        return subject.eraseToAnyPublisher()
     }
 
     // MARK: - Reactions
