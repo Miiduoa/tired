@@ -30,6 +30,8 @@ class TaskCategoryInferenceService {
         switch orgType {
         case .school:
             return .school
+        case .course:
+            return .school  // 課程屬於學校分類
         case .company, .project:
             return .work
         case .club:
@@ -137,6 +139,8 @@ extension TaskCategory {
         switch orgType {
         case .school:
             return .school
+        case .course:
+            return .school  // 課程屬於學校分類
         case .department:
             // 部門預設為工作，可以根據具體情況調整
             return .work

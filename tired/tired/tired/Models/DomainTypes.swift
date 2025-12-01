@@ -272,15 +272,15 @@ enum MembershipRole: String, Codable, CaseIterable {
             return self == .owner
 
         // Admin 及以上權限
-        case .manageMembers, .changeRoles, .removeMembers, .manageApps, .editOrgInfo:
+        case .manageMembers, .changeRoles, .removeMembers, .manageApps, .editOrgInfo, .manageChildOrgs, .createChildOrgs:
             return self.hierarchyLevel >= MembershipRole.admin.hierarchyLevel
 
         // Staff 及以上權限
-        case .createPosts, .createAnnouncement, .createEvents, .createTasks, .editOwnPosts:
+        case .createPosts, .createAnnouncement, .createEvents, .createTasks, .editOwnPosts, .gradeAssignments, .manageGrades, .takeAttendance:
             return self.hierarchyLevel >= MembershipRole.staff.hierarchyLevel
 
         // 所有成員都有的權限
-        case .viewContent, .comment, .joinEvents, .react:
+        case .viewContent, .comment, .joinEvents, .react, .submitAssignments, .viewGrades, .viewAttendance, .viewChildOrgs:
             return true
         }
     }

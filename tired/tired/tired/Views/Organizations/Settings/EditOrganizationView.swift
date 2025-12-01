@@ -34,14 +34,15 @@ struct EditOrganizationView: View {
         _description = State(initialValue: viewModel.organization?.description ?? "")
         _type = State(initialValue: viewModel.organization?.type ?? .other)
 
-        // 初始化課程資訊
-        _courseCode = State(initialValue: viewModel.organization?.courseCode ?? "")
-        _semester = State(initialValue: viewModel.organization?.semester ?? "")
-        _credits = State(initialValue: viewModel.organization?.credits != nil ? "\(viewModel.organization!.credits!)" : "")
-        _syllabus = State(initialValue: viewModel.organization?.syllabus ?? "")
-        _academicYear = State(initialValue: viewModel.organization?.academicYear ?? "")
-        _courseLevel = State(initialValue: viewModel.organization?.courseLevel ?? "")
-        _maxEnrollment = State(initialValue: viewModel.organization?.maxEnrollment != nil ? "\(viewModel.organization!.maxEnrollment!)" : "")
+        // 初始化課程資訊（從 courseInfo 讀取）
+        let courseInfo = viewModel.organization?.courseInfo
+        _courseCode = State(initialValue: courseInfo?.courseCode ?? "")
+        _semester = State(initialValue: courseInfo?.semester ?? "")
+        _credits = State(initialValue: courseInfo?.credits != nil ? "\(courseInfo!.credits)" : "")
+        _syllabus = State(initialValue: courseInfo?.syllabus ?? "")
+        _academicYear = State(initialValue: courseInfo?.academicYear ?? "")
+        _courseLevel = State(initialValue: courseInfo?.courseLevel ?? "")
+        _maxEnrollment = State(initialValue: courseInfo?.maxEnrollment != nil ? "\(courseInfo!.maxEnrollment!)" : "")
     }
     
     var body: some View {
@@ -195,7 +196,7 @@ struct EditOrganizationView: View {
                     .listRowBackground(Color.clear)
 
                     // Moodle-like 課程資訊編輯（P2-2）
-                    if type == .school || type == .department {
+                    if type == .course {
                         Section {
                             VStack(spacing: AppDesignSystem.paddingSmall) {
                                 TextField("課程代碼", text: $courseCode)
@@ -379,14 +380,25 @@ struct EditOrganizationView: View {
             updatedOrg.coverUrl = coverUrl
 
             // Moodle-like 課程資訊更新（P2-2）
-            if type == .school || type == .department {
-                updatedOrg.courseCode = courseCode.isEmpty ? nil : courseCode
-                updatedOrg.semester = semester.isEmpty ? nil : semester
-                updatedOrg.credits = Int(credits)
-                updatedOrg.syllabus = syllabus.isEmpty ? nil : syllabus
-                updatedOrg.academicYear = academicYear.isEmpty ? nil : academicYear
-                updatedOrg.courseLevel = courseLevel.isEmpty ? nil : courseLevel
-                updatedOrg.maxEnrollment = Int(maxEnrollment)
+            if type == .course {
+                // 創建或更新 courseInfo
+                let creditsValue = Int(credits) ?? 0
+                let maxEnrollmentValue = maxEnrollment.isEmpty ? nil : Int(maxEnrollment)
+                
+                updatedOrg.courseInfo = CourseInfo(
+                    courseCode: courseCode.isEmpty ? "" : courseCode,
+                    semester: semester.isEmpty ? "" : semester,
+                    academicYear: academicYear.isEmpty ? "" : academicYear,
+                    credits: creditsValue,
+                    syllabus: syllabus.isEmpty ? nil : syllabus,
+                    courseLevel: courseLevel.isEmpty ? nil : courseLevel,
+                    prerequisites: updatedOrg.courseInfo?.prerequisites,
+                    maxEnrollment: maxEnrollmentValue,
+                    currentEnrollment: updatedOrg.courseInfo?.currentEnrollment ?? 0
+                )
+            } else {
+                // 如果不是課程類型，清除 courseInfo
+                updatedOrg.courseInfo = nil
             }
 
             updatedOrg.updatedAt = Date()
@@ -412,6 +424,7 @@ struct EditOrganizationView: View {
         switch type {
         case .school: return "building.columns"
         case .department: return "building.2"
+        case .course: return "book.closed"
         case .club: return "music.note.house"
         case .company: return "briefcase"
         case .project: return "folder"
