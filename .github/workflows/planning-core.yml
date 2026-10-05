@@ -1,0 +1,28 @@
+name: planning-core
+
+on:
+  push:
+    paths:
+      - "PlanningCore/**"
+      - ".github/workflows/planning-core.yml"
+  pull_request:
+    paths:
+      - "PlanningCore/**"
+      - ".github/workflows/planning-core.yml"
+
+concurrency:
+  group: planning-core-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.0"
+
+      - run: swift test --package-path PlanningCore
