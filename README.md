@@ -1,15 +1,10 @@
-# Tired｜Multi-role Task Planning for iOS
+# Tired｜Planning Core for Multi-role Tasks
 
-Tired 是一個以 **SwiftUI + Firebase** 實作的 iOS 任務管理原型，處理學生、工作、社團等多重角色下的課程、任務、行程與協作資料。
+Tired 原本是一個 SwiftUI + Firebase 的多身份任務管理原型。這個 repo 現在把**可重現、可測試的部分**集中在 `PlanningCore/`，避免把尚未完整保存的 Xcode 專案包裝成可直接 build 的作品。
 
-這個 repo 現在把重點放在兩件事：
+## 可驗證的核心
 
-1. iOS App 的資料模型與服務分層。
-2. 可以獨立測試的排程規則，而不是只展示 UI。
-
-## 可驗證的排程核心
-
-`PlanningCore/` 是從 App 排程需求抽出的純 Swift Package，不依賴 SwiftUI 或 Firebase。
+`PlanningCore/` 是純 Swift Package，不依賴 SwiftUI、Firebase 或 Xcode project metadata。
 
 輸入包含：
 
@@ -26,6 +21,12 @@ Tired 是一個以 **SwiftUI + Firebase** 實作的 iOS 任務管理原型，處
 - 每日負載
 - 無法排程的原因
 
+執行：
+
+```bash
+swift test --package-path PlanningCore
+```
+
 目前測試涵蓋：
 
 - 高優先級任務提早安排
@@ -35,28 +36,11 @@ Tired 是一個以 **SwiftUI + Firebase** 實作的 iOS 任務管理原型，處
 - 容量不足時明確跳過
 - 已完成任務不再佔容量
 
-執行：
-
-```bash
-swift test --package-path PlanningCore
-```
-
 GitHub Actions 只測這個純 Swift domain core，因此不需要 Firebase credential 或 iOS simulator。
 
-## iOS App
+## iOS source snapshot
 
-主要程式在：
-
-```text
-tired/tired/tired/
-  Models/
-  Services/
-  ViewModels/
-  Views/
-  Utils/
-```
-
-目前實作包含：
+`tired/` 仍保留原本 App 的 Swift source，例如：
 
 - Course / Enrollment
 - Task / RecurringTask / TimeBlock
@@ -69,13 +53,13 @@ tired/tired/tired/
 - AutoPlan UI
 - Firebase Auth / Firestore / Storage boundary
 
-`Utils/AutoPlanService.swift` 是 App 內原本的排程服務；`PlanningCore` 則提供一個更小、更容易驗證的規則核心。
+這些 source 可以用來查看資料模型、ViewModel、Service 與 UI 分層，但**目前 repository 沒有保存 `.xcodeproj`、`.xcworkspace` 或 `project.pbxproj`**，因此不能從乾淨 checkout 直接重建完整 iOS App。
 
-## 為什麼另外抽 PlanningCore
+這也是為什麼首頁只把 `PlanningCore` 當成可驗證成果，而不是把完整 App 的可執行性說得比實際更多。
 
-完整 iOS App 同時依賴 UI、Firebase、日期環境與 Xcode 專案設定。若只靠 App 手動操作，很難判斷排程規則有沒有被改壞。
+## Planning model
 
-把核心規則抽成純 Swift 後，可以把：
+核心可以簡化成：
 
 ```text
 priority + deadline + capacity + busy time
@@ -85,25 +69,24 @@ priority + deadline + capacity + busy time
             deterministic tests
 ```
 
-獨立驗證。
+`PlanningCore` 是 weekly capacity heuristic，不是最佳化求解器，也不宣稱是 AI 排程。
 
-## Firebase
+## Firebase notes
 
-這個 repo 不把 Firebase client config 當成機密憑證；真正的資料存取邊界仍必須由 Firestore / Storage rules 與後端權限控制。
-
-規則文件放在：
+App source 中仍保留 Firebase Auth / Firestore / Storage 邊界與規則文件：
 
 - `firestore.rules`
 - `docs/FIRESTORE_RULES.md`
 
-## 限制
+Firebase client config 本身不是安全邊界；真正的資料存取仍應由 Security Rules 與後端權限控制。
 
-- `PlanningCore` 是 weekly capacity heuristic，不是最佳化求解器。
-- 目前 CI 驗證 domain core，不代表完整 Xcode App 已在 CI 編譯。
-- Firebase 相關功能需要自行設定專案。
-- 排程分數是透明規則，不宣稱為 AI。
-- iOS App 還有較多功能面，這個 README 只列目前可從程式碼直接驗證的部分。
+## Scope
+
+- 可重現成果：`PlanningCore` + tests
+- iOS source：保留作架構與介面參考
+- 完整 Xcode build：目前無法從 repo 直接重建
+- CI：只驗證純 Swift domain core
 
 ## Stack
 
-`Swift` · `SwiftUI` · `Firebase` · `Cloud Functions` · `GitHub Actions`
+`Swift` · `Swift Package Manager` · `SwiftUI source` · `Firebase source` · `GitHub Actions`
